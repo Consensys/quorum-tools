@@ -7,17 +7,27 @@ var accounts = {};
 // API
 
 var registerAccounts = function(accts) {
-    accounts = accts;
+  accounts = accts;
 };
 
-var sendTo = function(recipientName) {
+var sendTo = function(recipientName, etherAmount) {
+  var recipientAccount = accounts[recipientName];
+
+  var txHash = eth.sendTransaction({
+    from: myAccount,
+    to: recipientAccount,
+    value: web3.toWei(etherAmount, "ether")
+  });
+
+  return txHash;
+};
+
+var floodTo = function(recipientName, numberTxes) {
     var recipientAccount = accounts[recipientName];
 
-    var txHash = eth.sendTransaction({
+    return eth.repeatedlySendTransaction({
         from: myAccount,
         to: recipientAccount,
-        value: web3.toWei(1, "ether")
-    })
-
-    return txHash;
+        value: web3.toWei(0.000000001, "ether")
+    }, numberTxes);
 };
