@@ -4,12 +4,12 @@ set -u
 set -e
 
 die () {
-    echo >&2 "$@"
+    echo -e >&2 "$@"
     exit 1
 }
 
 usage () {
-    die "example usage: $0 [send | flood] geth1 geth2 5"
+    die "example usages:\n  sending 5 eth:\n    $0 send geth1 geth2 5\n  sending a small transfer 10 times:\n    $0 repeat geth1 geth2 10\n  sending a batch of 5000 small transfers:\n    $0 batch geth1 geth2 5000"
 }
 
 [ "$#" -eq 4 ] || usage
@@ -30,10 +30,15 @@ if [ "send" = "$cmd" ]; then
     echo "sending $amount ether from $from to $to"
 
     geth --exec "$loadScript; sendTo('$to', $amount)" attach ipc:gdata/$from/geth.ipc
-elif [ "flood" = "$cmd" ]; then
-    echo "flooding with $amount messages from $from to $to"
 
-    geth --exec "$loadScript; floodTo('$to', $amount)" attach ipc:gdata/$from/geth.ipc
+elif [ "repeat" = "$cmd" ]; then
+    echo "repeatedly sending $amount messages from $from to $to"
+
+    geth --exec "$loadScript; sendManyTo('$to', $amount)" attach ipc:gdata/$from/geth.ipc
+elif [ "batch" = "$cmd" ]; then
+    echo "sending a batch of $amount messages from $from to $to"
+
+    geth --exec "$loadScript; batchTo('$to', $amount)" attach ipc:gdata/$from/geth.ipc
 else
     usage
 fi

@@ -22,12 +22,25 @@ var sendTo = function(recipientName, etherAmount) {
   return txHash;
 };
 
-var floodTo = function(recipientName, numberTxes) {
+var sendManyTo = function(recipientName, numberTxes) {
     var recipientAccount = accounts[recipientName];
+    var txDesc = {
+      from: myAccount,
+      to: recipientAccount,
+      value: web3.toWei(0.000000001, "ether")
+    };
 
-    return eth.repeatedlySendTransaction({
-        from: myAccount,
-        to: recipientAccount,
-        value: web3.toWei(0.000000001, "ether")
-    }, numberTxes);
+    for (var i = 0; i < numberTxes; i++) {
+      eth.sendTransaction(txDesc);
+    }
+};
+
+var batchTo = function(recipientName, numberTxes) {
+  var recipientAccount = accounts[recipientName];
+
+  return eth.repeatedlySendTransaction({
+    from: myAccount,
+    to: recipientAccount,
+    value: web3.toWei(0.000000001, "ether")
+  }, numberTxes);
 };
