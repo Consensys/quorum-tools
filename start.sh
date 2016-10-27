@@ -17,11 +17,11 @@ function cleanup {
 trap cleanup EXIT
 rm -rf gdata
 
-args="--networkid 1418 --nodiscover --maxpeers 10 --fakepow --premine --blocktime 0 --blockjitter 0"
+args="--networkid 1418 --nodiscover --maxpeers 10 --rpc --rpccorsdomain '*' --rpcaddr localhost --fakepow --premine --blocktime 0 --blockjitter 0"
 
-geth1="geth --datadir gdata/geth1 --port 30401 $args $@"
-geth2="geth --datadir gdata/geth2 --port 30402 $args $@"
-geth3="geth --datadir gdata/geth3 --port 30403 $args $@"
+geth1="geth --datadir gdata/geth1 --port 30401 --rpcport 40401 $args $@"
+geth2="geth --datadir gdata/geth2 --port 30402 --rpcport 40402 $args $@"
+geth3="geth --datadir gdata/geth3 --port 30403 --rpcport 40403 $args $@"
 
 $geth1 init genesis.json
 $geth2 init genesis.json
