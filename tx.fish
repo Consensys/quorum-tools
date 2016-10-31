@@ -44,3 +44,7 @@ end
 function clean
   rm -r raft-*-{wal,snap}
 end
+
+function kill_geth # TAKES A GETH NUMBER
+  ps aux | grep geth$argv[1] | grep -v grep | grep -v tail | head -n1 | awk '{print $2}' | cat | xargs kill -9
+end
