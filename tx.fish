@@ -52,7 +52,7 @@ function unlock
   geth --exec "personal.unlockAccount(eth.accounts[0], 'abcd', 300000000)" attach ipc:gdata/geth$GETH/geth.ipc
 end
 
-function miner # TAKES A GETH NUMBER (e.g. 2)
+function node # TAKES A GETH NUMBER (e.g. 2)
   set -g GETH $argv
   set -g FROM (geth_id < /dev/null)
 end
