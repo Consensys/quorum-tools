@@ -13,18 +13,34 @@ end
 
 set -g TO 0000000000000000000000000000000000000000
 
+function tx_rpc
+  echo '{
+   "id":      1,
+   "jsonrpc": "2.0",
+   "method":  "eth_sendTransaction",
+   "params":  [
+     {
+       "from": "'$FROM'",
+       "to": "'$TO'"
+     }
+   ]
+}'
+end
+
 function tx
-  curl -X POST -H "Content-Type: application/json" -H "Cache-Control: no-cache" -d '{
-    "id":      1,
-    "jsonrpc": "2.0",
-    "method":  "eth_sendTransaction",
-    "params":  [
-      {
-        "from": "'$FROM'",
-        "to": "'$TO'"
-      }
-    ]
-  }' "http://localhost:4040$GETH/"
+  curl -X POST -H "Content-Type: application/json" -d @(tx_rpc | psub) "http://localhost:4040$GETH/"
+end
+
+function tx_lua
+  echo '
+wrk.method = "POST"
+wrk.body   = \'' (tx_rpc) '\'
+wrk.headers["Content-Type"] = "application/json"
+'
+end
+
+function bench
+  wrk -s (tx_lua | psub) -c 1 -d 1s -t 1 http://localhost:4040$GETH/
 end
 
 function txes # TAKES A NUMBER OF TXES
