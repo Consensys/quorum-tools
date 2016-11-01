@@ -40,7 +40,7 @@ wrk.headers["Content-Type"] = "application/json"
 end
 
 function bench
-  wrk -s (tx_lua | psub) -c 1 -d 1s -t 1 http://localhost:4040$GETH/
+  wrk -s (tx_lua | psub) -c 1 -d $argv[1]s -t 1 http://localhost:4040$GETH/
 end
 
 function txes # TAKES A NUMBER OF TXES
