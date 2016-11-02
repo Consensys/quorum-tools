@@ -39,7 +39,11 @@ wrk.headers["Content-Type"] = "application/json"
 '
 end
 
-function bench
+function bg_bench # takes timing in hours
+  nohup wrk -s (tx_lua | psub) -c 1 -d $argv[1]h -t 1 http://localhost:4040$GETH/ > bench.out 2> bench.err.out < /dev/null &
+end
+
+function bench # takes timing in seconds
   wrk -s (tx_lua | psub) -c 1 -d $argv[1]s -t 1 http://localhost:4040$GETH/
 end
 
