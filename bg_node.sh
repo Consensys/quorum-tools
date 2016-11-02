@@ -21,7 +21,7 @@ $geth1 init genesis.json
 
 $geth1 --password <(echo abcd) account new
 
-nohup $geth1 >geth1.out 2>geth1.err.our < /dev/null &
+nohup $geth1 >geth1.out 2>geth1.err.out < /dev/null &
 geth1pid=$!
 
 # Connect the peers
