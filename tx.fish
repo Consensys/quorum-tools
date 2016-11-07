@@ -2,7 +2,7 @@
 #
 # source tx.fish
 #
-# miner 2  # sets the current miner to geth2
+# node 2  # sets the current miner to geth2
 # unlock   # unlocks the current miner's account
 # tx       # sends a single tx
 # txes 10  # sends 10 txes in parallel
