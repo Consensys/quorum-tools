@@ -3,39 +3,37 @@
 set -u
 set -e
 
-geth1pid=
+node="$1"
+
+gethpid=
 
 function cleanup {
     echo "Cleaning up"
-    kill $geth1pid &
+    kill $gethpid &
 }
 
 trap cleanup EXIT
-rm -rf gdata
 
 args="--networkid 1418 --nodiscover --nat none --maxpeers 10 --rpc --rpccorsdomain '*' --rpcaddr localhost --fakepow --premine --blocktime 0 --blockjitter 0"
 
-geth1="geth --datadir gdata/geth1 --port 30401 --rpcport 40401 $args $@"
+geth_cmd="geth --datadir gdata/geth$node --port 3040$node --rpcport 4040$node $args $@"
 
-$geth1 init genesis.json
-
-$geth1 --password <(echo abcd) account new
-
-$geth1 >geth1.out 2>&1 &
-geth1pid=$!
+$geth_cmd >geth$node.out 2>&1 &
+gethpid=$!
 
 # Connect the peers
 sleep 2
-geth1Id=$(geth --exec "admin.nodeInfo.enode;" attach ipc:gdata/geth1/geth.ipc)
+gethId=$(geth --exec "admin.nodeInfo.enode;" attach ipc:gdata/geth$node/geth.ipc)
 
 echo "To add this peer from another node:"
-echo 'admin.addPeer('$geth1Id');'
-# echo 'geth --exec "admin.addPeer('$geth1Id');" attach ipc:gdata/geth2/geth.ipc'
+echo 'admin.addPeer('$gethId');'
 
-sleep 1
+read -n1 -r -p "Starting raft when ready; press [space] to continue..." key
 
-echo "Then, start raft:"
-echo 'geth --exec "raft.startNode();" attach ipc:gdata/geth1/geth.ipc'
+# echo "Then, start raft:"
+# echo 'geth --exec "raft.startNode();" attach ipc:gdata/geth$node/geth.ipc'
+
+geth --exec "raft.startNode();" attach ipc:gdata/geth$node/geth.ipc
 
 # Wait forever
 cat
