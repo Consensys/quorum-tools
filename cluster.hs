@@ -4,7 +4,6 @@
 -- OR, to pre-compile this:
 -- $ stack ghc -- -O2 -threaded cluster.hs
 
-{-# LANGUAGE ApplicativeDo       #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -25,7 +24,7 @@ import           Data.Text.Lazy           (toStrict)
 import           Data.Text.Lazy.Encoding  (decodeUtf8)
 import           Prelude                  hiding (FilePath)
 import           System.IO                (BufferMode (..), hClose,
-                                           hSetBuffering, hFlush)
+                                           hSetBuffering)
 import           Turtle
 
 main :: IO ()
