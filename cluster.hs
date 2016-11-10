@@ -9,22 +9,25 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import           Control.Concurrent.Async (forConcurrently, mapConcurrently)
+import           Control.Concurrent.Async (Async, forConcurrently,
+                                           mapConcurrently)
+import           Control.Concurrent.MVar  (isEmptyMVar, newEmptyMVar, putMVar,
+                                           takeMVar)
 import qualified Control.Foldl            as Fold
 import           Control.Monad.Managed    (MonadManaged)
 import           Data.Aeson
-import           Data.Foldable            (for_)
+import           Data.Foldable            (traverse_)
+import           Data.Functor             (($>))
 import           Data.Maybe               (fromMaybe)
-import qualified Data.Text                as T
+import           Data.Text                (isInfixOf)
 import           Data.Text.Lazy           (toStrict)
 import           Data.Text.Lazy.Encoding  (decodeUtf8)
-import           Data.Traversable         (for)
 import           Prelude                  hiding (FilePath)
 import           System.IO                (hClose)
 import           Turtle
 
 main :: IO ()
-main = echo "Hello, world!"
+main = sh $ setupNodes [GethId 1, GethId 2, GethId 3] >>= runNodes
 
 --
 
@@ -107,8 +110,8 @@ createAccount pw gid = shells createCommand inputPasswordTwice
     createCommand = gethCommand "account new" gid
 
     inputPasswordTwice :: Shell Text
-    inputPasswordTwice = return password -- "Passphrase:"
-                     <|> return password -- "Repeat passphrase:"
+    inputPasswordTwice = return pw -- "Passphrase:"
+                     <|> return pw -- "Repeat passphrase:"
 
 fileContaining :: Shell Text -> Managed FilePath
 fileContaining contents = do
@@ -142,9 +145,9 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       pure sib
 
 writeStaticNodes :: (MonadIO io) => [Geth] -> Geth -> io ()
-writeStaticNodes sibs geth = output filename contents
+writeStaticNodes sibs geth = output jsonPath contents
   where
-    filename = dataDir (gethId geth) </> "static-nodes.json"
+    jsonPath = dataDir (gethId geth) </> "static-nodes.json"
     contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
 
 mkGeth :: MonadIO io => GethId -> io Geth
@@ -154,7 +157,7 @@ setupNodes :: MonadIO io => [GethId] -> io [Geth]
 setupNodes gids = do
   wipeDataDirs
 
-  liftIO $ forConcurrently gids $ \gid -> do
+  void $ liftIO $ forConcurrently gids $ \gid -> do
     initNode gid
     createAccount password gid
 
@@ -171,7 +174,46 @@ nodeShell geth = do
     Left txt  -> return txt
     Right txt -> return txt
 
--- runNode :: MonadIO io => Geth -> io async
+data NodeReady = NodeReady -- online, and ready for us to start raft
+data NodeTerminated = NodeTerminated
+
+runNode :: forall m. MonadManaged m
+        => Geth
+        -> m (Async NodeReady, Async NodeTerminated)
+runNode geth = do
+  mvar <- liftIO newEmptyMVar
+
+  let started :: m (Async NodeReady)
+      started = fork $ do
+                  _ <- takeMVar mvar
+                  return NodeReady
+
+      terminated :: m (Async NodeTerminated)
+      terminated = fmap ($> NodeTerminated) $
+        using $ fork $ foldIO (nodeShell geth) $ Fold.mapM_ $ \line -> do
+          guard =<< isEmptyMVar mvar
+          when ("IPC endpoint opened:" `isInfixOf` line) $
+            putMVar mvar NodeReady
+
+  (,) <$> started <*> terminated
+
+startRaft :: MonadIO io => Geth -> io ()
+startRaft geth = shells startCommand empty
+  where
+    startCommand =
+      gethCommand (format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint)
+                  (gethId geth)
+
+    ipcPath = dataDir (gethId geth) </> "geth.ipc"
+    ipcEndpoint = format ("ipc:"%fp) ipcPath
+
+runNodes :: MonadManaged m => [Geth] -> m ()
+runNodes geths = do
+  (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
+  liftIO $ do
+    traverse_ wait readyAsyncs
+    traverse_ startRaft geths
+    traverse_ wait terminatedAsyncs
 
 --
 --
