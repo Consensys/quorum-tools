@@ -9,7 +9,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import           Control.Concurrent.Async (forConcurrently)
+import           Control.Concurrent.Async (forConcurrently, mapConcurrently)
 import qualified Control.Foldl            as Fold
 import           Control.Monad.Managed    (MonadManaged)
 import           Data.Aeson
@@ -158,7 +158,7 @@ setupNodes gids = do
     initNode gid
     createAccount password gid
 
-  geths <- traverse mkGeth gids
+  geths <- liftIO $ mapConcurrently mkGeth gids
 
   liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) -> do
     writeStaticNodes sibs geth
