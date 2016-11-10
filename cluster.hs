@@ -20,10 +20,12 @@ import           Data.Foldable            (traverse_)
 import           Data.Functor             (($>))
 import           Data.Maybe               (fromMaybe)
 import           Data.Text                (isInfixOf)
+import qualified Data.Text.IO             as T
 import           Data.Text.Lazy           (toStrict)
 import           Data.Text.Lazy.Encoding  (decodeUtf8)
 import           Prelude                  hiding (FilePath)
-import           System.IO                (hClose)
+import           System.IO                (BufferMode (..), hClose,
+                                           hSetBuffering, hFlush)
 import           Turtle
 
 main :: IO ()
@@ -188,12 +190,20 @@ runNode geth = do
                   _ <- takeMVar mvar
                   return NodeReady
 
+      outputPath :: FilePath
+      outputPath = fromText $ format ("geth"%d%".out") (gId $ gethId geth)
+
       terminated :: m (Async NodeTerminated)
       terminated = fmap ($> NodeTerminated) $
-        using $ fork $ foldIO (nodeShell geth) $ Fold.mapM_ $ \line -> do
-          guard =<< isEmptyMVar mvar
-          when ("IPC endpoint opened:" `isInfixOf` line) $
-            putMVar mvar NodeReady
+        using $ fork $ runManaged $ do
+          handle <- using (writeonly outputPath)
+          liftIO $ hSetBuffering handle LineBuffering
+
+          foldIO (nodeShell geth) $ Fold.mapM_ $ \line -> do
+            liftIO $ T.hPutStrLn handle line
+            guard =<< isEmptyMVar mvar
+            when ("IPC endpoint opened:" `isInfixOf` line) $
+              putMVar mvar NodeReady
 
   (,) <$> started <*> terminated
 
