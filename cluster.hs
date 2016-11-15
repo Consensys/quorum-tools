@@ -105,10 +105,10 @@ dataDir cEnv geth = (clusterDataRoot cEnv) </> fromText nodeName
   where
     nodeName = format ("geth"%d) (gId geth)
 
-wipeDataDirs :: MonadIO io => ClusterEnv -> io ()
+wipeDataDirs :: MonadIO m => ClusterEnv -> m ()
 wipeDataDirs cEnv = rmtree (clusterDataRoot cEnv)
 
-initNode :: MonadIO io => ClusterEnv -> GethId -> io ()
+initNode :: MonadIO m => ClusterEnv -> GethId -> m ()
 initNode cEnv geth = shells initCommand empty
   where
     initCommand :: Text
@@ -116,7 +116,7 @@ initNode cEnv geth = shells initCommand empty
                               (format ("init "%fp) (clusterGenesisJson cEnv))
                               geth
 
-createAccount :: MonadIO io => ClusterEnv -> GethId -> io ()
+createAccount :: MonadIO m => ClusterEnv -> GethId -> m ()
 createAccount cEnv gid = shells createCommand inputPasswordTwice
   where
     createCommand :: Text
@@ -135,7 +135,7 @@ fileContaining contents = do
   liftIO $ hClose handle
   return path
 
-getEnodeId :: MonadIO io => ClusterEnv -> GethId -> io EnodeId
+getEnodeId :: MonadIO m => ClusterEnv -> GethId -> m EnodeId
 getEnodeId cEnv gid = EnodeId . forceMaybe <$> fold enodeIdShell Fold.head
   where
     jsCommand jsPath = gethCommand cEnv (format ("js "%fp) jsPath) gid
@@ -158,16 +158,16 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       guard $ me /= sib
       pure sib
 
-writeStaticNodes :: (MonadIO io) => ClusterEnv -> [Geth] -> Geth -> io ()
+writeStaticNodes :: (MonadIO m) => ClusterEnv -> [Geth] -> Geth -> m ()
 writeStaticNodes cEnv sibs geth = output jsonPath contents
   where
     jsonPath = dataDir cEnv (gethId geth) </> "static-nodes.json"
     contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
 
-mkGeth :: MonadIO io => ClusterEnv -> GethId -> io Geth
+mkGeth :: MonadIO m => ClusterEnv -> GethId -> m Geth
 mkGeth cEnv gid = Geth gid <$> getEnodeId cEnv gid
 
-setupNodes :: MonadIO io => ClusterEnv -> [GethId] -> io [Geth]
+setupNodes :: MonadIO m => ClusterEnv -> [GethId] -> m [Geth]
 setupNodes cEnv gids = do
   wipeDataDirs cEnv
 
@@ -225,7 +225,7 @@ runNode cEnv geth = do
 
   (,) <$> started <*> terminated
 
-startRaft :: MonadIO io => ClusterEnv -> Geth -> io ()
+startRaft :: MonadIO m => ClusterEnv -> Geth -> m ()
 startRaft cEnv geth = shells startCommand empty
   where
     startCommand =
@@ -236,7 +236,7 @@ startRaft cEnv geth = shells startCommand empty
     ipcPath = dataDir cEnv (gethId geth) </> "geth.ipc"
     ipcEndpoint = format ("ipc:"%fp) ipcPath
 
-awaitAll :: (MonadIO io, Traversable t) => t (Async a) -> io ()
+awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
 
 runNodes :: MonadManaged m => ClusterEnv -> [Geth] -> m ()
