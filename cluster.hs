@@ -8,31 +8,34 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
-import           Control.Concurrent.Async (Async, forConcurrently,
-                                           mapConcurrently)
-import           Control.Concurrent.MVar  (isEmptyMVar, newEmptyMVar, putMVar,
-                                           takeMVar)
-import qualified Control.Foldl            as Fold
-import           Control.Monad.Managed    (MonadManaged)
+import           Control.Concurrent.Async   (Async, forConcurrently)
+import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
+                                             takeMVar)
+import qualified Control.Foldl              as Fold
+import           Control.Monad.Managed      (MonadManaged)
+import           Control.Monad.Reader       (ReaderT (runReaderT))
+import           Control.Monad.Reader.Class (MonadReader (ask, reader))
 import           Data.Aeson
-import           Data.Foldable            (traverse_)
-import           Data.Functor             (($>))
-import           Data.Maybe               (fromMaybe)
-import           Data.Text                (isInfixOf)
-import qualified Data.Text.IO             as T
-import           Data.Text.Lazy           (toStrict)
-import           Data.Text.Lazy.Encoding  (decodeUtf8)
-import           Prelude                  hiding (FilePath)
-import           System.IO                (BufferMode (..), hClose,
-                                           hSetBuffering)
+import           Data.Foldable              (traverse_)
+import           Data.Functor               (($>))
+import           Data.Maybe                 (fromMaybe)
+import           Data.Text                  (isInfixOf)
+import qualified Data.Text.IO               as T
+import           Data.Text.Lazy             (toStrict)
+import           Data.Text.Lazy.Encoding    (decodeUtf8)
+import           Prelude                    hiding (FilePath)
+import           System.IO                  (BufferMode (..), hClose,
+                                             hSetBuffering)
 import           Turtle
 
-httpPort :: ClusterEnv -> GethId -> Int
-httpPort cEnv (GethId gid) = (clusterBaseHttpPort cEnv) + gid
+main :: IO ()
+main = sh $ runReaderT (setupNodes [GethId 1, GethId 2, GethId 3] >>= runNodes)
+                       defaultClusterEnv
 
-rpcPort :: ClusterEnv -> GethId -> Int
-rpcPort cEnv (GethId gid) = (clusterBaseRpcPort cEnv) + gid
+--
 
 newtype Verbosity = Verbosity Int deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
@@ -47,6 +50,8 @@ data ClusterEnv
                }
   deriving (Eq, Show)
 
+type HasEnv = MonadReader ClusterEnv
+
 defaultClusterEnv :: ClusterEnv
 defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterPassword     = "abcd"
@@ -56,13 +61,6 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterBaseRpcPort  = 40400
                                , clusterVerbosity    = 3
                                }
-
-main :: IO ()
-main = sh $ setupNodes cEnv [GethId 1, GethId 2, GethId 3] >>= runNodes cEnv
-  where
-    cEnv = defaultClusterEnv
-
---
 
 data GethId = GethId { gId :: Int }
   deriving (Show, Eq)
@@ -79,12 +77,18 @@ data Geth =
        }
   deriving (Show, Eq)
 
-gethBinary :: ClusterEnv -> GethId -> Text
-gethBinary cEnv gid = mkCommand (dataDir cEnv gid)
-                                (httpPort cEnv gid)
-                                (rpcPort cEnv gid)
-                                (clusterNetworkId cEnv)
-                                (clusterVerbosity cEnv)
+httpPort :: HasEnv m => GethId -> m Int
+httpPort (GethId gid) = (gid +) <$> reader clusterBaseHttpPort
+
+rpcPort :: HasEnv m => GethId -> m Int
+rpcPort (GethId gid) = (gid +) <$> reader clusterBaseRpcPort
+
+gethBinary :: HasEnv m => GethId -> m Text
+gethBinary gid = mkCommand <$> dataDir gid
+                           <*> httpPort gid
+                           <*> rpcPort gid
+                           <*> reader clusterNetworkId
+                           <*> reader clusterVerbosity
   where
     mkCommand = format $ "geth --datadir "%fp       %
                              " --port "%d           %
@@ -97,35 +101,32 @@ gethBinary cEnv gid = mkCommand (dataDir cEnv gid)
                              " --rpccorsdomain '*'" %
                              " --rpcaddr localhost"
 
-gethCommand :: ClusterEnv -> Text -> GethId -> Text
-gethCommand cEnv cmd gid = format (s % " " % s) (gethBinary cEnv gid) cmd
+gethCommand :: HasEnv m => GethId -> m (Text -> Text)
+gethCommand gid = do
+  binary <- gethBinary gid
+  return $ format (s % " " % s) binary
 
-dataDir :: ClusterEnv -> GethId -> FilePath
-dataDir cEnv geth = (clusterDataRoot cEnv) </> fromText nodeName
-  where
-    nodeName = format ("geth"%d) (gId geth)
+dataDir :: HasEnv m => GethId -> m FilePath
+dataDir geth = do
+  dataDirRoot <- reader clusterDataRoot
+  let nodeName = format ("geth"%d) (gId geth)
+  pure $ dataDirRoot </> fromText nodeName
 
-wipeDataDirs :: MonadIO m => ClusterEnv -> m ()
-wipeDataDirs cEnv = rmtree (clusterDataRoot cEnv)
+wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
+wipeDataDirs = rmtree =<< reader clusterDataRoot
 
-initNode :: MonadIO m => ClusterEnv -> GethId -> m ()
-initNode cEnv geth = shells initCommand empty
-  where
-    initCommand :: Text
-    initCommand = gethCommand cEnv
-                              (format ("init "%fp) (clusterGenesisJson cEnv))
-                              geth
+initNode :: (MonadIO m, HasEnv m) => GethId -> m ()
+initNode geth = do
+  genesisJson <- reader clusterGenesisJson
+  cmd <- gethCommand geth <*> pure (format ("init "%fp) genesisJson)
+  shells cmd empty
 
-createAccount :: MonadIO m => ClusterEnv -> GethId -> m ()
-createAccount cEnv gid = shells createCommand inputPasswordTwice
-  where
-    createCommand :: Text
-    createCommand = gethCommand cEnv "account new" gid
-
-    -- For responding to "Passphrase:" and "Repeat passphrase:"
-    inputPasswordTwice :: Shell Text
-    inputPasswordTwice = let pw = clusterPassword cEnv
-                         in return pw <|> return pw
+createAccount :: (MonadIO m, HasEnv m) => GethId -> m ()
+createAccount gid = do
+  cmd <- gethCommand gid <*> pure "account new"
+  pw <- reader clusterPassword
+  -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
+  shells cmd $ return pw <|> return pw
 
 fileContaining :: Shell Text -> Managed FilePath
 fileContaining contents = do
@@ -135,17 +136,21 @@ fileContaining contents = do
   liftIO $ hClose handle
   return path
 
-getEnodeId :: MonadIO m => ClusterEnv -> GethId -> m EnodeId
-getEnodeId cEnv gid = EnodeId . forceMaybe <$> fold enodeIdShell Fold.head
+getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
+getEnodeId gid = do
+  mkCmd <- gethCommand gid
+
+  let enodeIdShell :: Shell Text
+      enodeIdShell = sed (begins "enode") $ do
+        jsPath <- using $ fileContaining jsPayload
+        let cmd = mkCmd $ format ("js "%fp) jsPath
+        inshell cmd empty
+
+  EnodeId . forceMaybe <$> fold enodeIdShell Fold.head
+
   where
-    jsCommand jsPath = gethCommand cEnv (format ("js "%fp) jsPath) gid
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceMaybe = fromMaybe $ error "unable to extract enode ID"
-
-    enodeIdShell :: Shell Text
-    enodeIdShell = sed (begins "enode") $ do
-      jsPath <- using $ fileContaining jsPayload
-      inshell (jsCommand jsPath) empty
 
 -- > allSiblings [1,2,3]
 -- [(1,[2,3]),(2,[1,3]),(3,[1,2])]
@@ -158,28 +163,33 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       guard $ me /= sib
       pure sib
 
-writeStaticNodes :: (MonadIO m) => ClusterEnv -> [Geth] -> Geth -> m ()
-writeStaticNodes cEnv sibs geth = output jsonPath contents
+writeStaticNodes :: (MonadIO m, HasEnv m) => [Geth] -> Geth -> m ()
+writeStaticNodes sibs geth = do
+  nodeDataDir <- dataDir $ gethId geth
+  let jsonPath = nodeDataDir </> "static-nodes.json"
+  output jsonPath contents
+
   where
-    jsonPath = dataDir cEnv (gethId geth) </> "static-nodes.json"
     contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
 
-mkGeth :: MonadIO m => ClusterEnv -> GethId -> m Geth
-mkGeth cEnv gid = Geth gid <$> getEnodeId cEnv gid
+mkGeth :: (MonadIO m, HasEnv m) => GethId -> m Geth
+mkGeth gid = Geth gid <$> getEnodeId gid
 
-setupNodes :: MonadIO m => ClusterEnv -> [GethId] -> m [Geth]
-setupNodes cEnv gids = do
-  wipeDataDirs cEnv
+setupNodes :: forall m. (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
+setupNodes gids = do
+  cEnv <- ask
 
-  void $ liftIO $ forConcurrently gids $ \gid -> do
-    initNode cEnv gid
-    createAccount cEnv gid
+  wipeDataDirs
 
-  geths <- liftIO $ mapConcurrently (mkGeth cEnv) gids
+  geths <- liftIO $ forConcurrently gids $ \gid -> flip runReaderT cEnv $ do
+    initNode gid
+    createAccount gid
+    mkGeth gid
 
-  liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) -> do
-    writeStaticNodes cEnv sibs geth
-    pure geth
+  void $ liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) ->
+    flip runReaderT cEnv $ writeStaticNodes sibs geth
+
+  pure geths
 
 inshellWithJoinedErr :: Text -> Shell Text -> Shell Text
 inshellWithJoinedErr cmd inputShell = do
@@ -191,11 +201,13 @@ inshellWithJoinedErr cmd inputShell = do
 data NodeReady = NodeReady -- online, and ready for us to start raft
 data NodeTerminated = NodeTerminated
 
-runNode :: forall m. MonadManaged m
-        => ClusterEnv
-        -> Geth
+runNode :: forall m. (MonadManaged m, HasEnv m)
+        => Geth
         -> m (Async NodeReady, Async NodeTerminated)
-runNode cEnv geth = do
+runNode geth = do
+  let gid = gethId geth
+
+  command <- gethCommand gid <*> pure ""
   mvar <- liftIO newEmptyMVar
 
   let started :: m (Async NodeReady)
@@ -203,13 +215,11 @@ runNode cEnv geth = do
                   _ <- takeMVar mvar
                   return NodeReady
 
-      gid = gethId geth
-
       outputPath :: FilePath
-      outputPath = fromText $ format ("geth"%d%".out") (gId gid)
+      outputPath = fromText $ format ("geth"%d%".out") $ gId gid
 
       nodeShell :: Shell Text
-      nodeShell = inshellWithJoinedErr (gethCommand cEnv "" gid) empty
+      nodeShell = inshellWithJoinedErr command empty
 
       terminated :: m (Async NodeTerminated)
       terminated = fmap ($> NodeTerminated) $
@@ -225,26 +235,23 @@ runNode cEnv geth = do
 
   (,) <$> started <*> terminated
 
-startRaft :: MonadIO m => ClusterEnv -> Geth -> m ()
-startRaft cEnv geth = shells startCommand empty
-  where
-    startCommand =
-      gethCommand cEnv
-                  (format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint)
-                  (gethId geth)
-
-    ipcPath = dataDir cEnv (gethId geth) </> "geth.ipc"
-    ipcEndpoint = format ("ipc:"%fp) ipcPath
+startRaft :: (MonadIO m, HasEnv m) => Geth -> m ()
+startRaft geth = do
+  nodeDataDir <- dataDir (gethId geth)
+  let ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
+  command <- gethCommand (gethId geth) <*>
+    pure (format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint)
+  shells command empty
 
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
 
-runNodes :: MonadManaged m => ClusterEnv -> [Geth] -> m ()
-runNodes cEnv geths = do
-  (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse (runNode cEnv) geths
+runNodes :: (MonadManaged m, HasEnv m) => [Geth] -> m ()
+runNodes geths = do
+  (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
 
   awaitAll readyAsyncs
-  traverse_ (startRaft cEnv) geths
+  traverse_ startRaft geths
   awaitAll terminatedAsyncs
 
 --
