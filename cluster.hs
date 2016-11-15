@@ -168,9 +168,9 @@ setupNodes gids = do
     writeStaticNodes sibs geth
     pure geth
 
-nodeShell :: Geth -> Shell Text
-nodeShell geth = do
-  line <- inshellWithErr (gethCommand "" (gethId geth)) empty
+inshellWithJoinedErr :: Text -> Shell Text -> Shell Text
+inshellWithJoinedErr cmd inputShell = do
+  line <- inshellWithErr cmd inputShell
   case line of
     Left txt  -> return txt
     Right txt -> return txt
@@ -189,8 +189,13 @@ runNode geth = do
                   _ <- takeMVar mvar
                   return NodeReady
 
+      gid = gethId geth
+
       outputPath :: FilePath
-      outputPath = fromText $ format ("geth"%d%".out") (gId $ gethId geth)
+      outputPath = fromText $ format ("geth"%d%".out") (gId gid)
+
+      nodeShell :: Shell Text
+      nodeShell = inshellWithJoinedErr (gethCommand "" gid) empty
 
       terminated :: m (Async NodeTerminated)
       terminated = fmap ($> NodeTerminated) $
@@ -198,7 +203,7 @@ runNode geth = do
           handle <- using (writeonly outputPath)
           liftIO $ hSetBuffering handle LineBuffering
 
-          foldIO (nodeShell geth) $ Fold.mapM_ $ \line -> do
+          foldIO nodeShell $ Fold.mapM_ $ \line -> do
             liftIO $ T.hPutStrLn handle line
             guard =<< isEmptyMVar mvar
             when ("IPC endpoint opened:" `isInfixOf` line) $
