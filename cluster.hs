@@ -198,22 +198,22 @@ inshellWithJoinedErr cmd inputShell = do
     Left txt  -> return txt
     Right txt -> return txt
 
-data NodeReady = NodeReady -- online, and ready for us to start raft
+data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
 data NodeTerminated = NodeTerminated
 
 runNode :: forall m. (MonadManaged m, HasEnv m)
         => Geth
-        -> m (Async NodeReady, Async NodeTerminated)
+        -> m (Async NodeOnline, Async NodeTerminated)
 runNode geth = do
   let gid = gethId geth
 
   command <- gethCommand gid <*> pure ""
   mvar <- liftIO newEmptyMVar
 
-  let started :: m (Async NodeReady)
+  let started :: m (Async NodeOnline)
       started = fork $ do
                   _ <- takeMVar mvar
-                  return NodeReady
+                  return NodeOnline
 
       outputPath :: FilePath
       outputPath = fromText $ format ("geth"%d%".out") $ gId gid
@@ -231,7 +231,7 @@ runNode geth = do
             liftIO $ T.hPutStrLn handle line
             guard =<< isEmptyMVar mvar
             when ("IPC endpoint opened:" `isInfixOf` line) $
-              putMVar mvar NodeReady
+              putMVar mvar NodeOnline
 
   (,) <$> started <*> terminated
 
