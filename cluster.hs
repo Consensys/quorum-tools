@@ -221,16 +221,16 @@ startRaft geth = shells startCommand empty
     ipcPath = dataDir (gethId geth) </> "geth.ipc"
     ipcEndpoint = format ("ipc:"%fp) ipcPath
 
-awaitAll :: Traversable t => t (Async a) -> IO ()
-awaitAll = traverse_ wait
+awaitAll :: (MonadIO io, Traversable t) => t (Async a) -> io ()
+awaitAll = liftIO . traverse_ wait
 
 runNodes :: MonadManaged m => [Geth] -> m ()
 runNodes geths = do
   (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
-  liftIO $ do
-    awaitAll readyAsyncs
-    traverse_ startRaft geths
-    awaitAll terminatedAsyncs
+
+  awaitAll readyAsyncs
+  traverse_ startRaft geths
+  awaitAll terminatedAsyncs
 
 --
 --
