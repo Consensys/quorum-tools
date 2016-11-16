@@ -4,12 +4,13 @@
 -- OR, to pre-compile this:
 -- $ stack ghc -- -O2 -threaded cluster.hs
 
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
@@ -19,9 +20,10 @@ import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
 import           Data.Aeson
+import           Data.Bifunctor             (first)
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
-import           Data.Maybe                 (fromMaybe)
+import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Text                  (isInfixOf)
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (toStrict)
@@ -199,6 +201,52 @@ inshellWithJoinedErr cmd inputShell = do
     Left txt  -> return txt
     Right txt -> return txt
 
+gethShell :: HasEnv m
+          => Geth
+          -> m (Shell Text)
+gethShell geth = do
+  let gid = gethId geth
+  command <- gethCommand gid <*> pure ""
+  return $ inshellWithJoinedErr command empty
+
+tee :: FilePath -> Shell Text -> Shell Text
+tee filepath lines = do
+  handle <- using $ writeonly filepath
+  liftIO $ hSetBuffering handle LineBuffering
+  line <- lines
+  liftIO $ T.hPutStrLn handle line
+  return line
+
+data Transitioned = PreTransition | PostTransition
+
+observingTransition :: (a -> Bool) -> Shell a -> Shell (Transitioned, a)
+observingTransition test lines = do
+  mvar <- liftIO newEmptyMVar
+  line <- lines
+  isEmpty <- liftIO $ isEmptyMVar mvar
+
+  let thisIsTheLine = test line
+  when (isEmpty && thisIsTheLine) $ liftIO $ putMVar mvar ()
+
+  let isPost = not isEmpty || thisIsTheLine
+  return (if isPost then PostTransition else PreTransition, line)
+
+-- TODO: move from tuple to first-class data type
+-- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
+--       use a typeclass to access the (Maybe NodeOnline) field.
+observingBoot :: Shell Text -> Shell (Maybe NodeOnline, Text)
+observingBoot shell = first isOnline <$> observingTransition ipcOpened shell
+  where
+    ipcOpened = ("IPC endpoint opened:" `isInfixOf`)
+    isOnline = \case
+      PreTransition -> Nothing
+      PostTransition -> Just NodeOnline
+
+instrumentedGethShell :: HasEnv m => Geth -> m (Shell (Maybe NodeOnline, Text))
+instrumentedGethShell geth = observingBoot . tee logPath <$> gethShell geth
+  where
+    logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
+
 data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
 data NodeTerminated = NodeTerminated
 
@@ -206,33 +254,18 @@ runNode :: forall m. (MonadManaged m, HasEnv m)
         => Geth
         -> m (Async NodeOnline, Async NodeTerminated)
 runNode geth = do
-  let gid = gethId geth
-
-  command <- gethCommand gid <*> pure ""
-  mvar <- liftIO newEmptyMVar
+  shell <- instrumentedGethShell geth
+  onlineMvar <- liftIO newEmptyMVar
 
   let started :: m (Async NodeOnline)
-      started = fork $ do
-                  _ <- takeMVar mvar
-                  return NodeOnline
-
-      outputPath :: FilePath
-      outputPath = fromText $ format ("geth"%d%".out") $ gId gid
-
-      nodeShell :: Shell Text
-      nodeShell = inshellWithJoinedErr command empty
+      started = fork $ NodeOnline <$ takeMVar onlineMvar
 
       terminated :: m (Async NodeTerminated)
       terminated = fmap ($> NodeTerminated) $
-        using $ fork $ runManaged $ do
-          handle <- using (writeonly outputPath)
-          liftIO $ hSetBuffering handle LineBuffering
-
-          foldIO nodeShell $ Fold.mapM_ $ \line -> do
-            liftIO $ T.hPutStrLn handle line
-            guard =<< isEmptyMVar mvar
-            when ("IPC endpoint opened:" `isInfixOf` line) $
-              putMVar mvar NodeOnline
+        fork $ foldIO shell $ Fold.mapM_ $ \(mOnline, _line) -> do
+          isEmpty <- isEmptyMVar onlineMvar
+          when (isEmpty && isJust mOnline) $
+            putMVar onlineMvar ()
 
   (,) <$> started <*> terminated
 
