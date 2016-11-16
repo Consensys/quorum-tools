@@ -32,8 +32,9 @@ import           System.IO                  (BufferMode (..), hClose,
 import           Turtle
 
 main :: IO ()
-main = sh $ runReaderT (setupNodes [GethId 1, GethId 2, GethId 3] >>= runNodes)
-                       defaultClusterEnv
+main = sh $ flip runReaderT defaultClusterEnv $ do
+  geths <- setupNodes [GethId 1, GethId 2, GethId 3]
+  runNodes geths
 
 --
 
