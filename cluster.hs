@@ -74,9 +74,13 @@ data EnodeId = EnodeId Text
 instance ToJSON EnodeId where
   toJSON (EnodeId eid) = String eid
 
+data AccountId = AccountId Text
+  deriving (Show, Eq)
+
 data Geth =
-  Geth { gethId      :: GethId
-       , gethEnodeId :: EnodeId
+  Geth { gethId        :: GethId
+       , gethEnodeId   :: EnodeId
+       , gethAccountId :: AccountId
        }
   deriving (Show, Eq)
 
@@ -124,12 +128,19 @@ initNode geth = do
   cmd <- gethCommand geth <*> pure (format ("init "%fp) genesisJson)
   shells cmd empty
 
-createAccount :: (MonadIO m, HasEnv m) => GethId -> m ()
+createAccount :: (MonadIO m, HasEnv m) => GethId -> m AccountId
 createAccount gid = do
   cmd <- gethCommand gid <*> pure "account new"
   pw <- reader clusterPassword
   -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-  shells cmd $ return pw <|> return pw
+  let acctShell = inshell cmd (return pw <|> return pw)
+                & grep (begins "Address: ")
+                & sed (chars *> between (char '{') (char '}') chars)
+
+  AccountId . forceMaybe <$> fold acctShell Fold.head
+
+  where
+    forceMaybe = fromMaybe $ error "unable to extract account ID"
 
 fileContaining :: Shell Text -> Managed FilePath
 fileContaining contents = do
@@ -144,10 +155,11 @@ getEnodeId gid = do
   mkCmd <- gethCommand gid
 
   let enodeIdShell :: Shell Text
-      enodeIdShell = sed (begins "enode") $ do
-        jsPath <- using $ fileContaining jsPayload
-        let cmd = mkCmd $ format ("js "%fp) jsPath
-        inshell cmd empty
+      enodeIdShell = do
+                       jsPath <- using $ fileContaining jsPayload
+                       let cmd = mkCmd $ format ("js "%fp) jsPath
+                       inshell cmd empty
+                   & grep (begins "enode")
 
   EnodeId . forceMaybe <$> fold enodeIdShell Fold.head
 
@@ -175,8 +187,8 @@ writeStaticNodes sibs geth = do
   where
     contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
 
-mkGeth :: (MonadIO m, HasEnv m) => GethId -> m Geth
-mkGeth gid = Geth gid <$> getEnodeId gid
+mkGeth :: (MonadIO m, HasEnv m) => GethId -> AccountId -> m Geth
+mkGeth gid aid = Geth gid <$> getEnodeId gid <*> pure aid
 
 setupNodes :: forall m. (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
@@ -186,8 +198,8 @@ setupNodes gids = do
 
   geths <- liftIO $ forConcurrently gids $ \gid -> flip runReaderT cEnv $ do
     initNode gid
-    createAccount gid
-    mkGeth gid
+    aid <- createAccount gid
+    mkGeth gid aid
 
   void $ liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) ->
     flip runReaderT cEnv $ writeStaticNodes sibs geth
@@ -231,6 +243,9 @@ observingTransition test lines = do
   let isPost = not isEmpty || thisIsTheLine
   return (if isPost then PostTransition else PreTransition, line)
 
+data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
+data NodeTerminated = NodeTerminated
+
 -- TODO: move from tuple to first-class data type
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
 --       use a typeclass to access the (Maybe NodeOnline) field.
@@ -246,9 +261,6 @@ instrumentedGethShell :: HasEnv m => Geth -> m (Shell (Maybe NodeOnline, Text))
 instrumentedGethShell geth = observingBoot . tee logPath <$> gethShell geth
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
-
-data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
-data NodeTerminated = NodeTerminated
 
 runNode :: forall m. (MonadManaged m, HasEnv m)
         => Geth
