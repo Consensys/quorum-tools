@@ -27,7 +27,7 @@ import           Data.Bifunctor             (first)
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import           Data.Maybe                 (fromMaybe, isJust)
-import           Data.Text                  (isInfixOf, pack)
+import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8)
@@ -334,11 +334,30 @@ runNode geth = do
 
   (,) <$> started <*> terminated
 
-startRaft :: MonadIO m => Geth -> m ()
-startRaft geth = shells (gethCommand geth subcmd) empty
+shellEscapeSingleQuotes :: Text -> Text
+shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
+
+jsEscapeSingleQuotes :: Text -> Text
+jsEscapeSingleQuotes = replace "'" "\\'"
+
+sendJs :: MonadIO m => Geth -> Text -> m ()
+sendJs geth js = shells (gethCommand geth subcmd) empty
   where
-    ipcEndpoint = format ("ipc:"%fp) $ (gethDataDir geth) </> "geth.ipc"
-    subcmd = format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint
+    ipcEndpoint = format ("ipc:"%fp) $ gethDataDir geth </> "geth.ipc"
+    subcmd = format ("--exec '"%s%"' attach "%s)
+                    (shellEscapeSingleQuotes js)
+                    ipcEndpoint
+
+startRaft :: MonadIO m => Geth -> m ()
+startRaft geth = sendJs geth "raft.startNode();"
+
+unlockAccount :: MonadIO m => Geth -> m ()
+unlockAccount geth = sendJs geth js
+  where
+    tenYears = 10 * 365 * 24 * 60 * 60 :: Int
+    js = format ("personal.unlockAccount(eth.accounts[0], '"%s%"', "%d%");")
+                (jsEscapeSingleQuotes $ gethPassword geth)
+                tenYears
 
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
@@ -348,6 +367,7 @@ runNodes geths = do
   (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
 
   awaitAll readyAsyncs
+  void $ liftIO $ forConcurrently geths unlockAccount
   void $ liftIO $ forConcurrently geths startRaft
   awaitAll terminatedAsyncs
 
