@@ -348,7 +348,7 @@ runNodes geths = do
   (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
 
   awaitAll readyAsyncs
-  traverse_ startRaft geths
+  void $ liftIO $ forConcurrently geths startRaft
   awaitAll terminatedAsyncs
 
 --
