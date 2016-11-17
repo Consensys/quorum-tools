@@ -40,7 +40,8 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
 
 --
 
-newtype Verbosity = Verbosity Int deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
+newtype Verbosity = Verbosity Int
+  deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
 data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
@@ -80,38 +81,15 @@ data AccountId = AccountId Text
 data Geth =
   Geth { gethId        :: GethId
        , gethEnodeId   :: EnodeId
+       , gethHttpPort  :: Int
+       , gethRpcPort   :: Int
        , gethAccountId :: AccountId
+       , gethPassword  :: Text
+       , gethNetworkId :: Int
+       , gethVerbosity :: Verbosity
+       , gethDataDir   :: FilePath
        }
   deriving (Show, Eq)
-
-httpPort :: HasEnv m => GethId -> m Int
-httpPort (GethId gid) = (gid +) <$> reader clusterBaseHttpPort
-
-rpcPort :: HasEnv m => GethId -> m Int
-rpcPort (GethId gid) = (gid +) <$> reader clusterBaseRpcPort
-
-gethBinary :: HasEnv m => GethId -> m Text
-gethBinary gid = mkCommand <$> dataDir gid
-                           <*> httpPort gid
-                           <*> rpcPort gid
-                           <*> reader clusterNetworkId
-                           <*> reader clusterVerbosity
-  where
-    mkCommand = format $ "geth --datadir "%fp       %
-                             " --port "%d           %
-                             " --rpcport "%d        %
-                             " --networkid "%d      %
-                             " --verbosity "%d      %
-                             " --nodiscover"        %
-                             " --maxpeers 10"       %
-                             " --rpc"               %
-                             " --rpccorsdomain '*'" %
-                             " --rpcaddr localhost"
-
-gethCommand :: HasEnv m => GethId -> m (Text -> Text)
-gethCommand gid = do
-  binary <- gethBinary gid
-  return $ format (s % " " % s) binary
 
 dataDir :: HasEnv m => GethId -> m FilePath
 dataDir geth = do
@@ -119,18 +97,49 @@ dataDir geth = do
   let nodeName = format ("geth"%d) (gId geth)
   pure $ dataDirRoot </> fromText nodeName
 
+httpPort :: HasEnv m => GethId -> m Int
+httpPort (GethId gid) = (gid +) <$> reader clusterBaseHttpPort
+
+rpcPort :: HasEnv m => GethId -> m Int
+rpcPort (GethId gid) = (gid +) <$> reader clusterBaseRpcPort
+
+setupCommand :: HasEnv m => GethId -> m (Text -> Text)
+setupCommand gid = format ("geth --datadir "%fp%
+                               " --port "%d    %
+                               " --nodiscover" %
+                               " "% s)
+                      <$> dataDir gid
+                      <*> httpPort gid
+
+gethCommand :: Geth -> Text -> Text
+gethCommand geth = format ("geth --datadir "%fp       %
+                               " --port "%d           %
+                               " --rpcport "%d        %
+                               " --networkid "%d      %
+                               " --verbosity "%d      %
+                               " --nodiscover"        %
+                               " --rpc"               %
+                               " --rpccorsdomain '*'" %
+                               " --rpcaddr localhost" %
+                               " "%s)
+                          (gethDataDir geth)
+                          (gethHttpPort geth)
+                          (gethRpcPort geth)
+                          (gethNetworkId geth)
+                          (gethVerbosity geth)
+
 wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
 wipeDataDirs = rmtree =<< reader clusterDataRoot
 
 initNode :: (MonadIO m, HasEnv m) => GethId -> m ()
-initNode geth = do
+initNode gid = do
   genesisJson <- reader clusterGenesisJson
-  cmd <- gethCommand geth <*> pure (format ("init "%fp) genesisJson)
+  cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJson)
   shells cmd empty
 
 createAccount :: (MonadIO m, HasEnv m) => GethId -> m AccountId
 createAccount gid = do
-  cmd <- gethCommand gid <*> pure "account new"
+  cmd <- setupCommand gid <*> pure "account new"
   pw <- reader clusterPassword
   -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
   let acctShell = inshell cmd (return pw <|> return pw)
@@ -152,10 +161,9 @@ fileContaining contents = do
 
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 getEnodeId gid = do
-  mkCmd <- gethCommand gid
+  mkCmd <- setupCommand gid
 
-  let enodeIdShell :: Shell Text
-      enodeIdShell = do
+  let enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
                        let cmd = mkCmd $ format ("js "%fp) jsPath
                        inshell cmd empty
@@ -178,31 +186,39 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       guard $ me /= sib
       pure sib
 
-writeStaticNodes :: (MonadIO m, HasEnv m) => [Geth] -> Geth -> m ()
-writeStaticNodes sibs geth = do
-  nodeDataDir <- dataDir $ gethId geth
-  let jsonPath = nodeDataDir </> "static-nodes.json"
-  output jsonPath contents
+mkGeth :: (MonadIO m, HasEnv m) => GethId -> AccountId -> m Geth
+mkGeth gid aid = Geth gid <$> getEnodeId gid
+                          <*> httpPort gid
+                          <*> rpcPort gid
+                          <*> pure aid
+                          <*> reader clusterPassword
+                          <*> reader clusterNetworkId
+                          <*> reader clusterVerbosity
+                          <*> dataDir gid
 
+createNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
+createNode gid = do
+  initNode gid
+  aid <- createAccount gid
+  mkGeth gid aid
+
+writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
+writeStaticNodes sibs geth = output jsonPath contents
   where
+    jsonPath = gethDataDir geth </> "static-nodes.json"
     contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
 
-mkGeth :: (MonadIO m, HasEnv m) => GethId -> AccountId -> m Geth
-mkGeth gid aid = Geth gid <$> getEnodeId gid <*> pure aid
-
-setupNodes :: forall m. (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
+setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
   cEnv <- ask
 
   wipeDataDirs
 
-  geths <- liftIO $ forConcurrently gids $ \gid -> flip runReaderT cEnv $ do
-    initNode gid
-    aid <- createAccount gid
-    mkGeth gid aid
+  geths <- liftIO $ forConcurrently gids $ \gid ->
+    runReaderT (createNode gid) cEnv
 
   void $ liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) ->
-    flip runReaderT cEnv $ writeStaticNodes sibs geth
+    writeStaticNodes sibs geth
 
   pure geths
 
@@ -213,13 +229,8 @@ inshellWithJoinedErr cmd inputShell = do
     Left txt  -> return txt
     Right txt -> return txt
 
-gethShell :: HasEnv m
-          => Geth
-          -> m (Shell Text)
-gethShell geth = do
-  let gid = gethId geth
-  command <- gethCommand gid <*> pure ""
-  return $ inshellWithJoinedErr command empty
+gethShell :: Geth -> Shell Text
+gethShell geth = inshellWithJoinedErr (gethCommand geth "") empty
 
 tee :: FilePath -> Shell Text -> Shell Text
 tee filepath lines = do
@@ -229,7 +240,9 @@ tee filepath lines = do
   liftIO $ T.hPutStrLn handle line
   return line
 
-data Transitioned = PreTransition | PostTransition
+data Transitioned
+  = PreTransition
+  | PostTransition
 
 observingTransition :: (a -> Bool) -> Shell a -> Shell (Transitioned, a)
 observingTransition test lines = do
@@ -257,16 +270,22 @@ observingBoot shell = first isOnline <$> observingTransition ipcOpened shell
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
 
-instrumentedGethShell :: HasEnv m => Geth -> m (Shell (Maybe NodeOnline, Text))
-instrumentedGethShell geth = observingBoot . tee logPath <$> gethShell geth
+instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Text)
+instrumentedGethShell geth = gethShell geth
+                           & tee logPath
+                           & observingBoot
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
-runNode :: forall m. (MonadManaged m, HasEnv m)
+-- TODO: take a shell which supports NodeOnline instead of hard-coding to build
+-- an instrumentedGethShell
+runNode :: forall m. (MonadManaged m)
         => Geth
         -> m (Async NodeOnline, Async NodeTerminated)
 runNode geth = do
-  shell <- instrumentedGethShell geth
+  -- TODO: take as arg:
+  let shell = instrumentedGethShell geth
+
   onlineMvar <- liftIO newEmptyMVar
 
   let started :: m (Async NodeOnline)
@@ -281,18 +300,16 @@ runNode geth = do
 
   (,) <$> started <*> terminated
 
-startRaft :: (MonadIO m, HasEnv m) => Geth -> m ()
-startRaft geth = do
-  nodeDataDir <- dataDir (gethId geth)
-  let ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
-  command <- gethCommand (gethId geth) <*>
-    pure (format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint)
-  shells command empty
+startRaft :: MonadIO m => Geth -> m ()
+startRaft geth = shells (gethCommand geth subcmd) empty
+  where
+    ipcEndpoint = format ("ipc:"%fp) $ (gethDataDir geth) </> "geth.ipc"
+    subcmd = format ("--exec 'raft.startNode();' attach "%s) ipcEndpoint
 
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
 
-runNodes :: (MonadManaged m, HasEnv m) => [Geth] -> m ()
+runNodes :: MonadManaged m => [Geth] -> m ()
 runNodes geths = do
   (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
 
