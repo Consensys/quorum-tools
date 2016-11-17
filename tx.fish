@@ -17,7 +17,7 @@ function tx_rpc
   echo '{
    "id":      1,
    "jsonrpc": "2.0",
-   "method":  "eth_sendTransaction",
+   "method":  "raft_sendTransaction",
    "params":  [
      {
        "from": "'$FROM'",
