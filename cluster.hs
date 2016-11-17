@@ -261,7 +261,8 @@ data NodeTerminated = NodeTerminated
 
 -- TODO: move from tuple to first-class data type
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
---       use a typeclass to access the (Maybe NodeOnline) field.
+--       use a typeclass ReportsOnline/ReportsBooted to access the
+--       (Maybe NodeOnline) field.
 observingBoot :: Shell Text -> Shell (Maybe NodeOnline, Text)
 observingBoot shell = first isOnline <$> observingTransition ipcOpened shell
   where
@@ -277,8 +278,8 @@ instrumentedGethShell geth = gethShell geth
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
--- TODO: take a shell which supports NodeOnline instead of hard-coding to build
--- an instrumentedGethShell
+-- TODO: take a shell which supports ReportsOnline/ReportsBooted instead of
+-- hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
         => Geth
         -> m (Async NodeOnline, Async NodeTerminated)
