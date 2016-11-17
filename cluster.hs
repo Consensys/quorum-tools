@@ -11,6 +11,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
@@ -19,12 +20,14 @@ import qualified Control.Foldl              as Fold
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
+import           Control.Monad.State        (evalStateT, modify, get)
+import           Control.Monad.Trans.Class  (lift)
 import           Data.Aeson
 import           Data.Bifunctor             (first)
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import           Data.Maybe                 (fromMaybe, isJust)
-import           Data.Text                  (isInfixOf)
+import           Data.Text                  (isInfixOf, pack)
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8)
@@ -271,10 +274,40 @@ observingBoot shell = first isOnline <$> observingTransition ipcOpened shell
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
 
+data LastBlock
+  = NoneSeen
+  | LastBlock Text
+  | Panic
+  deriving Eq
+
+almostLattice :: LastBlock -> LastBlock -> LastBlock
+almostLattice NoneSeen x = x
+almostLattice _ Panic = Panic
+almostLattice _b1 b2 = b2
+
+infixl 5 <^<
+(<^<) = almostLattice
+
+-- prototype: "I1107 15:40:34.895541 raft/handler.go:537] Successfully extended chain: d7895e144053e4e8980141cbf8d190506864c3963b970b04585509823864f618"
+extractHash :: Pattern LastBlock
+extractHash = has $
+  (LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit))
+  <|> (Panic <$ "panic:")
+
+trackLastBlock :: Shell (Maybe NodeOnline, Text)
+               -> Shell (Maybe NodeOnline, LastBlock, Text)
+trackLastBlock incoming = flip evalStateT NoneSeen $ do
+  (online, line) <- lift incoming
+  case match extractHash line of
+    [block] -> modify (<^< block)
+    _ -> pure ()
+  (online, ,line) <$> get
+
 instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Text)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
+                           -- & trackLastBlock
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
