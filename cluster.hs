@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack --install-ghc runghc --package turtle
+-- stack --install-ghc runghc --package turtle --package aeson
 
 -- OR, to pre-compile this:
 -- $ stack ghc -- -O2 -threaded cluster.hs
@@ -95,9 +95,9 @@ data Geth =
   deriving (Show, Eq)
 
 dataDir :: HasEnv m => GethId -> m FilePath
-dataDir geth = do
+dataDir gid = do
   dataDirRoot <- reader clusterDataRoot
-  let nodeName = format ("geth"%d) (gId geth)
+  let nodeName = format ("geth"%d) (gId gid)
   pure $ dataDirRoot </> fromText nodeName
 
 httpPort :: HasEnv m => GethId -> m Int
@@ -189,8 +189,9 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       guard $ me /= sib
       pure sib
 
-mkGeth :: (MonadIO m, HasEnv m) => GethId -> AccountId -> m Geth
-mkGeth gid aid = Geth gid <$> getEnodeId gid
+mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> AccountId -> m Geth
+mkGeth gid eid aid = Geth <$> pure gid
+                          <*> pure eid
                           <*> httpPort gid
                           <*> rpcPort gid
                           <*> pure aid
@@ -203,7 +204,8 @@ createNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
 createNode gid = do
   initNode gid
   aid <- createAccount gid
-  mkGeth gid aid
+  eid <- getEnodeId gid
+  mkGeth gid eid aid
 
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
