@@ -293,8 +293,8 @@ infixl 5 <^<
 -- prototype: "I1107 15:40:34.895541 raft/handler.go:537] Successfully extended chain: d7895e144053e4e8980141cbf8d190506864c3963b970b04585509823864f618"
 extractHash :: Pattern LastBlock
 extractHash = has $
-  (LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit))
-  <|> (Panic <$ "panic:")
+  LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
+  <|> Panic <$ "panic:"
 
 trackLastBlock :: Shell (Maybe NodeOnline, Text)
                -> Shell (Maybe NodeOnline, LastBlock, Text)
