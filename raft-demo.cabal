@@ -1,0 +1,12 @@
+name: raft-demo
+version: 0.0.1
+synopsis: Orchestration, testing, and demonstration of JPM Raft-Ethereum
+license: Apache
+license-file: LICENSE.md
+cabal-version: >=1.10
+
+executable cluster
+  hs-source-dirs: src
+  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
+  main-is: cluster.hs
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers

@@ -1,9 +1,3 @@
-#!/usr/bin/env stack
--- stack --install-ghc runghc --package turtle --package aeson --package wreq --package safe --package transformers
-
--- OR, to pre-compile this:
--- $ stack ghc -- -O2 -threaded cluster.hs
-
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
