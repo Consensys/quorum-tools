@@ -8,6 +8,10 @@ resolver: lts-7.9
 
 packages:
 - '.'
+- location:
+    git: git@github.com:joelburget/symmetric-properties.git
+    commit: b070542f34ed4b508fecb0c74456edf3967f522d
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: []

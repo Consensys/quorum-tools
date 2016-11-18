@@ -6,11 +6,12 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
+module Cluster where
 
 import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
-                                             takeMVar)
+import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newEmptyMVar, putMVar,
+                                             takeMVar, swapMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (^.), (^?))
@@ -42,8 +43,8 @@ import           Turtle
 
 main :: IO ()
 main = sh $ flip runReaderT defaultClusterEnv $ do
-  geths <- setupNodes [GethId 1, GethId 2, GethId 3]
-  runNodes geths
+  geths <- setupNodes [1, 2, 3]
+  runNodesIndefinitely geths
 
 --
 
@@ -83,7 +84,7 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                }
 
 newtype GethId = GethId { gId :: Int }
-  deriving (Show, Eq, Num)
+  deriving (Show, Eq, Num, Enum)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
@@ -363,11 +364,11 @@ trackLastBlock incoming = flip evalStateT NoneSeen $ do
     _       -> pure ()
   (online, ,line) <$> get
 
-instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Text)
+instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, LastBlock, Text)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
-                           -- & trackLastBlock
+                           & trackLastBlock
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
@@ -375,24 +376,28 @@ instrumentedGethShell geth = gethShell geth
 -- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
         => Geth
-        -> m (Async NodeOnline, Async NodeTerminated)
+        -> m (Async NodeOnline, Async NodeTerminated, MVar LastBlock)
 runNode geth = do
   -- TODO: take as arg:
   let shell = instrumentedGethShell geth
 
-  onlineMvar <- liftIO newEmptyMVar
+  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newEmptyMVar
 
   let started :: m (Async NodeOnline)
       started = fork $ NodeOnline <$ takeMVar onlineMvar
 
       terminated :: m (Async NodeTerminated)
-      terminated = fmap ($> NodeTerminated) $
-        fork $ foldIO shell $ Fold.mapM_ $ \(mOnline, _line) -> do
+      terminated = fmap ($> NodeTerminated) processor
+
+      processor :: m (Async ())
+      processor = fork $ foldIO shell $ Fold.mapM_ $
+        \(mOnline, lastBlock, _line) -> do
           isEmpty <- isEmptyMVar onlineMvar
+          swapMVar lastBlockMvar lastBlock
           when (isEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
-  (,) <$> started <*> terminated
+  (,, lastBlockMvar) <$> started <*> terminated
 
 
 
@@ -415,13 +420,16 @@ unlockAccount geth = sendJs geth js
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
 
-runNodes :: MonadManaged m => [Geth] -> m ()
-runNodes geths = do
-  (readyAsyncs, terminatedAsyncs) <- unzip <$> traverse runNode geths
+runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
+runNodesIndefinitely geths = do
+  (readyAsyncs, terminatedAsyncs, _lastBlocks) <-
+    unzip3 <$> traverse runNode geths
 
   awaitAll readyAsyncs
-  void $ liftIO $ forConcurrently geths unlockAccount
-  void $ liftIO $ forConcurrently geths startRaft
+  void $ liftIO $ do
+    forConcurrently geths unlockAccount
+    forConcurrently geths startRaft
+
   awaitAll terminatedAsyncs
 
 -- | Make a packet filter rule to block a specific port.
@@ -491,9 +499,9 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
 --
 -- Invariant: list has at least one element
 spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions (g1:gs) = do
-  sendTx g1
-  spamTransactions (gs <> [g1])
+spamTransactions geths =
+  let spamInfinite (g:gs) = sendTx g >> spamInfinite gs
+  in spamInfinite (cycle geths)
 
 bench :: MonadIO m => Geth -> Seconds -> m ()
 bench geth (Seconds seconds) = view benchShell
