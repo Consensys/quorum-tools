@@ -57,8 +57,8 @@ data ClusterEnv
                , clusterPassword     :: Text
                , clusterNetworkId    :: Int
                , clusterGenesisJson  :: FilePath
-               , clusterBaseHttpPort :: Int
-               , clusterBaseRpcPort  :: Int
+               , clusterBaseHttpPort :: Port
+               , clusterBaseRpcPort  :: Port
                , clusterVerbosity    :: Verbosity
                }
   deriving (Eq, Show)
@@ -107,10 +107,10 @@ dataDir gid = do
   pure $ dataDirRoot </> fromText nodeName
 
 httpPort :: HasEnv m => GethId -> m Port
-httpPort (GethId gid) = Port . (gid +) <$> reader clusterBaseHttpPort
+httpPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseHttpPort
 
 rpcPort :: HasEnv m => GethId -> m Port
-rpcPort (GethId gid) = Port . (gid +) <$> reader clusterBaseRpcPort
+rpcPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseRpcPort
 
 setupCommand :: HasEnv m => GethId -> m (Text -> Text)
 setupCommand gid = format ("geth --datadir "%fp%
