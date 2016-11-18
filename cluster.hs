@@ -33,7 +33,6 @@ import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
-import qualified Data.Text                  as T
 import           Data.Text.Lazy             (toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8)
 import           Network.Wreq               (post)
