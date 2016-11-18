@@ -490,7 +490,7 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
 --   indefinitely.
 --
 -- Invariant: list has at least one element
-spamTransactions :: (MonadIO m, HasEnv m) => [Geth] -> m ()
+spamTransactions :: MonadIO m => [Geth] -> m ()
 spamTransactions (g1:gs) = do
   sendTx g1
   spamTransactions (gs <> [g1])
