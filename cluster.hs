@@ -19,14 +19,18 @@ import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
                                              takeMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
+import           Control.Lens               (to, (^.), (^?))
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
 import           Control.Monad.State        (evalStateT, get, modify)
 import           Control.Monad.Trans.Class  (lift)
 import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
-import           Data.Aeson
+import           Data.Aeson                 (ToJSON (toJSON), Value (String),
+                                             encode, object, (.=))
+import           Data.Aeson.Lens            (key, _String)
 import           Data.Bifunctor             (first)
+import qualified Data.ByteString.Lazy       as LSB
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import           Data.Maybe                 (fromMaybe, isJust)
@@ -34,8 +38,8 @@ import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (toStrict)
-import           Data.Text.Lazy.Encoding    (decodeUtf8)
-import           Network.Wreq               (post)
+import qualified Data.Text.Lazy.Encoding    as LT
+import           Network.Wreq               (Response, post, responseBody)
 import           Prelude                    hiding (FilePath)
 import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
@@ -52,8 +56,11 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
-newtype Millis = Millis Int deriving Num
-newtype Port = Port Int deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
+newtype Millis = Millis Int
+  deriving Num
+
+newtype Port = Port { getPort :: Int }
+  deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
 data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
@@ -88,6 +95,9 @@ instance ToJSON EnodeId where
   toJSON (EnodeId eid) = String eid
 
 data AccountId = AccountId { accountId :: Text }
+  deriving (Show, Eq)
+
+data TxId = TxId { txId :: Text }
   deriving (Show, Eq)
 
 data Geth =
@@ -222,7 +232,6 @@ shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
 jsEscapeSingleQuotes :: Text -> Text
 jsEscapeSingleQuotes = replace "'" "\\'"
 
--- TODO: this should take a RpcTransport (Local/IPC vs Remote/Network)
 sendJsSubcommand :: FilePath -> Text -> Text
 sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
                                          (shellEscapeSingleQuotes js)
@@ -253,7 +262,7 @@ writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
   where
     jsonPath = gethDataDir geth </> "static-nodes.json"
-    contents = return $ toStrict . decodeUtf8 . encode $ gethEnodeId <$> sibs
+    contents = return $ toStrict . LT.decodeUtf8 . encode $ gethEnodeId <$> sibs
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
@@ -441,11 +450,39 @@ partition (Millis ms) g = do
   liftIO $ threadDelay (1000 * ms)
 
 
---
---
+sendTx :: MonadIO io => Geth -> io (Either Text TxId)
+sendTx geth = liftIO $ parse <$> post route requestBody
+  where
+    route = "http://localhost:" <> show (getPort . gethRpcPort $ geth)
+
+    t :: Text -> Text
+    t = id
+
+    requestBody :: Value
+    requestBody = object
+      [ "id"      .= (1 :: Int)
+      , "jsonrpc" .= t "2.0"
+      , "method"  .= t "raft_sendTransaction"
+      , "params"  .=
+        [ object
+          [ "from" .= (accountId . gethAccountId $ geth)
+          , "to"   .= t "0000000000000000000000000000000000000000"
+          ]
+        ]
+      ]
+
+    parse :: Response LSB.ByteString -> Either Text TxId
+    parse r = fromMaybe parseFailure mParsed
+      where
+        parseFailure = Left $ toStrict $
+          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+        mParsed :: Maybe (Either Text TxId)
+        mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
+              <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 
--- TODO: use this
+
+-- TODO: potentially use this
 --
 -- type IdProducer = MonadState GethId
 --
@@ -454,26 +491,3 @@ partition (Millis ms) g = do
 --   id@(GethId i) <- S.get
 --   S.put (GethId (i + 1))
 --   return id
-
-
--- TODO: use this
---
--- postTx :: MonadIO io => Int -> io ()
--- postTx gethId =
---   let port = 40400 + gethId
---       route = format ("http://localhost:"%d) show port
---
---       t :: Text -> Text
---       t = id
---
---       body :: Value
---       body = object
---         [ "id" .= (1 :: Int)
---         , "jsonrpc" .= t "2.0"
---         , "method" .= t "eth_sendTransaction"
---         , "params" .= object
---           [ "from" .= t "joel"
---           , "to" .= t "jpm"
---           ]
---         ]
---   in liftIO $ post route body >> return ()
