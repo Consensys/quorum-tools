@@ -53,6 +53,9 @@ newtype Verbosity = Verbosity Int
 newtype Millis = Millis Int
   deriving Num
 
+newtype Seconds = Seconds Int
+  deriving Num
+
 newtype Port = Port { getPort :: Int }
   deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
@@ -104,6 +107,7 @@ data Geth =
        , gethNetworkId :: Int
        , gethVerbosity :: Verbosity
        , gethDataDir   :: FilePath
+       , gethUrl       :: Text
        }
   deriving (Show, Eq)
 
@@ -204,15 +208,19 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
       pure sib
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> AccountId -> m Geth
-mkGeth gid eid aid = Geth <$> pure gid
-                          <*> pure eid
-                          <*> httpPort gid
-                          <*> rpcPort gid
-                          <*> pure aid
-                          <*> reader clusterPassword
-                          <*> reader clusterNetworkId
-                          <*> reader clusterVerbosity
-                          <*> dataDir gid
+mkGeth gid eid aid = do
+  rpcPort' <- rpcPort gid
+
+  Geth <$> pure gid
+       <*> pure eid
+       <*> httpPort gid
+       <*> pure rpcPort'
+       <*> pure aid
+       <*> reader clusterPassword
+       <*> reader clusterNetworkId
+       <*> reader clusterVerbosity
+       <*> dataDir gid
+       <*> pure (format ("http://localhost:"%d) rpcPort')
 
 createNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
 createNode gid = do
@@ -253,11 +261,15 @@ loadNode gid = do
   where
     forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
 
+-- TODO: switch to a more efficient version
+textEncode :: ToJSON a => a -> Text
+textEncode = toStrict . LT.decodeUtf8 . encode
+
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
   where
     jsonPath = gethDataDir geth </> "static-nodes.json"
-    contents = return $ toStrict . LT.decodeUtf8 . encode $ gethEnodeId <$> sibs
+    contents = return $ textEncode $ gethEnodeId <$> sibs
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
@@ -445,27 +457,26 @@ partition (Millis ms) g = do
   liftIO $ threadDelay (1000 * ms)
 
 
-sendTx :: MonadIO io => Geth -> io (Either Text TxId)
-sendTx geth = liftIO $ parse <$> post route requestBody
-  where
-    route = "http://localhost:" <> show (getPort . gethRpcPort $ geth)
+txRpcBody :: Geth -> Value
+txRpcBody geth = object
+  [ "id"      .= (1 :: Int)
+  , "jsonrpc" .= t "2.0"
+  , "method"  .= t "raft_sendTransaction"
+  , "params"  .=
+    [ object
+      [ "from" .= (accountId . gethAccountId $ geth)
+      , "to"   .= t "0000000000000000000000000000000000000000"
+      ]
+    ]
+  ]
 
+  where
     t :: Text -> Text
     t = id
 
-    requestBody :: Value
-    requestBody = object
-      [ "id"      .= (1 :: Int)
-      , "jsonrpc" .= t "2.0"
-      , "method"  .= t "raft_sendTransaction"
-      , "params"  .=
-        [ object
-          [ "from" .= (accountId . gethAccountId $ geth)
-          , "to"   .= t "0000000000000000000000000000000000000000"
-          ]
-        ]
-      ]
-
+sendTx :: MonadIO io => Geth -> io (Either Text TxId)
+sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
+  where
     parse :: Response LSB.ByteString -> Either Text TxId
     parse r = fromMaybe parseFailure mParsed
       where
@@ -474,7 +485,6 @@ sendTx geth = liftIO $ parse <$> post route requestBody
         mParsed :: Maybe (Either Text TxId)
         mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
-
 
 -- | Continuously send transaction requests in a round-robin order. This runs
 --   indefinitely.
@@ -485,7 +495,22 @@ spamTransactions (g1:gs) = do
   sendTx g1
   spamTransactions (gs <> [g1])
 
+bench :: MonadIO m => Geth -> Seconds -> m ()
+bench geth (Seconds seconds) = view benchShell
+  where
+    luaEscapeSingleQuotes = jsEscapeSingleQuotes
+    lua = format ("wrk.method = 'POST'"  %
+                  "wrk.body   = '"%s%"'" %
+                  "wrk.headers['Content-Type'] = 'application/json'")
+                 (luaEscapeSingleQuotes $ textEncode $ txRpcBody geth)
 
+    benchShell = do
+      luaPath <- using $ fileContaining $ return lua
+      let cmd = format ("wrk -s "%fp%" -c 1 -d "%d%"s -t 1 "%s)
+                       luaPath
+                       seconds
+                       (gethUrl geth)
+      inshell cmd empty
 
 -- TODO: potentially use this
 --
