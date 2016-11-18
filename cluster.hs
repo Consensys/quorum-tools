@@ -50,7 +50,7 @@ newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
 newtype Millis = Millis Int deriving Num
-newtype Port = Port Int deriving Num
+newtype Port = Port Int deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
 data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
@@ -90,8 +90,8 @@ data AccountId = AccountId Text
 data Geth =
   Geth { gethId        :: GethId
        , gethEnodeId   :: EnodeId
-       , gethHttpPort  :: Int
-       , gethRpcPort   :: Int
+       , gethHttpPort  :: Port
+       , gethRpcPort   :: Port
        , gethAccountId :: AccountId
        , gethPassword  :: Text
        , gethNetworkId :: Int
@@ -106,13 +106,11 @@ dataDir gid = do
   let nodeName = format ("geth"%d) (gId gid)
   pure $ dataDirRoot </> fromText nodeName
 
--- TODO: return Port instead of Int
-httpPort :: HasEnv m => GethId -> m Int
-httpPort (GethId gid) = (gid +) <$> reader clusterBaseHttpPort
+httpPort :: HasEnv m => GethId -> m Port
+httpPort (GethId gid) = Port . (gid +) <$> reader clusterBaseHttpPort
 
--- TODO: return Port instead of Int
-rpcPort :: HasEnv m => GethId -> m Int
-rpcPort (GethId gid) = (gid +) <$> reader clusterBaseRpcPort
+rpcPort :: HasEnv m => GethId -> m Port
+rpcPort (GethId gid) = Port . (gid +) <$> reader clusterBaseRpcPort
 
 setupCommand :: HasEnv m => GethId -> m (Text -> Text)
 setupCommand gid = format ("geth --datadir "%fp%
@@ -400,7 +398,7 @@ onExit action cb = bracket (pure ()) (\_ -> action) cb
 partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
 partition (Millis ms) g = do
   pfConf <- fold (input "/etc/pf.conf") Fold.mconcat
-  port <- Port <$> httpPort g
+  port <- httpPort g
 
   ruleFile <- using $ fileContaining $ pure $ T.unlines
     [ pfConf

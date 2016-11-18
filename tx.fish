@@ -48,7 +48,7 @@ function bench # takes timing in seconds
 end
 
 function txes # TAKES A NUMBER OF TXES
-  echo curl -s -X POST -H "'Content-Type: application/json'" -d '\'{ "id": 1, "jsonrpc": "2.0", "method":  "eth_sendTransaction", "params":  [ { "from": "'$FROM'", "to": "'$TO'" } ] }\'' "http://localhost:4040$GETH/" >/tmp/cmd.txt
+  echo curl -s -X POST -H "'Content-Type: application/json'" -d '\'{ "id": 1, "jsonrpc": "2.0", "method":  "raft_sendTransaction", "params":  [ { "from": "'$FROM'", "to": "'$TO'" } ] }\'' "http://localhost:4040$GETH/" >/tmp/cmd.txt
   parallel -j 8 :::: (for x in (seq $argv); cat /tmp/cmd.txt; end | psub)
 end
 
