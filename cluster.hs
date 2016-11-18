@@ -13,9 +13,11 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
+import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (isEmptyMVar, newEmptyMVar, putMVar,
                                              takeMVar)
+import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -29,6 +31,7 @@ import           Data.Functor               (($>))
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text.IO               as T
+import qualified Data.Text                  as T
 import           Data.Text.Lazy             (toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8)
 import           Prelude                    hiding (FilePath)
@@ -45,6 +48,9 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
 
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
+
+newtype Millis = Millis Int deriving Num
+newtype Port = Port Int deriving Num
 
 data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
@@ -69,8 +75,8 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterVerbosity    = 3
                                }
 
-data GethId = GethId { gId :: Int }
-  deriving (Show, Eq)
+newtype GethId = GethId { gId :: Int }
+  deriving (Show, Eq, Num)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
@@ -100,9 +106,11 @@ dataDir gid = do
   let nodeName = format ("geth"%d) (gId gid)
   pure $ dataDirRoot </> fromText nodeName
 
+-- TODO: return Port instead of Int
 httpPort :: HasEnv m => GethId -> m Int
 httpPort (GethId gid) = (gid +) <$> reader clusterBaseHttpPort
 
+-- TODO: return Port instead of Int
 rpcPort :: HasEnv m => GethId -> m Int
 rpcPort (GethId gid) = (gid +) <$> reader clusterBaseRpcPort
 
@@ -372,6 +380,39 @@ runNodes geths = do
   void $ liftIO $ forConcurrently geths unlockAccount
   void $ liftIO $ forConcurrently geths startRaft
   awaitAll terminatedAsyncs
+
+-- | Make a packet filter rule to block a specific port.
+blockPortRule :: Port -> Text
+blockPortRule (Port i) = format
+  ("block in quick inet proto { tcp, udp } from any to any port "%d) i
+
+-- | Execute an action before exiting. Exception safe.
+--
+-- @
+--     onExit (putStrLn "exited!") $ \_ -> { code }
+-- @
+onExit :: IO () -> (() -> IO r) -> IO r
+onExit action cb = bracket (pure ()) (\_ -> action) cb
+
+-- | Partition some geth node for a number of milliseconds.
+--
+-- TODO: This will currently only work for partitioning a single node.
+partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
+partition (Millis ms) g = do
+  pfConf <- fold (input "/etc/pf.conf") Fold.mconcat
+  port <- Port <$> httpPort g
+
+  ruleFile <- using $ fileContaining $ pure $ T.unlines
+    [ pfConf
+    , blockPortRule port
+    ]
+
+  -- make sure to reset pf.conf on exit
+  _ <- using $ managed (onExit (sh $ inshell "sudo pfctl -f /etc/pf.conf" ""))
+
+  view $ inshell (format ("sudo pfctl -f "%fp) ruleFile) ""
+  liftIO $ threadDelay (1000 * ms)
+
 
 --
 --
