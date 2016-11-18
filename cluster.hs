@@ -177,8 +177,9 @@ fileContaining :: Shell Text -> Managed FilePath
 fileContaining contents = do
   dir <- using $ mktempdir "/tmp" "geth"
   (path, handle) <- using $ mktemp dir "geth"
-  liftIO $ outhandle handle contents
-  liftIO $ hClose handle
+  liftIO $ do
+    outhandle handle contents
+    hClose handle
   return path
 
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
@@ -479,6 +480,16 @@ sendTx geth = liftIO $ parse <$> post route requestBody
         mParsed :: Maybe (Either Text TxId)
         mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
+
+
+-- | Continuously send transaction requests in a round-robin order. This runs
+--   indefinitely.
+--
+-- Invariant: list has at least one element
+spamTransactions :: (MonadIO m, HasEnv m) => [Geth] -> m ()
+spamTransactions (g1:gs) = do
+  sendTx g1
+  spamTransactions (gs <> [g1])
 
 
 
