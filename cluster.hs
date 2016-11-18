@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack --install-ghc runghc --package turtle --package aeson
+-- stack --install-ghc runghc --package turtle --package aeson --package wreq --package safe --package transformers
 
 -- OR, to pre-compile this:
 -- $ stack ghc -- -O2 -threaded cluster.hs
@@ -22,19 +22,23 @@ import qualified Control.Foldl              as Fold
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
-import           Control.Monad.State        (evalStateT, modify, get)
+import           Control.Monad.State        (evalStateT, get, modify)
 import           Control.Monad.Trans.Class  (lift)
+import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson
 import           Data.Bifunctor             (first)
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Text                  (isInfixOf, pack, replace)
+import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import qualified Data.Text                  as T
 import           Data.Text.Lazy             (toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8)
+import           Network.Wreq               (post)
 import           Prelude                    hiding (FilePath)
+import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle
@@ -84,7 +88,7 @@ data EnodeId = EnodeId Text
 instance ToJSON EnodeId where
   toJSON (EnodeId eid) = String eid
 
-data AccountId = AccountId Text
+data AccountId = AccountId { accountId :: Text }
   deriving (Show, Eq)
 
 data Geth =
@@ -213,6 +217,39 @@ createNode gid = do
   eid <- getEnodeId gid
   mkGeth gid eid aid
 
+shellEscapeSingleQuotes :: Text -> Text
+shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
+
+jsEscapeSingleQuotes :: Text -> Text
+jsEscapeSingleQuotes = replace "'" "\\'"
+
+-- TODO: this should take a RpcTransport (Local/IPC vs Remote/Network)
+sendJsSubcommand :: FilePath -> Text -> Text
+sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
+                                         (shellEscapeSingleQuotes js)
+                                         ipcEndpoint
+  where
+    ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
+
+loadNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
+loadNode gid = do
+  nodeDataDir <- dataDir gid
+  let js = "console.log(eth.accounts[0] + '!' + admin.nodeInfo.enode)"
+  cmd <- setupCommand gid <*> pure (sendJsSubcommand nodeDataDir js)
+
+  let pat :: Pattern (AccountId, EnodeId)
+      pat = (pure (,)) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
+                       <*> fmap EnodeId ("!" *> begins "enode")
+
+  (aid, eid) <- fmap forceMaybe $ runMaybeT $ do
+    t <- MaybeT $ fold (inshell cmd empty) Fold.head
+    MaybeT $ return $ headMay $ match pat t
+
+  mkGeth gid eid aid
+
+  where
+    forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
+
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
   where
@@ -290,8 +327,8 @@ data LastBlock
 
 almostLattice :: LastBlock -> LastBlock -> LastBlock
 almostLattice NoneSeen x = x
-almostLattice _ Panic = Panic
-almostLattice _b1 b2 = b2
+almostLattice _ Panic    = Panic
+almostLattice _b1 b2     = b2
 
 infixl 5 <^<
 (<^<) = almostLattice
@@ -308,7 +345,7 @@ trackLastBlock incoming = flip evalStateT NoneSeen $ do
   (online, line) <- lift incoming
   case match extractHash line of
     [block] -> modify (<^< block)
-    _ -> pure ()
+    _       -> pure ()
   (online, ,line) <$> get
 
 instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Text)
@@ -342,19 +379,12 @@ runNode geth = do
 
   (,) <$> started <*> terminated
 
-shellEscapeSingleQuotes :: Text -> Text
-shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
 
-jsEscapeSingleQuotes :: Text -> Text
-jsEscapeSingleQuotes = replace "'" "\\'"
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
   where
-    ipcEndpoint = format ("ipc:"%fp) $ gethDataDir geth </> "geth.ipc"
-    subcmd = format ("--exec '"%s%"' attach "%s)
-                    (shellEscapeSingleQuotes js)
-                    ipcEndpoint
+    subcmd = sendJsSubcommand (gethDataDir geth) js
 
 startRaft :: MonadIO m => Geth -> m ()
 startRaft geth = sendJs geth "raft.startNode();"
