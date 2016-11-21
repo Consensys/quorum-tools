@@ -13,7 +13,7 @@ import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newMVar,
                                              newEmptyMVar, putMVar, swapMVar,
-                                             takeMVar)
+                                             takeMVar, modifyMVar_ , readMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (^.), (^?))
@@ -350,7 +350,7 @@ data LastBlock
   = NoneSeen
   | LastBlock Text
   | Panic
-  deriving Eq
+  deriving (Show, Eq)
 
 instance Monoid LastBlock where
   mempty = NoneSeen
@@ -371,12 +371,14 @@ extractHash = has $
 
 trackLastBlock :: Shell (Maybe NodeOnline, Text)
                -> Shell (Maybe NodeOnline, LastBlock, Text)
-trackLastBlock incoming = flip evalStateT NoneSeen $ do
-  (online, line) <- lift incoming
+trackLastBlock incoming = do
+  st <- liftIO $ newMVar NoneSeen
+  (online, line) <- incoming
   case match extractHash line of
-    [block] -> modify (<> block)
+    [block] -> do
+      liftIO $ modifyMVar_ st (\x -> pure (x <> block))
     _       -> pure ()
-  (online, ,line) <$> get
+  (online, ,line) <$> liftIO (readMVar st)
 
 instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, LastBlock, Text)
 instrumentedGethShell geth = gethShell geth

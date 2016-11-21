@@ -12,21 +12,23 @@ import Turtle
 import Cluster
 import ClusterAsync
 
--- data FailureReason
---   = MissingTx
---   | WrongOrder
---   | Panic
+data FailureReason
+  = WrongOrder LastBlock LastBlock
+  | DidPanic
+  deriving Show
 
 data Validity
   = Verified
-  -- we need to give a reason for the failure
-  | Falsified
+  | Falsified FailureReason
   deriving Show
 
 verifySameLastBlock :: [LastBlock] -> Validity
-verifySameLastBlock lastBlocks =
-  let allEq = allSame lastBlocks
-  in if allEq then Verified else Falsified
+verifySameLastBlock lastBlocks = case allSame lastBlocks of
+  NotSame a b -> Falsified $ case (a, b) of
+    (Panic, _) -> DidPanic
+    (_, Panic) -> DidPanic
+    (_, _) -> WrongOrder a b
+  _ -> Verified
 
 second :: Int
 second = 10 ^ (6 :: Int)

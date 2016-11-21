@@ -15,4 +15,4 @@ executable test1
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: test1.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, symmetric-properties
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties
