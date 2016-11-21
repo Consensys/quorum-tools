@@ -11,8 +11,9 @@ module Cluster where
 
 import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newEmptyMVar,
-                                             putMVar, swapMVar, takeMVar)
+import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newMVar,
+                                             newEmptyMVar, putMVar, swapMVar,
+                                             takeMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (^.), (^?))
@@ -385,12 +386,6 @@ instrumentedGethShell geth = gethShell geth
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
--- | Non-blocking MVar put. Warning: _not atomic_.
-putMVar' :: MVar a -> a -> IO ()
-putMVar' mv a = do
-  mvEmpty <- isEmptyMVar mv
-  if mvEmpty then putMVar mv a else void $ swapMVar mv a
-
 -- TODO: take a shell which supports ReportsOnline/ReportsBooted/HasBooted
 -- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
@@ -400,7 +395,7 @@ runNode geth = do
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newEmptyMVar
+  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newMVar NoneSeen
 
   let started :: m (Async NodeOnline)
       started = fork $ NodeOnline <$ takeMVar onlineMvar
@@ -412,7 +407,7 @@ runNode geth = do
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
         \(mOnline, lastBlock, _line) -> do
           isEmpty <- isEmptyMVar onlineMvar
-          putMVar' lastBlockMvar lastBlock
+          void $ swapMVar lastBlockMvar lastBlock
           when (isEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
