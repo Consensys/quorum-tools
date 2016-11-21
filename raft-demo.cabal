@@ -9,7 +9,7 @@ executable cluster
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: cluster.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers
 
 executable test1
   hs-source-dirs: src

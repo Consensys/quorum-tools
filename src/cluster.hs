@@ -6,12 +6,13 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
+
 module Cluster where
 
 import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newEmptyMVar, putMVar,
-                                             takeMVar, swapMVar)
+import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newEmptyMVar,
+                                             putMVar, swapMVar, takeMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (^.), (^?))
@@ -28,6 +29,7 @@ import           Data.Bifunctor             (first)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
+import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
@@ -60,6 +62,9 @@ newtype Seconds = Seconds Int
 newtype Port = Port { getPort :: Int }
   deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
+newtype Hostname = Hostname Text
+  deriving (Eq, Show)
+
 data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
                , clusterPassword     :: Text
@@ -68,6 +73,7 @@ data ClusterEnv
                , clusterBaseHttpPort :: Port
                , clusterBaseRpcPort  :: Port
                , clusterVerbosity    :: Verbosity
+               , clusterHostnames    :: Map.Map GethId Hostname
                }
   deriving (Eq, Show)
 
@@ -81,10 +87,14 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterBaseHttpPort = 30400
                                , clusterBaseRpcPort  = 40400
                                , clusterVerbosity    = 3
+                               , clusterHostnames    =
+                                   Map.fromList [ (1, Hostname "localhost")
+                                                , (2, Hostname "localhost")
+                                                , (3, Hostname "localhost")]
                                }
 
 newtype GethId = GethId { gId :: Int }
-  deriving (Show, Eq, Num, Enum)
+  deriving (Show, Eq, Num, Ord, Enum)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
