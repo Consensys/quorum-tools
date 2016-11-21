@@ -28,6 +28,9 @@ verifySameLastBlock lastBlocks =
   let allEq = allSame lastBlocks
   in if allEq then Verified else Falsified
 
+second :: Int
+second = 10 ^ (6 :: Int)
+
 main :: IO ()
 main = sh $ flip runReaderT defaultClusterEnv $ do
   nodes <- setupNodes [1..3]
@@ -45,9 +48,9 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
   -- run with all three nodes for a second, partition 1 for a second, run with
   -- all three for another second
   partitioner <- clusterAsync $ do
-    void $ liftIO $ threadDelay (1 * 1000000)
+    void $ liftIO $ threadDelay (1 * second)
     partition 1000 (GethId 1)
-    void $ liftIO $ threadDelay (1 * 1000000)
+    void $ liftIO $ threadDelay (1 * second)
 
   -- run spammer and partitioner concurrently, wait for the partitioner process
   -- to finish
@@ -55,7 +58,7 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
 
   void $ liftIO $ do
     -- HACK: wait three seconds for geths to catch up
-    threadDelay (3 * 1000000)
+    threadDelay (3 * second)
 
     -- verify that all have consistent logs
     lastBlocks' <- traverse readMVar lastBlocks
