@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module ClusterAsync where
 
-import Control.Concurrent.Async   (Async, async, forConcurrently, waitAny)
+import Control.Concurrent.Async   (Async, async, forConcurrently)
 import Control.Monad.Reader       (ReaderT (ReaderT, runReaderT), ask)
 import Turtle
 
@@ -21,18 +21,10 @@ newtype ClusterAsync a = ClusterAsync
 clusterAsync
   :: (MonadIO m, HasEnv m)
   => ReaderT ClusterEnv Shell a
-  -> m (ClusterAsync ())
+  -> m (Async ())
 clusterAsync m = do
   clusterEnv <- ask
-  a <- liftIO $ async $ sh (runReaderT m clusterEnv)
-  return $ ClusterAsync (ReaderT (const a))
-
--- | Wait for any cluster action to finish.
-waitAnyCluster :: (MonadIO m, HasEnv m) => [ClusterAsync a] -> m (Async a, a)
-waitAnyCluster asyncs = do
-  clusterEnv <- ask
-  let asyncs_ = map (flip runReaderT clusterEnv . runClusterAsync) asyncs
-  liftIO $ waitAny asyncs_
+  liftIO $ async $ sh (runReaderT m clusterEnv)
 
 -- | Map an IO-performing function with cluster environment access.
 forConcurrently'

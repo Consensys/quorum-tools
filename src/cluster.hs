@@ -32,6 +32,7 @@ import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
+import           Data.Monoid.Same           (Same(NotSame), allSame)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -122,6 +123,27 @@ data Geth =
        , gethUrl       :: Text
        }
   deriving (Show, Eq)
+
+data FailureReason
+  = WrongOrder LastBlock LastBlock
+  | DidPanic
+  deriving Show
+
+data Validity
+  = Verified
+  | Falsified FailureReason
+  deriving Show
+
+second :: Int
+second = 10 ^ (6 :: Int)
+
+verifySameLastBlock :: [LastBlock] -> Validity
+verifySameLastBlock lastBlocks = case allSame lastBlocks of
+  NotSame a b -> Falsified $ case (a, b) of
+    (Panic, _) -> DidPanic
+    (_, Panic) -> DidPanic
+    (_, _) -> WrongOrder a b
+  _ -> Verified
 
 dataDir :: HasEnv m => GethId -> m FilePath
 dataDir gid = do
