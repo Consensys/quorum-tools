@@ -385,6 +385,12 @@ instrumentedGethShell geth = gethShell geth
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
+-- | Non-blocking MVar put. Warning: _not atomic_.
+putMVar' :: MVar a -> a -> IO ()
+putMVar' mv a = do
+  mvEmpty <- isEmptyMVar mv
+  if mvEmpty then putMVar mv a else void $ swapMVar mv a
+
 -- TODO: take a shell which supports ReportsOnline/ReportsBooted/HasBooted
 -- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
@@ -406,7 +412,7 @@ runNode geth = do
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
         \(mOnline, lastBlock, _line) -> do
           isEmpty <- isEmptyMVar onlineMvar
-          void $ swapMVar lastBlockMvar lastBlock
+          putMVar' lastBlockMvar lastBlock
           when (isEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
