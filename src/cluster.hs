@@ -37,7 +37,7 @@ import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (toStrict)
 import qualified Data.Text.Lazy.Encoding    as LT
 import           Network.Wreq               (Response, post, responseBody)
-import           Prelude                    hiding (FilePath)
+import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
@@ -260,8 +260,8 @@ loadNode gid = do
   cmd <- setupCommand gid <*> pure (sendJsSubcommand nodeDataDir js)
 
   let pat :: Pattern (AccountId, EnodeId)
-      pat = (pure (,)) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
-                       <*> fmap EnodeId ("!" *> begins "enode")
+      pat = pure (,) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
+                     <*> fmap EnodeId ("!" *> begins "enode")
 
   (aid, eid) <- fmap forceMaybe $ runMaybeT $ do
     t <- MaybeT $ fold (inshell cmd empty) Fold.head
@@ -338,7 +338,7 @@ data NodeTerminated = NodeTerminated
 --       use a typeclass ReportsOnline/ReportsBooted/HasBooted to access the
 --       (Maybe NodeOnline) field.
 observingBoot :: Shell Text -> Shell (Maybe NodeOnline, Text)
-observingBoot shell = first isOnline <$> observingTransition ipcOpened shell
+observingBoot lines = first isOnline <$> observingTransition ipcOpened lines
   where
     ipcOpened = ("IPC endpoint opened:" `isInfixOf`)
     isOnline = \case
@@ -351,13 +351,16 @@ data LastBlock
   | Panic
   deriving Eq
 
-almostLattice :: LastBlock -> LastBlock -> LastBlock
-almostLattice NoneSeen x = x
-almostLattice _ Panic    = Panic
-almostLattice _b1 b2     = b2
+instance Monoid LastBlock where
+  mempty = NoneSeen
 
-infixl 5 <^<
-(<^<) = almostLattice
+  -- This behavior is almost bounded lattice -like, in that we have both a
+  -- bottom (NoneSeen) and a top (Panic), but the behavior is not lattice-like
+  -- in between, where we always take the later block.
+  mappend NoneSeen block = block
+  mappend _        Panic = Panic
+  mappend Panic    _b2   = Panic
+  mappend _b1      b2    = b2
 
 -- prototype: "I1107 15:40:34.895541 raft/handler.go:537] Successfully extended chain: d7895e144053e4e8980141cbf8d190506864c3963b970b04585509823864f618"
 extractHash :: Pattern LastBlock
@@ -370,7 +373,7 @@ trackLastBlock :: Shell (Maybe NodeOnline, Text)
 trackLastBlock incoming = flip evalStateT NoneSeen $ do
   (online, line) <- lift incoming
   case match extractHash line of
-    [block] -> modify (<^< block)
+    [block] -> modify (<> block)
     _       -> pure ()
   (online, ,line) <$> get
 
@@ -389,7 +392,7 @@ runNode :: forall m. (MonadManaged m)
         -> m (Async NodeOnline, Async NodeTerminated, MVar LastBlock)
 runNode geth = do
   -- TODO: take as arg:
-  let shell = instrumentedGethShell geth
+  let instrumentedLines = instrumentedGethShell geth
 
   (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newEmptyMVar
 
@@ -400,10 +403,10 @@ runNode geth = do
       terminated = fmap ($> NodeTerminated) processor
 
       processor :: m (Async ())
-      processor = fork $ foldIO shell $ Fold.mapM_ $
+      processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
         \(mOnline, lastBlock, _line) -> do
           isEmpty <- isEmptyMVar onlineMvar
-          swapMVar lastBlockMvar lastBlock
+          void $ swapMVar lastBlockMvar lastBlock
           when (isEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
@@ -436,9 +439,8 @@ runNodesIndefinitely geths = do
     unzip3 <$> traverse runNode geths
 
   awaitAll readyAsyncs
-  void $ liftIO $ do
-    forConcurrently geths unlockAccount
-    forConcurrently geths startRaft
+  void $ liftIO $ forConcurrently geths $ \geth ->
+    unlockAccount geth >> startRaft geth
 
   awaitAll terminatedAsyncs
 
@@ -453,7 +455,7 @@ blockPortRule (Port i) = format
 --     onExit (putStrLn "exited!") $ \_ -> { code }
 -- @
 onExit :: IO () -> (() -> IO r) -> IO r
-onExit action cb = bracket (pure ()) (\_ -> action) cb
+onExit action = bracket (pure ()) (const action)
 
 -- | Partition some geth node for a number of milliseconds.
 --
@@ -511,6 +513,7 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
 spamTransactions :: MonadIO m => [Geth] -> m ()
 spamTransactions geths =
   let spamInfinite (g:gs) = sendTx g >> spamInfinite gs
+      spamInfinite _ = error "spamTransactions: list must have at least one element"
   in spamInfinite (cycle geths)
 
 bench :: MonadIO m => Geth -> Seconds -> m ()
