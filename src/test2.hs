@@ -1,5 +1,5 @@
 -- Late-joining node
-module Test2 where
+module Main where
 
 import Control.Concurrent         (threadDelay)
 import Control.Concurrent.Async   (cancel)

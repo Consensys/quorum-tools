@@ -1,5 +1,5 @@
 -- One-second partition
-module Test1 where
+module Main where
 
 import Control.Concurrent         (threadDelay)
 import Control.Concurrent.Async   (cancel, wait)

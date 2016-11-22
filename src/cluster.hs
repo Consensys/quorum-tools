@@ -45,13 +45,6 @@ import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle
 
-main :: IO ()
-main = sh $ flip runReaderT defaultClusterEnv $ do
-  geths <- setupNodes [1, 2, 3]
-  runNodesIndefinitely geths
-
---
-
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
