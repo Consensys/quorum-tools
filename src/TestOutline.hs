@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 module TestOutline where
 
 import Control.Concurrent         (threadDelay)
@@ -8,12 +9,16 @@ import Control.Monad.Reader       (ReaderT (runReaderT), MonadReader)
 import Turtle
 
 import Cluster
+import PacketFilter
 import ClusterAsync
 
 -- TODO make this not callback-based
 tester :: Int -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
 tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
-  nodes <- setupNodes (map GethId [1..n])
+  let geths = [1..GethId n]
+  _ <- acquirePf geths
+
+  nodes <- setupNodes geths
   (readyAsyncs, terminatedAsyncs, lastBlocks) <-
     unzip3 <$> traverse runNode nodes
 

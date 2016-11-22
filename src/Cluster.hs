@@ -465,11 +465,6 @@ runNodesIndefinitely geths = do
 
   awaitAll terminatedAsyncs
 
--- | Make a packet filter rule to block a specific port.
-blockPortRule :: Port -> Text
-blockPortRule (Port i) = format
-  ("block in quick inet proto { tcp, udp } from any to any port "%d) i
-
 -- | Execute an action before exiting. Exception safe.
 --
 -- @
@@ -477,26 +472,6 @@ blockPortRule (Port i) = format
 -- @
 onExit :: IO () -> (() -> IO r) -> IO r
 onExit action = bracket (pure ()) (const action)
-
--- | Partition some geth node for a number of milliseconds.
---
--- TODO: This will currently only work for partitioning a single node.
-partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
-partition (Millis ms) g = do
-  pfConf <- fold (input "/etc/pf.conf") Fold.mconcat
-  port <- httpPort g
-
-  ruleFile <- using $ fileContaining $ pure $ T.unlines
-    [ pfConf
-    , blockPortRule port
-    ]
-
-  -- make sure to reset pf.conf on exit
-  _ <- using $ managed (onExit (sh $ inshell "sudo pfctl -f /etc/pf.conf" ""))
-
-  view $ inshell (format ("sudo pfctl -f "%fp) ruleFile) ""
-  liftIO $ threadDelay (1000 * ms)
-
 
 txRpcBody :: Geth -> Value
 txRpcBody geth = object
