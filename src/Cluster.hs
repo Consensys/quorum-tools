@@ -176,7 +176,10 @@ gethCommand geth = format ("geth --datadir "%fp       %
                           (gethVerbosity geth)
 
 wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
-wipeDataDirs = rmtree =<< reader clusterDataRoot
+wipeDataDirs = do
+  root <- reader clusterDataRoot
+  rmtree root
+  mktree root
 
 initNode :: (MonadIO m, HasEnv m) => GethId -> m ()
 initNode gid = do
