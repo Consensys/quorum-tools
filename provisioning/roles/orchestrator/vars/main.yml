@@ -1,0 +1,5 @@
+---
+gemini_examples_dir: '{{ home_dir }}/gemini-examples'
+demo_dir: '{{ gemini_examples_dir }}/raft-demo'
+stack_repo_key: '575159689BEFB442'
+stack_repo_url: 'http://download.fpcomplete.com/ubuntu/{{ ubuntu_release_codename }}'

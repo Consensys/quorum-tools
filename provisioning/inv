@@ -1,0 +1,6 @@
+[node_hosts:vars]
+ansible_ssh_private_key_file=ethereum-raft-demo.pem
+ansible_ssh_user=ubuntu
+
+[node_hosts]
+ec2-54-209-178-101.compute-1.amazonaws.com

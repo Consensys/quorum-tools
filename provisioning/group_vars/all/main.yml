@@ -1,0 +1,6 @@
+---
+home_dir: '/home/{{ ansible_ssh_user }}'
+go_path: '{{ home_dir }}/go'
+go_bin_dir: '{{ go_path }}/bin'
+path_with_go_binaries: '$PATH:{{ go_bin_dir }}:$GOPATH/bin'
+ubuntu_release_codename: xenial

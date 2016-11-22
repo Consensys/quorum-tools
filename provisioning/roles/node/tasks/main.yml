@@ -1,0 +1,49 @@
+---
+
+- name: Install Go
+  apt: name=golang state=present
+  become: yes
+
+- name: Get git configuration for GitHub repos
+  shell: git config --global --get url."git@github.com:".insteadOf
+  register: git_github_config_result
+  changed_when: False
+  ignore_errors: yes
+
+# This is necessary so that `go get` can pull down private forks.
+- name: Change git config to use SSH for GitHub repos
+  shell: git config --global url."git@github.com:".insteadOf "https://github.com/"
+  when: git_github_config_result.stdout == ""
+
+- name: Set GOPATH and add go bin directory to PATH
+  lineinfile: dest='{{ home_dir }}/.profile'
+              create=yes
+              line='{{ item }}'
+  with_items:
+    - 'export GOPATH="{{ go_path }}"'
+    - 'export PATH="{{ path_with_go_binaries }}"'
+
+- name: 'Create GOPATH'
+  file: path={{ go_path }} state=directory
+
+- name: 'Check out custom etcd (for raft)'
+  git: repo=ssh://git@github.com/noirqs/etcd.git
+       dest='{{ go_path }}/src/github.com/coreos/etcd'
+       version='{{ etcd_branch }}'
+  register: git_etcd_result
+
+- name: 'Check out custom ethereum'
+  git: repo=ssh://git@github.com/noirqs/jpm-goethereum.git
+       dest='{{ go_path }}/src/github.com/ethereum/go-ethereum'
+       version='{{ ethereum_branch }}'
+  register: git_eth_result
+  # There's something about this repo that's triggering an ansible bug (possibly
+  # related to https://github.com/ansible/ansible-modules-core/issues/1509), so
+  # we apply a workaround:
+  changed_when: "git_eth_result.after|default('after') != git_eth_result.before|default('before')"
+
+- name: 'Build ethereum'
+  shell: 'go get github.com/ethereum/go-ethereum/cmd/geth'
+  environment:
+    GOPATH: '{{ go_path }}'
+  when: git_etcd_result.changed or git_eth_result.changed

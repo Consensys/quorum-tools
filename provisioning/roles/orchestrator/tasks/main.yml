@@ -1,0 +1,37 @@
+---
+
+- name: Install wrk for benchmarking
+  apt: name=wrk state=present
+  become: yes
+
+- name: Add stack repo keys
+  apt_key:
+    keyserver: keyserver.ubuntu.com
+    id: '{{ stack_repo_key }}'
+  become: yes
+
+- name: Add stack deb repo
+  apt_repository: repo="deb {{ stack_repo_url }} stable main"
+  become: yes
+
+- name: Install stack
+  apt: name=stack state=present
+  become: yes
+  register: stack_install
+
+- name: Check out gemini-examples
+  git: repo=ssh://git@github.com/noirqs/gemini-examples.git
+       dest='{{ home_dir }}/gemini-examples'
+  register: checkout
+
+- name: Setup stack project
+  shell: stack setup
+  args:
+    chdir: '{{ demo_dir }}'
+  when: stack_install.changed
+
+- name: Build orchestration code
+  shell: stack build
+  args:
+    chdir: '{{ demo_dir }}'
+  when: checkout.changed

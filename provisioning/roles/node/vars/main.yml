@@ -1,0 +1,3 @@
+---
+etcd_branch: role-notification
+ethereum_branch: jpm-raft
