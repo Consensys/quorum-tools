@@ -541,8 +541,8 @@ bench :: MonadIO m => Geth -> Seconds -> m ()
 bench geth (Seconds seconds) = view benchShell
   where
     luaEscapeSingleQuotes = jsEscapeSingleQuotes
-    lua = format ("wrk.method = 'POST'"  %
-                  "wrk.body   = '"%s%"'" %
+    lua = format ("wrk.method = 'POST'\n"  %
+                  "wrk.body   = '"%s%"'\n" %
                   "wrk.headers['Content-Type'] = 'application/json'")
                  (luaEscapeSingleQuotes $ textEncode $ txRpcBody geth)
 
