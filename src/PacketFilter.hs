@@ -23,6 +23,13 @@ newtype PfToken = PfToken Text
 
 newtype Pid = Pid Int
 
+inshellWithNoErr :: Text -> Shell Text -> Shell Text
+inshellWithNoErr cmd inputShell = do
+  line <- inshellWithErr cmd inputShell
+  case line of
+    Left _err -> empty
+    Right out -> pure out
+
 -- create something like this:
 --
 -- anchor "raft-anchor" {
@@ -75,14 +82,14 @@ acquirePf geths = do
   -- enable pf / increment its enable reference count, then release on exit
   _ <- using $ managed $ bracket
     acquirePfHelper
-    (\(PfToken tk) -> sh $ inshell (format ("sudo pfctl -X "%s) tk) "")
+    (\(PfToken tk) -> sh $ inshellWithNoErr (format ("sudo pfctl -X "%s) tk) "")
 
   -- write the initial ruleset which passes packets through to each geth
   ruleFile <- using $ fileContaining $ pure (emptyRuleset geths)
-  view $ inshell (format ("sudo pfctl -f "%fp) ruleFile) ""
+  view $ inshellWithNoErr (format ("sudo pfctl -f "%fp) ruleFile) ""
 
   -- flush the rules we added on exit
-  _ <- using $ managed (onExit (sh $ inshell "sudo pfctl -a 'raft-anchor' -F rules" ""))
+  _ <- using $ managed (onExit (sh $ inshellWithNoErr "sudo pfctl -a 'raft-anchor' -F rules" ""))
   return ()
 
 matchOnce :: Pattern a -> Text -> Maybe a
@@ -157,11 +164,11 @@ partition (Millis ms) geth = do
   gdata <- reader clusterDataRoot
   ports <- getPortsForGeth gdata geth
   let anchor = format ("raft-anchor/geth"%d) (gId geth)
-  _ <- sh $ inshell
+  _ <- sh $ inshellWithNoErr
     (format ("sudo pfctl -a "%s%" -f -") anchor)
     (select [blockPortsRule ports])
 
   -- make sure to reset pf.conf on exit
-  _ <- using $ managed (onExit (sh $ inshell "sudo pfctl -a raft-partition" ""))
+  _ <- using $ managed (onExit (sh $ inshellWithNoErr "sudo pfctl -a raft-partition" ""))
 
   liftIO $ threadDelay (1000 * ms)
