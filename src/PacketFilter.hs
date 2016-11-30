@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE BangPatterns          #-}
 
 module PacketFilter (acquirePf, partition) where
 
@@ -30,7 +31,7 @@ inshellWithNoErr :: Text -> Shell Text -> Shell Text
 inshellWithNoErr cmd inputShell = do
   line <- inshellWithErr cmd inputShell
   case line of
-    Left _err -> empty
+    Left _shellErr -> empty
     Right out -> pure out
 
 -- create something like this:
@@ -67,7 +68,9 @@ acquirePfHelper =
       tokenPat = PfToken . pack <$> ("Token : " *> some digit)
 
       forceFirst :: First PfToken -> PfToken
-      forceFirst = fromMaybe (error "failed to find pf token") . getFirst
+      forceFirst =
+        fromMaybe (error "failed to find pf token (check you're a sudoer)")
+        . getFirst
 
       step :: First PfToken -> Either Text Text -> First PfToken
       step acc line = (acc <> First (matchOnce tokenPat (either id id line)))
@@ -83,7 +86,9 @@ acquirePfHelper =
 acquirePf :: MonadManaged m => [GethId] -> m ()
 acquirePf geths = do
   -- enable pf / increment its enable reference count, then release on exit
-  _ <- using $ managed $ bracket
+  -- Note: this could fail if we're not sudoers -- bind strictly to trigger
+  -- failure
+  !_ <- using $ managed $ bracket
     acquirePfHelper
     (\(PfToken tk) -> sh $ inshellWithNoErr (pfctl ("-X "%s) tk) "")
 
@@ -92,7 +97,8 @@ acquirePf geths = do
   view $ inshellWithNoErr (pfctl ("-f "%fp) ruleFile) ""
 
   -- flush the rules we added on exit
-  _ <- using $ managed (onExit (sh $ inshellWithNoErr (pfctl "-a 'raft-anchor' -F rules") ""))
+  !_ <- using $ managed $ onExit $ sh $
+    inshellWithNoErr (pfctl "-a 'raft-anchor' -F rules") ""
   return ()
 
 matchOnce :: Pattern a -> Text -> Maybe a
@@ -137,7 +143,9 @@ getPid gdata (GethId gid) =
           Nothing -> mzero
 
       forceFirst :: First Pid -> Pid
-      forceFirst = fromMaybe (error "failed to find pid") . getFirst
+      forceFirst =
+        fromMaybe (error "failed to find pid (check you're a sudoer)")
+        . getFirst
 
       step :: First Pid -> Text -> First Pid
       step acc line = (acc <> First (matchOnce pidPat line))
@@ -172,6 +180,7 @@ partition (Millis ms) geth = do
     (select [blockPortsRule ports])
 
   -- make sure to reset pf.conf on exit
-  _ <- using $ managed (onExit (sh $ inshellWithNoErr (pfctl "-a raft-partition") ""))
+  !_ <- using $ managed $ onExit $ sh $
+    inshellWithNoErr (pfctl "-a raft-partition") ""
 
   liftIO $ threadDelay (1000 * ms)
