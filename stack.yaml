@@ -10,7 +10,7 @@ packages:
 - '.'
 - location:
     git: git@github.com:joelburget/symmetric-properties.git
-    commit: 6b9d558aeaff5628894ab5c36782c2e337314ed4
+    commit: ce2a00df46751896966482b9beeadb1220fda575
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

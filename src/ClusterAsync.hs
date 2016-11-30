@@ -4,7 +4,7 @@ module ClusterAsync where
 
 import Control.Concurrent.Async   (Async, async, forConcurrently)
 import Control.Monad.Reader       (ReaderT (ReaderT, runReaderT), ask)
-import Turtle
+import Turtle                     (MonadIO, Shell, liftIO, sh)
 
 import Cluster
 

@@ -9,7 +9,6 @@
 
 module Cluster where
 
-import           Control.Concurrent         (threadDelay)
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newMVar,
                                              newEmptyMVar, putMVar, swapMVar,
@@ -20,8 +19,6 @@ import           Control.Lens               (to, (^.), (^?))
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
-import           Control.Monad.State        (evalStateT, get, modify)
-import           Control.Monad.Trans.Class  (lift)
 import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson                 (ToJSON (toJSON), Value (String),
                                              encode, object, (.=))
@@ -177,9 +174,9 @@ gethCommand geth = format ("geth --datadir "%fp       %
 
 wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
 wipeDataDirs = do
-  root <- reader clusterDataRoot
-  rmtree root
-  mktree root
+  gdata <- reader clusterDataRoot
+  rmtree gdata
+  mktree gdata
 
 initNode :: (MonadIO m, HasEnv m) => GethId -> m ()
 initNode gid = do
@@ -394,7 +391,7 @@ trackLastBlock incoming = do
   (online, line) <- incoming
   case match extractHash line of
     [block] -> do
-      liftIO $ modifyMVar_ st (\x -> pure (x <> block))
+      liftIO $ modifyMVar_ st (\prevLast -> pure (prevLast <> block))
     _       -> pure ()
   (online, ,line) <$> liftIO (readMVar st)
 
@@ -507,10 +504,10 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
 --
 -- Invariant: list has at least one element
 spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions geths =
-  let spamInfinite (g:gs) = sendTx g >> spamInfinite gs
+spamTransactions gethList =
+  let spamInfinite (geth:geths) = sendTx geth >> spamInfinite geths
       spamInfinite _ = error "spamTransactions: list must have at least one element"
-  in spamInfinite (cycle geths)
+  in spamInfinite (cycle gethList)
 
 bench :: MonadIO m => Geth -> Seconds -> m ()
 bench geth (Seconds seconds) = view benchShell
