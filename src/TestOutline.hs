@@ -5,18 +5,21 @@ module TestOutline where
 import Control.Concurrent         (threadDelay)
 import Control.Concurrent.Async   (cancel)
 import Control.Concurrent.MVar    (readMVar)
+import Control.Monad.Managed      (MonadManaged)
 import Control.Monad.Reader       (ReaderT (runReaderT), MonadReader)
+import System.Info
 import Turtle
 
 import Cluster
-import PacketFilter
+import qualified PacketFilter as PF
+import qualified IpTables as IPT
 import ClusterAsync
 
 -- TODO make this not callback-based
 tester :: Int -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
 tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
   let geths = [1..GethId n]
-  _ <- acquirePf geths
+  _ <- when (os == "darwin") $ PF.acquirePf geths
 
   nodes <- setupNodes geths
   (readyAsyncs, terminatedAsyncs, lastBlocks) <-
@@ -37,6 +40,9 @@ tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
 
     -- cancel all the workers
     mapM_ cancel terminatedAsyncs
+
+partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
+partition = if os == "darwin" then PF.partition else IPT.partition
 
 startAndUnlock
   :: (Traversable t, MonadIO m, MonadReader ClusterEnv m)

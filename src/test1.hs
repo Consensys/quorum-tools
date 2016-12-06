@@ -2,7 +2,6 @@
 module Main where
 
 import Cluster
-import PacketFilter
 import TestOutline
 
 main :: IO ()
