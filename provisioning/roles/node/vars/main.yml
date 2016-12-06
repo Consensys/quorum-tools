@@ -1,3 +1,4 @@
 ---
 etcd_branch: role-notification
+ethereum_repo: ssh://git@github.com/noirqs/jpm-goethereum.git
 ethereum_branch: jpm-raft

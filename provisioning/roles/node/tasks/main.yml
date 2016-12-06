@@ -26,6 +26,9 @@
 - name: 'Create GOPATH'
   file: path={{ go_path }} state=directory
 
+# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
+# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
+# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
 - name: 'Check out custom etcd (for raft)'
   git: repo=ssh://git@github.com/noirqs/etcd.git
        dest='{{ go_path }}/src/github.com/coreos/etcd'
@@ -33,7 +36,7 @@
   register: git_etcd_result
 
 - name: 'Check out custom ethereum'
-  git: repo=ssh://git@github.com/noirqs/jpm-goethereum.git
+  git: repo='{{ ethereum_repo }}'
        dest='{{ go_path }}/src/github.com/ethereum/go-ethereum'
        version='{{ ethereum_branch }}'
   register: git_eth_result
