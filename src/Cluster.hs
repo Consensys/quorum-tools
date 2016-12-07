@@ -9,13 +9,15 @@
 
 module Cluster where
 
+import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (MVar, isEmptyMVar, newMVar,
-                                             newEmptyMVar, putMVar, swapMVar,
-                                             takeMVar, modifyMVar_ , readMVar)
+import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
+                                             newEmptyMVar, newMVar, putMVar,
+                                             readMVar, swapMVar, takeMVar)
 import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (to, (^.), (^?))
+import           Control.Lens               (to, (<&>), (^.), (^?))
+import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask, reader))
@@ -29,7 +31,8 @@ import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
-import           Data.Monoid.Same           (Same(NotSame), allSame)
+import           Data.Monoid                ((<>))
+import           Data.Monoid.Same           (Same (NotSame), allSame)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -61,7 +64,6 @@ data ClusterEnv
   = ClusterEnv { clusterDataRoot     :: FilePath
                , clusterPassword     :: Text
                , clusterNetworkId    :: Int
-               , clusterGenesisJson  :: FilePath
                , clusterBaseHttpPort :: Port
                , clusterBaseRpcPort  :: Port
                , clusterVerbosity    :: Verbosity
@@ -75,7 +77,6 @@ defaultClusterEnv :: ClusterEnv
 defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterPassword     = "abcd"
                                , clusterNetworkId    = 1418
-                               , clusterGenesisJson  = "genesis.json"
                                , clusterBaseHttpPort = 30400
                                , clusterBaseRpcPort  = 40400
                                , clusterVerbosity    = 3
@@ -97,7 +98,16 @@ instance ToJSON EnodeId where
 data AccountId = AccountId { accountId :: Text }
   deriving (Show, Eq)
 
+data AccountKey = AccountKey { akAccountId :: AccountId
+                             , akKey       :: T.Text
+                             }
+  deriving (Show, Eq)
+
 data TxId = TxId { txId :: Text }
+  deriving (Show, Eq)
+
+data DataDir
+  = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
 data Geth =
@@ -109,7 +119,7 @@ data Geth =
        , gethPassword  :: Text
        , gethNetworkId :: Int
        , gethVerbosity :: Verbosity
-       , gethDataDir   :: FilePath
+       , gethDataDir   :: DataDir
        , gethUrl       :: Text
        }
   deriving (Show, Eq)
@@ -132,14 +142,16 @@ verifySameLastBlock lastBlocks = case allSame lastBlocks of
   NotSame a b -> Falsified $ case (a, b) of
     (Panic, _) -> DidPanic
     (_, Panic) -> DidPanic
-    (_, _) -> WrongOrder a b
+    (_, _)     -> WrongOrder a b
   _ -> Verified
 
-dataDir :: HasEnv m => GethId -> m FilePath
-dataDir gid = do
-  dataDirRoot <- reader clusterDataRoot
-  let nodeName = format ("geth"%d) (gId gid)
-  pure $ dataDirRoot </> fromText nodeName
+nodeName :: GethId -> T.Text
+nodeName gid = format ("geth"%d) (gId gid)
+
+gidDataDir :: HasEnv m => GethId -> m DataDir
+gidDataDir gid = do
+  dataDirPathRoot <- reader clusterDataRoot
+  pure . DataDir $ dataDirPathRoot </> fromText (nodeName gid)
 
 httpPort :: HasEnv m => GethId -> m Port
 httpPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseHttpPort
@@ -147,12 +159,15 @@ httpPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseHttpPort
 rpcPort :: HasEnv m => GethId -> m Port
 rpcPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseRpcPort
 
+rawCommand :: DataDir -> Text -> Text
+rawCommand dir = format ("geth --datadir "%fp%" "%s) (dataDirPath dir)
+
 setupCommand :: HasEnv m => GethId -> m (Text -> Text)
 setupCommand gid = format ("geth --datadir "%fp%
                                " --port "%d    %
                                " --nodiscover" %
                                " "% s)
-                      <$> dataDir gid
+                      <$> fmap dataDirPath (gidDataDir gid)
                       <*> httpPort gid
 
 gethCommand :: Geth -> Text -> Text
@@ -165,8 +180,9 @@ gethCommand geth = format ("geth --datadir "%fp       %
                                " --rpc"               %
                                " --rpccorsdomain '*'" %
                                " --rpcaddr localhost" %
+                               " --raft"              %
                                " "%s)
-                          (gethDataDir geth)
+                          (dataDirPath (gethDataDir geth))
                           (gethHttpPort geth)
                           (gethRpcPort geth)
                           (gethNetworkId geth)
@@ -178,25 +194,37 @@ wipeDataDirs = do
   rmtree gdata
   mktree gdata
 
-initNode :: (MonadIO m, HasEnv m) => GethId -> m ()
-initNode gid = do
-  genesisJson <- reader clusterGenesisJson
-  cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJson)
+initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
+initNode genesisJsonPath gid = do
+  cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
   shells cmd empty
 
-createAccount :: (MonadIO m, HasEnv m) => GethId -> m AccountId
-createAccount gid = do
-  cmd <- setupCommand gid <*> pure "account new"
-  pw <- reader clusterPassword
-  -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-  let acctShell = inshell cmd (return pw <|> return pw)
-                & grep (begins "Address: ")
-                & sed (chars *> between (char '{') (char '}') chars)
+readAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
+readAccountKey dir acctId@(AccountId aid) = do
+    paths <- fold (ls $ dataDirPath dir <> "keystore") Fold.list
+    let mPath = headMay $ filter (format fp
+                                    >>> match (contains $ text aid)
+                                    >>> null
+                                    >>> not)
+                                 paths
 
-  AccountId . forceMaybe <$> fold acctShell Fold.head
+    fmap (AccountKey acctId) <$> sequence (strict . input <$> mPath)
+
+createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
+createAccount dir = do
+    let cmd = rawCommand dir "account new"
+    pw <- reader clusterPassword
+    -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
+    let acctShell = inshell cmd (return pw <|> return pw)
+                  & grep (begins "Address: ")
+                  & sed (chars *> between (char '{') (char '}') chars)
+    aid <- AccountId . forceAcctId <$> fold acctShell Fold.head
+    mKey <- readAccountKey dir aid
+    return $ forceKey mKey
 
   where
-    forceMaybe = fromMaybe $ error "unable to extract account ID"
+    forceAcctId = fromMaybe $ error "unable to extract account ID"
+    forceKey = fromMaybe $ error "unable to find key in keystore"
 
 fileContaining :: Shell Text -> Managed FilePath
 fileContaining contents = do
@@ -246,15 +274,26 @@ mkGeth gid eid aid = do
        <*> reader clusterPassword
        <*> reader clusterNetworkId
        <*> reader clusterVerbosity
-       <*> dataDir gid
+       <*> gidDataDir gid
        <*> pure (format ("http://localhost:"%d) rpcPort')
 
-createNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
-createNode gid = do
-  initNode gid
-  aid <- createAccount gid
+installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
+installAccountKey gid acctKey = do
+    dir <- gidDataDir gid
+    let keystoreDir = (dataDirPath dir) </> "keystore"
+        jsonPath = keystoreDir </> fromText (nodeName gid)
+    output jsonPath (pure $ akKey acctKey)
+
+createNode :: (MonadIO m, HasEnv m)
+           => FilePath
+           -> GethId
+           -> AccountKey
+           -> m Geth
+createNode genesisJsonPath gid acctKey = do
+  initNode genesisJsonPath gid
+  installAccountKey gid acctKey
   eid <- getEnodeId gid
-  mkGeth gid eid aid
+  mkGeth gid eid (akAccountId acctKey)
 
 shellEscapeSingleQuotes :: Text -> Text
 shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
@@ -271,9 +310,9 @@ sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
 
 loadNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
 loadNode gid = do
-  nodeDataDir <- dataDir gid
+  nodeDataDir <- gidDataDir gid
   let js = "console.log(eth.accounts[0] + '!' + admin.nodeInfo.enode)"
-  cmd <- setupCommand gid <*> pure (sendJsSubcommand nodeDataDir js)
+  cmd <- setupCommand gid <*> pure (sendJsSubcommand (dataDirPath nodeDataDir) js)
 
   let pat :: Pattern (AccountId, EnodeId)
       pat = pure (,) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
@@ -295,17 +334,57 @@ textEncode = toStrict . LT.decodeUtf8 . encode
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
   where
-    jsonPath = gethDataDir geth </> "static-nodes.json"
+    jsonPath = (dataDirPath $ gethDataDir geth) </> "static-nodes.json"
     contents = return $ textEncode $ gethEnodeId <$> sibs
+
+generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
+generateAccountKeys numAccts = do
+  clusterEnv <- ask
+  liftIO $ with (DataDir <$> mktempdir "/tmp" "geth") $ \tmpDataDir ->
+    runReaderT (replicateM numAccts $ createAccount tmpDataDir) clusterEnv
+
+createGenesisJson :: (MonadIO m, HasEnv m) => [AccountId] -> m FilePath
+createGenesisJson acctIds = do
+    jsonPath <- reader clusterDataRoot <&> (</> "genesis.json")
+    output jsonPath contents
+    return jsonPath
+
+  where
+    contents :: Shell Text
+    contents = return $ textEncode $ object
+      [ "alloc"      .= object
+        (fmap (\(AccountId aid) ->
+                 ("0x" <> aid) .= object [ "balance" .= initialAcctBalance ])
+              acctIds)
+      , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
+      , "config"     .= object
+        [ "homesteadBlock" .= (0 :: Int) ]
+      , "difficulty" .= t "0x0"
+      , "extraData"  .= t "0x0"
+      , "gasLimit"   .= t "0x2FEFD800"
+      -- TODO: perhaps make this 0 or randomize it:
+      , "mixhash"    .= t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
+      , "nonce"      .= t "0x0"
+      , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
+      , "timestamp"  .= t "0x0"
+      ]
+
+    t = id :: Text -> Text
+
+    initialAcctBalance :: Text
+    initialAcctBalance = "1000000000000000000000000000"
+
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
-  cEnv <- ask
-
   wipeDataDirs
 
-  geths <- liftIO $ forConcurrently gids $ \gid ->
-    runReaderT (createNode gid) cEnv
+  acctKeys <- generateAccountKeys (length gids)
+  genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
+
+  clusterEnv <- ask
+  geths <- liftIO $ forConcurrently (zip gids acctKeys) $ \(gid, acctKey) ->
+    runReaderT (createNode genesisJsonPath gid acctKey) clusterEnv
 
   void $ liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) ->
     writeStaticNodes sibs geth
@@ -320,7 +399,11 @@ inshellWithJoinedErr cmd inputShell = do
     Right txt -> return txt
 
 gethShell :: Geth -> Shell Text
-gethShell geth = inshellWithJoinedErr (gethCommand geth "") empty
+gethShell geth = do
+  pwPath <- using $ fileContaining $ return $ gethPassword geth
+  inshellWithJoinedErr (gethCommand geth $
+                                    format ("--unlock 0 --password "%fp) pwPath)
+                       empty
 
 tee :: FilePath -> Shell Text -> Shell Text
 tee filepath lines = do
@@ -435,7 +518,7 @@ runNode geth = do
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
   where
-    subcmd = sendJsSubcommand (gethDataDir geth) js
+    subcmd = sendJsSubcommand (dataDirPath $ gethDataDir geth) js
 
 startRaft :: MonadIO m => Geth -> m ()
 startRaft geth = sendJs geth "raft.startNode();"
@@ -457,8 +540,8 @@ runNodesIndefinitely geths = do
     unzip3 <$> traverse runNode geths
 
   awaitAll readyAsyncs
-  void $ liftIO $ forConcurrently geths $ \geth ->
-    unlockAccount geth >> startRaft geth
+
+  void $ liftIO $ forConcurrently geths startRaft
 
   awaitAll terminatedAsyncs
 
@@ -474,7 +557,7 @@ txRpcBody :: Geth -> Value
 txRpcBody geth = object
   [ "id"      .= (1 :: Int)
   , "jsonrpc" .= t "2.0"
-  , "method"  .= t "raft_sendTransaction"
+  , "method"  .= t "eth_sendTransaction"
   , "params"  .=
     [ object
       [ "from" .= (accountId . gethAccountId $ geth)
