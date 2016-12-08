@@ -362,8 +362,7 @@ createGenesisJson acctIds = do
       , "difficulty" .= t "0x0"
       , "extraData"  .= t "0x0"
       , "gasLimit"   .= t "0x2FEFD800"
-      -- TODO: perhaps make this 0 or randomize it:
-      , "mixhash"    .= t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
+      , "mixhash"    .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
       , "nonce"      .= t "0x0"
       , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
       , "timestamp"  .= t "0x0"
