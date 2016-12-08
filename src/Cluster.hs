@@ -354,7 +354,7 @@ createGenesisJson acctIds = do
     contents = return $ textEncode $ object
       [ "alloc"      .= object
         (fmap (\(AccountId aid) ->
-                 ("0x" <> aid) .= object [ "balance" .= initialAcctBalance ])
+                 ("0x" <> aid) .= object [ "balance" .= t "0" ])
               acctIds)
       , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
       , "config"     .= object
@@ -370,10 +370,6 @@ createGenesisJson acctIds = do
       ]
 
     t = id :: Text -> Text
-
-    initialAcctBalance :: Text
-    initialAcctBalance = "1000000000000000000000000000"
-
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
