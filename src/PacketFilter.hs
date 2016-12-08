@@ -108,6 +108,6 @@ partition (Millis ms) geth = do
 
   -- make sure to reset pf.conf on exit
   !_ <- using $ managed $ onExit $ sh $
-    inshellWithNoErr (pfctl "-a raft-partition") ""
+    inshellWithNoErr (pfctl "-a raft-anchor") ""
 
   liftIO $ threadDelay (1000 * ms)
