@@ -26,18 +26,9 @@
 - name: 'Create GOPATH'
   file: path={{ go_path }} state=directory
 
-# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
-# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
-# TODO: REMOVE THIS AND TRANSITION TO VENDORED RAFT
-- name: 'Check out custom etcd (for raft)'
-  git: repo=ssh://git@github.com/noirqs/etcd.git
-       dest='{{ go_path }}/src/github.com/coreos/etcd'
-       version='{{ etcd_branch }}'
-  register: git_etcd_result
-
 - name: 'Check out custom ethereum'
   git: repo='{{ ethereum_repo }}'
-       dest='{{ go_path }}/src/github.com/ethereum/go-ethereum'
+       dest='{{ geth_dir }}'
        version='{{ ethereum_branch }}'
   register: git_eth_result
   # There's something about this repo that's triggering an ansible bug (possibly
@@ -46,7 +37,13 @@
   changed_when: "git_eth_result.after|default('after') != git_eth_result.before|default('before')"
 
 - name: 'Build ethereum'
-  shell: 'go get github.com/ethereum/go-ethereum/cmd/geth'
+  shell: 'make all'
+  args:
+    chdir: '{{ geth_dir }}'
   environment:
     GOPATH: '{{ go_path }}'
-  when: git_etcd_result.changed or git_eth_result.changed
+  when: git_eth_result.changed
+
+- name: 'Copy geth to go binaries directory'
+  shell: 'cp {{ geth_dir }}/build/bin/geth {{ go_path }}/bin'
+  when: git_eth_result.changed
