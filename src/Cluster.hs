@@ -57,7 +57,7 @@ newtype Seconds = Seconds Int
 newtype Port = Port { getPort :: Int }
   deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
-newtype Hostname = Hostname Text
+newtype Hostname = Hostname { getHostname :: Text }
   deriving (Eq, Show)
 
 data ClusterEnv
@@ -81,9 +81,9 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterBaseRpcPort  = 40400
                                , clusterVerbosity    = 3
                                , clusterHostnames    =
-                                   Map.fromList [ (1, Hostname "localhost")
-                                                , (2, Hostname "localhost")
-                                                , (3, Hostname "localhost")]
+                                   Map.fromList [ (1, Hostname "127.0.0.1")
+                                                , (2, Hostname "127.0.0.1")
+                                                , (3, Hostname "127.0.0.1")]
                                }
 
 newtype GethId = GethId { gId :: Int }
@@ -239,18 +239,24 @@ fileContaining contents = do
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 getEnodeId gid = do
   mkCmd <- setupCommand gid
+  mHost <- Map.lookup gid <$> reader clusterHostnames
 
-  let enodeIdShell = do
+  let host = getHostname $ forceHostname mHost
+      enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
                        let cmd = mkCmd $ format ("js "%fp) jsPath
                        inshell cmd empty
                    & grep (begins "enode")
+                   & sed (fmap (\a b -> a <> host <> b) chars
+                           <*  text "[::]"
+                           <*> chars)
 
-  EnodeId . forceMaybe <$> fold enodeIdShell Fold.head
+  EnodeId . forceNodeId <$> fold enodeIdShell Fold.head
 
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
-    forceMaybe = fromMaybe $ error "unable to extract enode ID"
+    forceNodeId = fromMaybe $ error "unable to extract enode ID"
+    forceHostname = fromMaybe $ error $ "no found hostname for " <> show gid
 
 -- > allSiblings [1,2,3]
 -- [(1,[2,3]),(2,[1,3]),(3,[1,2])]
