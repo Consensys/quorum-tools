@@ -191,7 +191,8 @@ gethCommand geth = format ("geth --datadir "%fp       %
 wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
 wipeDataDirs = do
   gdata <- reader clusterDataRoot
-  rmtree gdata
+  dirExists <- testdir gdata
+  when dirExists $ rmtree gdata
   mktree gdata
 
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
