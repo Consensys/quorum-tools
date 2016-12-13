@@ -32,7 +32,7 @@ import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                ((<>))
-import           Data.Monoid.Same           (Same (NotSame), allSame)
+import           Data.Monoid.Same           (Same (NotSame, Same), allSame)
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -143,6 +143,7 @@ verifySameLastBlock lastBlocks = case allSame lastBlocks of
     (Panic, _) -> DidPanic
     (_, Panic) -> DidPanic
     (_, _)     -> WrongOrder a b
+  Same Panic -> Falsified DidPanic
   _ -> Verified
 
 nodeName :: GethId -> T.Text
