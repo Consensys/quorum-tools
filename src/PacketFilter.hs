@@ -21,34 +21,7 @@ import SharedPartitioning
 pfctl :: Format Text r -> r
 pfctl args = format ("sudo -n pfctl "%args)
 
--- create something like this:
---
--- anchor "raft-anchor" {
---   anchor "geth1" {
---     pass
---   }
---   anchor "geth2" {
---     pass
---   }
---   anchor "geth3" {
---     pass
---   }
--- }
-emptyRuleset :: [GethId] -> Text
-emptyRuleset geths =
-  let gethRule (GethId i) =
-        [ format ("anchor \"geth"%d%"\" {") i
-        , "pass"
-        , "}"
-        ]
-      gethRules = concatMap gethRule geths
-      gethRules_ = map ("  " <>) gethRules
-      anchorLines =
-        [ "anchor \"raft-anchor\" {" ] <>
-        gethRules_ <>
-        [ "}" ]
-  in T.unlines anchorLines
-
+-- TODO(joel): this should really use anchors for easy cleanup
 acquirePfHelper :: IO PfToken
 acquirePfHelper =
   let tokenPat :: Pattern PfToken
@@ -70,8 +43,8 @@ acquirePfHelper =
 -- | Turn on pf and initialize with empty rules for every geth node.
 --
 -- Must be called once at the beginning of a test.
-acquirePf :: MonadManaged m => [GethId] -> m ()
-acquirePf geths = do
+acquirePf :: MonadManaged m => m ()
+acquirePf = do
   -- enable pf / increment its enable reference count, then release on exit
   -- Note: this could fail if we're not sudoers -- bind strictly to trigger
   -- failure
@@ -79,20 +52,16 @@ acquirePf geths = do
     acquirePfHelper
     (\(PfToken tk) -> sh $ inshellWithNoErr (pfctl ("-X "%s) tk) "")
 
-  -- write the initial ruleset which passes packets through to each geth
-  ruleFile <- using $ fileContaining $ pure (emptyRuleset geths)
-  view $ inshellWithNoErr (pfctl ("-f "%fp) ruleFile) ""
-
   -- flush the rules we added on exit
   !_ <- using $ managed $ onExit $ sh $
-    inshellWithNoErr (pfctl "-a 'raft-anchor' -F rules") ""
+    inshellWithNoErr (pfctl "-F rules") ""
   return ()
 
 -- | Make a packet filter rule to block a specific port.
 blockPortsRule :: [Port] -> Text
 blockPortsRule ports =
   let ports_ = T.intercalate ", " (map (T.pack . show . getPort) ports)
-  in format ("block quick proto { tcp, udp } from any to any port { "%s%" }") ports_
+  in format ("block quick proto { tcp, udp } from any to port { "%s%" }") ports_
 
 -- | Partition some geth node for a number of milliseconds.
 --
@@ -101,13 +70,12 @@ partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
 partition (Millis ms) geth = do
   gdata <- reader clusterDataRoot
   ports <- getPortsForGeth gdata geth
-  let anchor = format ("raft-anchor/geth"%d) (gId geth)
   _ <- sh $ inshellWithNoErr
-    (pfctl ("-a "%s%" -f -") anchor)
+    (pfctl "-f -")
     (select [blockPortsRule ports])
 
   -- make sure to reset pf.conf on exit
   !_ <- using $ managed $ onExit $ sh $
-    inshellWithNoErr (pfctl "-a raft-anchor") ""
+    inshellWithNoErr (pfctl "") ""
 
   liftIO $ threadDelay (1000 * ms)

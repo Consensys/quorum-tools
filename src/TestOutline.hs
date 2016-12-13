@@ -19,7 +19,7 @@ import ClusterAsync
 tester :: Int -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
 tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
   let geths = [1..GethId n]
-  _ <- when (os == "darwin") $ PF.acquirePf geths
+  _ <- when (os == "darwin") PF.acquirePf
 
   nodes <- setupNodes geths
   (readyAsyncs, terminatedAsyncs, lastBlocks) <-
@@ -51,7 +51,7 @@ startRaftAcross
 startRaftAcross gs = void $ forConcurrently' gs startRaft
 
 -- TODO make this not callback-based
--- spammer :: MonadManaged m => 
+-- spammer :: MonadManaged m =>
 withSpammer :: (MonadIO m, MonadReader ClusterEnv m) => [Geth] -> m () -> m ()
 withSpammer geths action = do
   spammer <- clusterAsync $ spamTransactions geths
