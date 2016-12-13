@@ -44,12 +44,11 @@ tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
 partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
 partition = if os == "darwin" then PF.partition else IPT.partition
 
-startAndUnlock
+startRaftAcross
   :: (Traversable t, MonadIO m, MonadReader ClusterEnv m)
   => t Geth
   -> m ()
-startAndUnlock gs =
-  void $ forConcurrently' gs (\geth -> unlockAccount geth >> startRaft geth)
+startRaftAcross gs = void $ forConcurrently' gs startRaft
 
 -- TODO make this not callback-based
 -- spammer :: MonadManaged m => 

@@ -6,7 +6,7 @@ import TestOutline
 
 main :: IO ()
 main = tester 3 $ \nodes -> do
-  startAndUnlock nodes
+  startRaftAcross nodes
   let dropNode:stableNodes = nodes
 
   withSpammer stableNodes $ do

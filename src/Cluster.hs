@@ -525,14 +525,6 @@ sendJs geth js = shells (gethCommand geth subcmd) empty
 startRaft :: MonadIO m => Geth -> m ()
 startRaft geth = sendJs geth "raft.startNode();"
 
-unlockAccount :: MonadIO m => Geth -> m ()
-unlockAccount geth = sendJs geth js
-  where
-    tenYears = 10 * 365 * 24 * 60 * 60 :: Int
-    js = format ("personal.unlockAccount(eth.accounts[0], '"%s%"', "%d%");")
-                (jsEscapeSingleQuotes $ gethPassword geth)
-                tenYears
-
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
 
