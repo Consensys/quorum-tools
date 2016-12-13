@@ -3,6 +3,7 @@
 - name: Install Go
   apt: name=golang state=present
   become: yes
+  register: install_go_result
 
 - name: Get git configuration for GitHub repos
   shell: git config --global --get url."git@github.com:".insteadOf
@@ -24,7 +25,7 @@
     - 'export PATH="{{ path_with_go_binaries }}"'
 
 - name: 'Create GOPATH'
-  file: path={{ go_path }} state=directory
+  file: path={{ go_path }}/bin state=directory
 
 - name: 'Check out custom ethereum'
   git: repo='{{ ethereum_repo }}'
@@ -45,5 +46,5 @@
   when: git_eth_result.changed
 
 - name: 'Copy geth to go binaries directory'
-  shell: 'cp {{ geth_dir }}/build/bin/geth {{ go_path }}/bin'
+  shell: 'cp {{ geth_dir }}/build/bin/geth {{ go_path }}/bin/'
   when: git_eth_result.changed
