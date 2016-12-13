@@ -287,10 +287,10 @@ mkGeth gid eid aid = do
 
 installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
 installAccountKey gid acctKey = do
-    dir <- gidDataDir gid
-    let keystoreDir = (dataDirPath dir) </> "keystore"
-        jsonPath = keystoreDir </> fromText (nodeName gid)
-    output jsonPath (pure $ akKey acctKey)
+  dir <- gidDataDir gid
+  let keystoreDir = (dataDirPath dir) </> "keystore"
+      jsonPath = keystoreDir </> fromText (nodeName gid)
+  output jsonPath (pure $ akKey acctKey)
 
 createNode :: (MonadIO m, HasEnv m)
            => FilePath
