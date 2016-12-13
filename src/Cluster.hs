@@ -57,7 +57,7 @@ newtype Seconds = Seconds Int
 newtype Port = Port { getPort :: Int }
   deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
 
-newtype Hostname = Hostname { getHostname :: Text }
+newtype Ip = Ip { getIp :: Text }
   deriving (Eq, Show)
 
 data ClusterEnv
@@ -67,7 +67,7 @@ data ClusterEnv
                , clusterBaseHttpPort :: Port
                , clusterBaseRpcPort  :: Port
                , clusterVerbosity    :: Verbosity
-               , clusterHostnames    :: Map.Map GethId Hostname
+               , clusterIps    :: Map.Map GethId Ip
                }
   deriving (Eq, Show)
 
@@ -80,10 +80,10 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                , clusterBaseHttpPort = 30400
                                , clusterBaseRpcPort  = 40400
                                , clusterVerbosity    = 3
-                               , clusterHostnames    =
-                                   Map.fromList [ (1, Hostname "127.0.0.1")
-                                                , (2, Hostname "127.0.0.1")
-                                                , (3, Hostname "127.0.0.1")]
+                               , clusterIps    =
+                                   Map.fromList [ (1, Ip "127.0.0.1")
+                                                , (2, Ip "127.0.0.1")
+                                                , (3, Ip "127.0.0.1")]
                                }
 
 newtype GethId = GethId { gId :: Int }
@@ -239,9 +239,9 @@ fileContaining contents = do
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 getEnodeId gid = do
   mkCmd <- setupCommand gid
-  mHost <- Map.lookup gid <$> reader clusterHostnames
+  mHost <- Map.lookup gid <$> reader clusterIps
 
-  let host = getHostname $ forceHostname mHost
+  let host = getIp $ forceIp mHost
       enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
                        let cmd = mkCmd $ format ("js "%fp) jsPath
@@ -256,7 +256,7 @@ getEnodeId gid = do
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
-    forceHostname = fromMaybe $ error $ "no found hostname for " <> show gid
+    forceIp = fromMaybe $ error $ "no IP found for " <> show gid
 
 -- > allSiblings [1,2,3]
 -- [(1,[2,3]),(2,[1,3]),(3,[1,2])]
