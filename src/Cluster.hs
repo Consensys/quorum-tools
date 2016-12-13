@@ -67,7 +67,7 @@ data ClusterEnv
                , clusterBaseHttpPort :: Port
                , clusterBaseRpcPort  :: Port
                , clusterVerbosity    :: Verbosity
-               , clusterIps    :: Map.Map GethId Ip
+               , clusterIps          :: Map.Map GethId Ip
                }
   deriving (Eq, Show)
 
@@ -464,22 +464,23 @@ instance Monoid LastBlock where
   mappend Panic    _b2   = Panic
   mappend _b1      b2    = b2
 
--- prototype: "I1107 15:40:34.895541 raft/handler.go:537] Successfully extended chain: d7895e144053e4e8980141cbf8d190506864c3963b970b04585509823864f618"
-extractHash :: Pattern LastBlock
-extractHash = has $
-  LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
-  <|> Panic <$ "panic:"
 
 trackLastBlock :: Shell (Maybe NodeOnline, Text)
                -> Shell (Maybe NodeOnline, LastBlock, Text)
 trackLastBlock incoming = do
-  st <- liftIO $ newMVar NoneSeen
-  (online, line) <- incoming
-  case match extractHash line of
-    [block] -> do
-      liftIO $ modifyMVar_ st (\prevLast -> pure (prevLast <> block))
-    _       -> pure ()
-  (online, ,line) <$> liftIO (readMVar st)
+    st <- liftIO $ newMVar NoneSeen
+    (online, line) <- incoming
+    case match extractHash line of
+      [block] -> do
+        liftIO $ modifyMVar_ st (\prevLast -> pure (prevLast <> block))
+      _       -> pure ()
+    (online, ,line) <$> liftIO (readMVar st)
+
+  where
+    extractHash :: Pattern LastBlock
+    extractHash = has $
+      LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
+      <|> Panic <$ "panic:"
 
 instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, LastBlock, Text)
 instrumentedGethShell geth = gethShell geth
