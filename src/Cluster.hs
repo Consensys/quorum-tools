@@ -204,15 +204,23 @@ readAccountKey dir acctId@(AccountId aid) = do
 
     fmap (AccountKey acctId) <$> sequence (strict . input <$> mPath)
 
+inshellWithJoinedErr :: Text -> Shell Line -> Shell Line
+inshellWithJoinedErr cmd inputShell = do
+  line <- inshellWithErr cmd inputShell
+  case line of
+    Left txt  -> return txt
+    Right txt -> return txt
+
 createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
 createAccount dir = do
     let cmd = rawCommand dir "account new"
     pw <- reader clusterPassword
     -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let acctShell = inshell cmd (return pw <|> return pw)
+    let acctShell = inshellWithJoinedErr cmd (select $ textToLines pw
+                                                    <> textToLines pw)
                   & grep (begins "Address: ")
                   & sed (chars *> between (char '{') (char '}') chars)
-    aid <- AccountId . forceAcctId <$> fold acctShell Fold.head
+    aid <- AccountId . lineToText . forceAcctId <$> fold acctShell Fold.head
     mKey <- readAccountKey dir aid
     return $ forceKey mKey
 
@@ -220,7 +228,7 @@ createAccount dir = do
     forceAcctId = fromMaybe $ error "unable to extract account ID"
     forceKey = fromMaybe $ error "unable to find key in keystore"
 
-fileContaining :: Shell Text -> Managed FilePath
+fileContaining :: Shell Line -> Managed FilePath
 fileContaining contents = do
   dir <- using $ mktempdir "/tmp" "geth"
   (path, handle) <- using $ mktemp dir "geth"
@@ -244,7 +252,7 @@ getEnodeId gid = do
                            <*  text "[::]"
                            <*> chars)
 
-  EnodeId . forceNodeId <$> fold enodeIdShell Fold.head
+  EnodeId . lineToText . forceNodeId <$> fold enodeIdShell Fold.head
 
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
@@ -282,7 +290,7 @@ installAccountKey gid acctKey = do
   dir <- gidDataDir gid
   let keystoreDir = (dataDirPath dir) </> "keystore"
       jsonPath = keystoreDir </> fromText (nodeName gid)
-  output jsonPath (pure $ akKey acctKey)
+  output jsonPath (select $ textToLines $ akKey acctKey)
 
 createNode :: (MonadIO m, HasEnv m)
            => FilePath
@@ -319,8 +327,8 @@ loadNode gid = do
                      <*> fmap EnodeId ("!" *> begins "enode")
 
   (aid, eid) <- fmap forceMaybe $ runMaybeT $ do
-    t <- MaybeT $ fold (inshell cmd empty) Fold.head
-    MaybeT $ return $ headMay $ match pat t
+    line <- MaybeT $ fold (inshell cmd empty) Fold.head
+    MaybeT $ return $ headMay $ match pat (lineToText line)
 
   mkGeth gid eid aid
 
@@ -334,8 +342,8 @@ textEncode = toStrict . LT.decodeUtf8 . encode
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
   where
-    jsonPath = (dataDirPath $ gethDataDir geth) </> "static-nodes.json"
-    contents = return $ textEncode $ gethEnodeId <$> sibs
+    jsonPath = dataDirPath (gethDataDir geth) </> "static-nodes.json"
+    contents = select $ textToLines $ textEncode $ gethEnodeId <$> sibs
 
 generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
 generateAccountKeys numAccts = do
@@ -350,8 +358,8 @@ createGenesisJson acctIds = do
     return jsonPath
 
   where
-    contents :: Shell Text
-    contents = return $ textEncode $ object
+    contents :: Shell Line
+    contents = select $ textToLines $ textEncode $ object
       [ "alloc"      .= object
         (fmap (\(AccountId aid) ->
                  ("0x" <> aid) .= object [ "balance" .= t "0" ])
@@ -386,26 +394,19 @@ setupNodes gids = do
 
   pure geths
 
-inshellWithJoinedErr :: Text -> Shell Text -> Shell Text
-inshellWithJoinedErr cmd inputShell = do
-  line <- inshellWithErr cmd inputShell
-  case line of
-    Left txt  -> return txt
-    Right txt -> return txt
-
-gethShell :: Geth -> Shell Text
+gethShell :: Geth -> Shell Line
 gethShell geth = do
-  pwPath <- using $ fileContaining $ return $ gethPassword geth
+  pwPath <- using $ fileContaining $ select $ textToLines $ gethPassword geth
   inshellWithJoinedErr (gethCommand geth $
                                     format ("--unlock 0 --password "%fp) pwPath)
                        empty
 
-tee :: FilePath -> Shell Text -> Shell Text
+tee :: FilePath -> Shell Line -> Shell Line
 tee filepath lines = do
   handle <- using $ writeonly filepath
   liftIO $ hSetBuffering handle LineBuffering
   line <- lines
-  liftIO $ T.hPutStrLn handle line
+  liftIO $ T.hPutStrLn handle $ lineToText line
   return line
 
 data Transitioned
@@ -431,20 +432,20 @@ data NodeTerminated = NodeTerminated deriving Eq
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
 --       use a typeclass ReportsOnline/ReportsBooted/HasBooted to access the
 --       (Maybe NodeOnline) field.
-observingBoot :: Shell Text -> Shell (Maybe NodeOnline, Text)
+observingBoot :: Shell Line -> Shell (Maybe NodeOnline, Line)
 observingBoot lines = first isOnline <$> observingTransition ipcOpened lines
   where
-    ipcOpened = ("IPC endpoint opened:" `isInfixOf`)
+    ipcOpened line = ("IPC endpoint opened:" `isInfixOf` (lineToText line))
     isOnline = \case
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
 
-observingLastBlock :: Shell (Maybe NodeOnline, Text)
-                   -> Shell (Maybe NodeOnline, Last Block, Text)
+observingLastBlock :: Shell (Maybe NodeOnline, Line)
+                   -> Shell (Maybe NodeOnline, Last Block, Line)
 observingLastBlock incoming = do
     st <- liftIO $ newMVar (mempty :: Last Block)
     (mOnline, line) <- incoming
-    case match blockPattern line of
+    case match blockPattern (lineToText line) of
       [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> pure latest))
       _       -> pure ()
     (mOnline, ,line) <$> liftIO (readMVar st)
@@ -454,12 +455,12 @@ observingLastBlock incoming = do
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
-observingRaftStatus :: Shell (Maybe NodeOnline, Last Block, Text)
-                    -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Text)
+observingRaftStatus :: Shell (Maybe NodeOnline, Last Block, Line)
+                    -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Line)
 observingRaftStatus incoming = do
     st <- liftIO $ newMVar (mempty :: Last RaftStatus)
     (mOnline,lastBlock, line) <- incoming
-    case match statusPattern line of
+    case match statusPattern (lineToText line) of
       [raftStatus] -> liftIO $ modifyMVar_ st (const $ pure $ pure raftStatus)
       _            -> pure ()
     (mOnline,lastBlock, ,line) <$> liftIO (readMVar st)
@@ -476,7 +477,7 @@ observingRaftStatus incoming = do
     toRole unknown = error $ "failed to parse unknown raft role: " ++ T.unpack unknown
 
 instrumentedGethShell :: Geth
-                      -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Text)
+                      -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Line)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
@@ -596,7 +597,7 @@ bench geth (Seconds seconds) = view benchShell
                  (luaEscapeSingleQuotes $ textEncode $ txRpcBody geth)
 
     benchShell = do
-      luaPath <- using $ fileContaining $ return lua
+      luaPath <- using $ fileContaining $ select $ textToLines lua
       let cmd = format ("wrk -s "%fp%" -c 1 -d "%d%"s -t 1 "%s)
                        luaPath
                        seconds

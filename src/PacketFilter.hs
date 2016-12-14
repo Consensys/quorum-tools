@@ -32,10 +32,11 @@ acquirePfHelper =
         fromMaybe (error "failed to find pf token (check you're a sudoer)")
         . getFirst
 
-      step :: First PfToken -> Either Text Text -> First PfToken
-      step acc line = (acc <> First (matchOnce tokenPat (either id id line)))
+      step :: First PfToken -> Either Line Line -> First PfToken
+      step acc line = acc <> First (matchOnce tokenPat
+                                              (lineToText $ either id id line))
 
-      findToken :: Fold (Either Text Text) PfToken
+      findToken :: Fold (Either Line Line) PfToken
       findToken = Fold step mempty forceFirst
 
   in fold (inshellWithErr (pfctl "-E") "") findToken
@@ -73,7 +74,7 @@ partition (Millis ms) geth = do
   ports <- getPortsForGeth gdata geth
   _ <- sh $ inshellWithNoErr
     (pfctl "-f -")
-    (select [blockPortsRule ports])
+    (select $ textToLines $ blockPortsRule ports)
 
   -- make sure to reset pf.conf on exit
   !_ <- using $ managed $ onExit $ sh $

@@ -17,7 +17,7 @@ newtype PfToken = PfToken Text
 
 newtype Pid = Pid Int
 
-inshellWithNoErr :: Text -> Shell Text -> Shell Text
+inshellWithNoErr :: Text -> Shell Line -> Shell Line
 inshellWithNoErr cmd inputShell = do
   line <- inshellWithErr cmd inputShell
   case line of
@@ -42,15 +42,15 @@ portPattern = has $ do
 
 getPorts :: MonadIO io => Pid -> io [Port]
 getPorts (Pid pid) =
-  let helper :: Text -> Maybe Port
-      helper t = case match portPattern t of
+  let helper :: Line -> Maybe Port
+      helper t = case match portPattern (lineToText t) of
         [p] -> Just p
         _ -> Nothing
 
-      matches' :: Prism' Text Port
+      matches' :: Prism' Line Port
       matches' = prism' (error "XXX(joel)") helper
 
-      findPorts :: Fold Text [Port]
+      findPorts :: Fold Line [Port]
       findPorts = Fold.handles matches' Fold.list
 
       cmd = format ("lsof -p "%d) pid
@@ -70,10 +70,10 @@ getPid gdata gid =
         fromMaybe (error "failed to find pid (check you're a sudoer)")
         . getFirst
 
-      step :: First Pid -> Text -> First Pid
-      step acc line = (acc <> First (matchOnce pidPat line))
+      step :: First Pid -> Line -> First Pid
+      step acc line = (acc <> First (matchOnce pidPat (lineToText line)))
 
-      findPid :: Fold Text Pid
+      findPid :: Fold Line Pid
       findPid = Fold step mempty forceFirst
 
       ipcPath :: IO FilePath
