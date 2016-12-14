@@ -31,8 +31,7 @@ import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
-import           Data.Monoid                ((<>))
-import           Data.Monoid.Same           (Same (NotSame, Same), allSame)
+import           Data.Monoid                (Last, (<>))
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -106,6 +105,9 @@ data AccountKey = AccountKey { akAccountId :: AccountId
 data TxId = TxId { txId :: Text }
   deriving (Show, Eq)
 
+data Block = Block Text
+  deriving (Eq, Show)
+
 data DataDir
   = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
@@ -123,28 +125,6 @@ data Geth =
        , gethUrl       :: Text
        }
   deriving (Show, Eq)
-
-data FailureReason
-  = WrongOrder LastBlock LastBlock
-  | DidPanic
-  deriving Show
-
-data Validity
-  = Verified
-  | Falsified FailureReason
-  deriving Show
-
-second :: Int
-second = 10 ^ (6 :: Int)
-
-verifySameLastBlock :: [LastBlock] -> Validity
-verifySameLastBlock lastBlocks = case allSame lastBlocks of
-  NotSame a b -> Falsified $ case (a, b) of
-    (Panic, _) -> DidPanic
-    (_, Panic) -> DidPanic
-    (_, _)     -> WrongOrder a b
-  Same Panic -> Falsified DidPanic
-  _ -> Verified
 
 nodeName :: GethId -> T.Text
 nodeName gid = format ("geth"%d) (gId gid)
@@ -433,7 +413,7 @@ observingTransition test lines = do
   return (if isPost then PostTransition else PreTransition, line)
 
 data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
-data NodeTerminated = NodeTerminated
+data NodeTerminated = NodeTerminated deriving Eq
 
 -- TODO: move from tuple to first-class data type
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
@@ -447,46 +427,26 @@ observingBoot lines = first isOnline <$> observingTransition ipcOpened lines
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
 
-data LastBlock
-  = NoneSeen
-  | LastBlock Text
-  | Panic
-  deriving (Show, Eq)
-
-instance Monoid LastBlock where
-  mempty = NoneSeen
-
-  -- This behavior is almost bounded lattice -like, in that we have both a
-  -- bottom (NoneSeen) and a top (Panic), but the behavior is not lattice-like
-  -- in between, where we always take the later block.
-  mappend NoneSeen block = block
-  mappend _        Panic = Panic
-  mappend Panic    _b2   = Panic
-  mappend _b1      b2    = b2
-
-
-trackLastBlock :: Shell (Maybe NodeOnline, Text)
-               -> Shell (Maybe NodeOnline, LastBlock, Text)
-trackLastBlock incoming = do
-    st <- liftIO $ newMVar NoneSeen
-    (online, line) <- incoming
+observingLastBlock :: Shell (Maybe NodeOnline, Text)
+                   -> Shell (Maybe NodeOnline, Last Block, Text)
+observingLastBlock incoming = do
+    st <- liftIO $ newMVar (mempty :: Last Block)
+    (mOnline, line) <- incoming
     case match extractHash line of
-      [block] -> do
-        liftIO $ modifyMVar_ st (\prevLast -> pure (prevLast <> block))
+      [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> latest))
       _       -> pure ()
-    (online, ,line) <$> liftIO (readMVar st)
+    (mOnline, ,line) <$> liftIO (readMVar st)
 
   where
-    extractHash :: Pattern LastBlock
+    extractHash :: Pattern (Last Block)
     extractHash = has $
-      LastBlock . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
-      <|> Panic <$ "panic:"
+      return . Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
-instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, LastBlock, Text)
+instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Last Block, Text)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
-                           & trackLastBlock
+                           & observingLastBlock
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
@@ -494,12 +454,12 @@ instrumentedGethShell geth = gethShell geth
 -- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
         => Geth
-        -> m (Async NodeOnline, Async NodeTerminated, MVar LastBlock)
+        -> m (Async NodeOnline, Async NodeTerminated, MVar (Last Block))
 runNode geth = do
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newMVar NoneSeen
+  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newMVar mempty
 
   let started :: m (Async NodeOnline)
       started = fork $ NodeOnline <$ takeMVar onlineMvar
@@ -515,7 +475,7 @@ runNode geth = do
           when (isEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
-  (,, lastBlockMvar) <$> started <*> terminated
+  ( , ,lastBlockMvar) <$> started <*> terminated
 
 
 

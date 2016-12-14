@@ -1,22 +1,52 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module TestOutline where
 
-import Control.Concurrent         (threadDelay)
-import Control.Concurrent.Async   (cancel)
-import Control.Concurrent.MVar    (readMVar)
-import Control.Monad.Managed      (MonadManaged)
-import Control.Monad.Reader       (ReaderT (runReaderT), MonadReader)
-import System.Info
-import Turtle
+import           Control.Concurrent       (threadDelay)
+import           Control.Concurrent.Async (cancel, poll)
+import           Control.Concurrent.MVar  (readMVar)
+import           Control.Exception        (throwIO)
+import           Control.Monad            (zipWithM)
+import           Control.Monad.Managed    (MonadManaged)
+import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
+import           Data.Monoid              (Last (Last))
+import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
+import qualified IpTables                 as IPT
+import qualified PacketFilter             as PF
+import           System.Info
+import           Turtle
 
 import Cluster
-import qualified PacketFilter as PF
-import qualified IpTables as IPT
 import ClusterAsync
 
 newtype Repeat = Repeat { unRepeat :: Int }
 newtype NumNodes = NumNodes { unNumNodes :: Int }
+
+data FailureReason
+  = WrongOrder (Last Block) (Last Block)
+  | NoBlockFound
+  | DidPanic
+  deriving Show
+
+data Validity
+  = Verified
+  | Falsified FailureReason
+  deriving Show
+
+second :: Int
+second = 10 ^ (6 :: Int)
+
+verifySameLastBlock :: [Either NodeTerminated (Last Block)] -> Validity
+verifySameLastBlock results = case allSame results of
+  NotSame a b -> Falsified $ case (a, b) of
+    (Left NodeTerminated, _) -> DidPanic
+    (_, Left NodeTerminated) -> DidPanic
+    (Right b1, Right b2)     -> WrongOrder b1 b2
+  Same (Left NodeTerminated)  -> Falsified DidPanic
+  Same (Right (Last Nothing)) -> Falsified NoBlockFound
+  _                           -> Verified
 
 -- | Run this test up to @Repeat@ times or until it fails
 repeatTester
@@ -31,7 +61,7 @@ repeatTester (Repeat n) numNodes cb = do
     _ <- when (os == "darwin") PF.acquirePf
 
     nodes <- setupNodes geths
-    (readyAsyncs, terminatedAsyncs, lastBlocks) <-
+    (readyAsyncs, terminatedAsyncs, lastBlockMs) <-
       unzip3 <$> traverse runNode nodes
 
     -- wait for geth to launch, then unlock and start raft
@@ -41,17 +71,21 @@ repeatTester (Repeat n) numNodes cb = do
 
     cb nodes
 
-    void $ liftIO $ do
-      -- HACK: wait three seconds for geths to catch up
-      threadDelay (3 * second)
-
+    liftIO $ do
       -- verify that all have consistent logs
-      lastBlocks' <- traverse readMVar lastBlocks
-      print $ verifySameLastBlock lastBlocks'
+      lastBlocks <- traverse readMVar lastBlockMs
+      meEarlyTerms <- traverse poll terminatedAsyncs
 
-      -- cancel all the workers
-      mapM_ cancel terminatedAsyncs
+      results <- zipWithM (curry $ \case
+                            (Just (Left ex), _)     -> throwIO ex
+                            (Just (Right panic), _) -> pure $ Left panic
+                            (Nothing, lastBlock)    -> pure $ Right lastBlock)
+                          meEarlyTerms
+                          lastBlocks
 
+      print $ verifySameLastBlock results
+
+  -- TODO: only if verified
   repeatTester (Repeat (n - 1)) numNodes cb
 
 tester :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
