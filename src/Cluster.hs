@@ -127,8 +127,14 @@ data Geth =
        }
   deriving (Show, Eq)
 
+data RaftRole
+  = Leader
+  | Candidate
+  | Follower
+  deriving (Eq, Show)
+
 data RaftStatus
-  = RaftStatus { raftRole :: Text
+  = RaftStatus { raftRole :: RaftRole
                , raftTerm :: Int }
   deriving Show
 
@@ -460,8 +466,14 @@ observingRaftStatus incoming = do
 
   where
     statusPattern :: Pattern RaftStatus
-    statusPattern = has $ RaftStatus <$> (text " became "  *> plus lower)
+    statusPattern = has $ RaftStatus <$> (text " became "  *> fmap toRole (plus lower))
                                      <*> (text " at term " *> decimal)
+
+    toRole :: Text -> RaftRole
+    toRole "follower"  = Follower
+    toRole "candidate" = Candidate
+    toRole "leader"    = Leader
+    toRole unknown = error $ "failed to parse unknown raft role: " ++ T.unpack unknown
 
 instrumentedGethShell :: Geth
                       -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Text)
