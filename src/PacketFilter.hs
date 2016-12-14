@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE BangPatterns          #-}
 
-module PacketFilter (acquirePf, partition) where
+module PacketFilter (acquirePf, flushPf, partition) where
 
 import           Control.Concurrent         (threadDelay)
 import           Control.Exception          (bracket)
@@ -40,6 +40,9 @@ acquirePfHelper =
 
   in fold (inshellWithErr (pfctl "-E") "") findToken
 
+flushPf :: MonadManaged m => m ()
+flushPf = sh $ inshellWithNoErr (pfctl "-F rules") ""
+
 -- | Turn on pf and initialize with empty rules for every geth node.
 --
 -- Must be called once at the beginning of a test.
@@ -53,9 +56,7 @@ acquirePf = do
     (\(PfToken tk) -> sh $ inshellWithNoErr (pfctl ("-X "%s) tk) "")
 
   -- flush the rules we added on exit
-  !_ <- using $ managed $ onExit $ sh $
-    inshellWithNoErr (pfctl "-F rules") ""
-  return ()
+  flushPf
 
 -- | Make a packet filter rule to block a specific port.
 blockPortsRule :: [Port] -> Text

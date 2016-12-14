@@ -42,7 +42,10 @@ tester n cb = sh $ flip runReaderT defaultClusterEnv $ do
     mapM_ cancel terminatedAsyncs
 
 partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
-partition = if os == "darwin" then PF.partition else IPT.partition
+partition millis node =
+  if os == "darwin"
+  then PF.partition millis node >> PF.flushPf
+  else IPT.partition millis node
 
 startRaftAcross
   :: (Traversable t, MonadIO m, MonadReader ClusterEnv m)
