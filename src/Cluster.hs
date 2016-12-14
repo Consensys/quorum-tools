@@ -29,6 +29,7 @@ import           Data.Bifunctor             (first)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
+import           Data.List                  (unzip4)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
@@ -432,21 +433,40 @@ observingLastBlock :: Shell (Maybe NodeOnline, Text)
 observingLastBlock incoming = do
     st <- liftIO $ newMVar (mempty :: Last Block)
     (mOnline, line) <- incoming
-    case match extractHash line of
-      [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> latest))
+    case match blockPattern line of
+      [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> pure latest))
       _       -> pure ()
     (mOnline, ,line) <$> liftIO (readMVar st)
 
   where
-    extractHash :: Pattern (Last Block)
-    extractHash = has $
-      return . Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
+    blockPattern :: Pattern Block
+    blockPattern = has $
+      Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
-instrumentedGethShell :: Geth -> Shell (Maybe NodeOnline, Last Block, Text)
+data RaftRole = RaftRole Text Int
+
+observingRaftRole :: Shell (Maybe NodeOnline, Last Block, Text)
+                  -> Shell (Maybe NodeOnline, Last Block, Last RaftRole, Text)
+observingRaftRole incoming = do
+    st <- liftIO $ newMVar (mempty :: Last RaftRole)
+    (mOnline,lastBlock, line) <- incoming
+    case match rolePattern line of
+      [role] -> liftIO $ modifyMVar_ st (const $ pure $ pure role)
+      _      -> pure ()
+    (mOnline,lastBlock, ,line) <$> liftIO (readMVar st)
+
+  where
+    rolePattern :: Pattern RaftRole
+    rolePattern = has $ RaftRole <$> (text " became " *> plus lower)
+                                 <*> (text " at term " *> decimal)
+
+instrumentedGethShell :: Geth
+                      -> Shell (Maybe NodeOnline, Last Block, Last RaftRole, Text)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
                            & observingLastBlock
+                           & observingRaftRole
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
@@ -454,12 +474,16 @@ instrumentedGethShell geth = gethShell geth
 -- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
         => Geth
-        -> m (Async NodeOnline, Async NodeTerminated, MVar (Last Block))
+        -> m ( Async NodeOnline
+             , Async NodeTerminated
+             , MVar (Last Block)
+             , MVar (Last RaftRole) )
 runNode geth = do
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  (onlineMvar, lastBlockMvar) <- liftIO $ (,) <$> newEmptyMVar <*> newMVar mempty
+  (onlineMvar, lastBlockMvar, lastRoleMvar) <- liftIO $
+    (,,) <$> newEmptyMVar <*> newMVar mempty <*> newMVar mempty
 
   let started :: m (Async NodeOnline)
       started = fork $ NodeOnline <$ takeMVar onlineMvar
@@ -469,15 +493,14 @@ runNode geth = do
 
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
-        \(mOnline, lastBlock, _line) -> do
-          isEmpty <- isEmptyMVar onlineMvar
+        \(mOnline, lastBlock, lastRaftRole, _line) -> do
           void $ swapMVar lastBlockMvar lastBlock
-          when (isEmpty && isJust mOnline) $
+          void $ swapMVar lastRoleMvar lastRaftRole
+          onlineEmpty <- isEmptyMVar onlineMvar
+          when (onlineEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
-  ( , ,lastBlockMvar) <$> started <*> terminated
-
-
+  ( , ,lastBlockMvar,lastRoleMvar) <$> started <*> terminated
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
@@ -492,8 +515,8 @@ awaitAll = liftIO . traverse_ wait
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
-  (readyAsyncs, terminatedAsyncs, _lastBlocks) <-
-    unzip3 <$> traverse runNode geths
+  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRoles) <-
+    unzip4 <$> traverse runNode geths
 
   awaitAll readyAsyncs
 

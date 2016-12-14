@@ -11,6 +11,7 @@ import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
+import           Data.List                (unzip4)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import qualified IpTables                 as IPT
@@ -66,8 +67,8 @@ repeatTester (Repeat n) numNodes cb = do
     _ <- when (os == "darwin") PF.acquirePf
 
     nodes <- setupNodes geths
-    (readyAsyncs, terminatedAsyncs, lastBlockMs) <-
-      unzip3 <$> traverse runNode nodes
+    (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRoles) <-
+      unzip4 <$> traverse runNode nodes
 
     -- wait for geth to launch, then unlock and start raft
     awaitAll readyAsyncs
