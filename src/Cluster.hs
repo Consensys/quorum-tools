@@ -127,9 +127,9 @@ data Geth =
        }
   deriving (Show, Eq)
 
-data RaftRole
-  = RaftRole { roleName :: Text
-             , roleTerm :: Int }
+data RaftStatus
+  = RaftStatus { raftRole :: Text
+               , raftTerm :: Int }
   deriving Show
 
 nodeName :: GethId -> T.Text
@@ -448,28 +448,28 @@ observingLastBlock incoming = do
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
-observingRaftRole :: Shell (Maybe NodeOnline, Last Block, Text)
-                  -> Shell (Maybe NodeOnline, Last Block, Last RaftRole, Text)
-observingRaftRole incoming = do
-    st <- liftIO $ newMVar (mempty :: Last RaftRole)
+observingRaftStatus :: Shell (Maybe NodeOnline, Last Block, Text)
+                    -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Text)
+observingRaftStatus incoming = do
+    st <- liftIO $ newMVar (mempty :: Last RaftStatus)
     (mOnline,lastBlock, line) <- incoming
-    case match rolePattern line of
-      [role] -> liftIO $ modifyMVar_ st (const $ pure $ pure role)
-      _      -> pure ()
+    case match statusPattern line of
+      [raftStatus] -> liftIO $ modifyMVar_ st (const $ pure $ pure raftStatus)
+      _            -> pure ()
     (mOnline,lastBlock, ,line) <$> liftIO (readMVar st)
 
   where
-    rolePattern :: Pattern RaftRole
-    rolePattern = has $ RaftRole <$> (text " became " *> plus lower)
-                                 <*> (text " at term " *> decimal)
+    statusPattern :: Pattern RaftStatus
+    statusPattern = has $ RaftStatus <$> (text " became "  *> plus lower)
+                                     <*> (text " at term " *> decimal)
 
 instrumentedGethShell :: Geth
-                      -> Shell (Maybe NodeOnline, Last Block, Last RaftRole, Text)
+                      -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Text)
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & observingBoot
                            & observingLastBlock
-                           & observingRaftRole
+                           & observingRaftStatus
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
@@ -480,12 +480,12 @@ runNode :: forall m. (MonadManaged m)
         -> m ( Async NodeOnline
              , Async NodeTerminated
              , MVar (Last Block)
-             , MVar (Last RaftRole) )
+             , MVar (Last RaftStatus) )
 runNode geth = do
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  (onlineMvar, lastBlockMvar, lastRoleMvar) <- liftIO $
+  (onlineMvar, lastBlockMvar, lastRaftMvar) <- liftIO $
     (,,) <$> newEmptyMVar <*> newMVar mempty <*> newMVar mempty
 
   let started :: m (Async NodeOnline)
@@ -496,14 +496,14 @@ runNode geth = do
 
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
-        \(mOnline, lastBlock, lastRaftRole, _line) -> do
+        \(mOnline, lastBlock, lastRaftStatus, _line) -> do
           void $ swapMVar lastBlockMvar lastBlock
-          void $ swapMVar lastRoleMvar lastRaftRole
+          void $ swapMVar lastRaftMvar lastRaftStatus
           onlineEmpty <- isEmptyMVar onlineMvar
           when (onlineEmpty && isJust mOnline) $
             putMVar onlineMvar ()
 
-  ( , ,lastBlockMvar,lastRoleMvar) <$> started <*> terminated
+  ( , ,lastBlockMvar,lastRaftMvar) <$> started <*> terminated
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
@@ -518,7 +518,7 @@ awaitAll = liftIO . traverse_ wait
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
-  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRoles) <-
+  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRafts) <-
     unzip4 <$> traverse runNode geths
 
   awaitAll readyAsyncs

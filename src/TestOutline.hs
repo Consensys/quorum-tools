@@ -67,7 +67,7 @@ repeatTester (Repeat n) numNodes cb = do
     _ <- when (os == "darwin") PF.acquirePf
 
     nodes <- setupNodes geths
-    (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRoles) <-
+    (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts) <-
       unzip4 <$> traverse runNode nodes
 
     -- wait for geth to launch, then unlock and start raft
