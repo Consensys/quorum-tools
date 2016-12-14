@@ -127,6 +127,11 @@ data Geth =
        }
   deriving (Show, Eq)
 
+data RaftRole
+  = RaftRole { roleName :: Text
+             , roleTerm :: Int }
+  deriving Show
+
 nodeName :: GethId -> T.Text
 nodeName gid = format ("geth"%d) (gId gid)
 
@@ -442,8 +447,6 @@ observingLastBlock incoming = do
     blockPattern :: Pattern Block
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
-
-data RaftRole = RaftRole Text Int
 
 observingRaftRole :: Shell (Maybe NodeOnline, Last Block, Text)
                   -> Shell (Maybe NodeOnline, Last Block, Last RaftRole, Text)
