@@ -6,7 +6,7 @@ module TestOutline where
 
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (cancel, poll)
-import           Control.Concurrent.MVar  (readMVar)
+import           Control.Concurrent.MVar  (readMVar, newEmptyMVar, putMVar, takeMVar)
 import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
@@ -38,6 +38,9 @@ data Validity
 second :: Int
 second = 10 ^ (6 :: Int)
 
+failedTestCode :: ExitCode
+failedTestCode = ExitFailure 1
+
 verifySameLastBlock :: [Either NodeTerminated (Last Block)] -> Validity
 verifySameLastBlock results = case allSame results of
   NotSame a b -> Falsified $ case (a, b) of
@@ -56,6 +59,8 @@ repeatTester
   -> IO ()
 repeatTester (Repeat 0) _ _ = return ()
 repeatTester (Repeat n) numNodes cb = do
+  resultVar <- liftIO newEmptyMVar
+
   sh $ flip runReaderT defaultClusterEnv $ do
     let geths = [1..GethId (unNumNodes numNodes)]
     _ <- when (os == "darwin") PF.acquirePf
@@ -72,6 +77,9 @@ repeatTester (Repeat n) numNodes cb = do
     cb nodes
 
     liftIO $ do
+      -- pause an extra second before checking last block
+      td 1
+      
       -- verify that all have consistent logs
       lastBlocks <- traverse readMVar lastBlockMs
       meEarlyTerms <- traverse poll terminatedAsyncs
@@ -83,10 +91,13 @@ repeatTester (Repeat n) numNodes cb = do
                           meEarlyTerms
                           lastBlocks
 
-      print $ verifySameLastBlock results
+      putMVar resultVar (verifySameLastBlock results)
 
-  -- TODO: only if verified
-  repeatTester (Repeat (n - 1)) numNodes cb
+  result <- takeMVar resultVar
+  print result
+  case result of
+    Verified -> repeatTester (Repeat (n - 1)) numNodes cb
+    _ -> exit failedTestCode
 
 tester :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
 tester = repeatTester (Repeat 1)
