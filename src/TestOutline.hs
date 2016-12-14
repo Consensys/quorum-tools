@@ -37,6 +37,8 @@ repeatTester (Repeat n) numNodes cb = do
     -- wait for geth to launch, then unlock and start raft
     awaitAll readyAsyncs
 
+    startRaftAcross nodes
+
     cb nodes
 
     void $ liftIO $ do
