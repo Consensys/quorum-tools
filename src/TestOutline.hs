@@ -80,7 +80,7 @@ repeatTester (Repeat n) numNodes cb = do
     liftIO $ do
       -- pause an extra second before checking last block
       td 1
-      
+
       -- verify that all have consistent logs
       lastBlocks <- traverse readMVar lastBlockMs
       meEarlyTerms <- traverse poll terminatedAsyncs
