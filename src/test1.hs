@@ -5,8 +5,7 @@ import Cluster
 import TestOutline
 
 main :: IO ()
-main = tester 3 $ \nodes -> do
-  startRaftAcross nodes
+main = repeatTester (Repeat 100) (NumNodes 3) $ \nodes -> do
   let dropNode:stableNodes = nodes
 
   withSpammer stableNodes $ do
@@ -14,4 +13,4 @@ main = tester 3 $ \nodes -> do
     -- all three for another second
     td 1
     partition 1000 (gethId dropNode)
-    td 1
+    td 2
