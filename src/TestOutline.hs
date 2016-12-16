@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module TestOutline where
 
@@ -22,7 +23,7 @@ import           Turtle
 import Cluster
 import ClusterAsync
 
-newtype Repeat = Repeat { unRepeat :: Int }
+newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
 
 data FailureReason
@@ -52,49 +53,75 @@ verifySameLastBlock results = case allSame results of
   Same (Right (Last Nothing)) -> Falsified NoBlockFound
   _                           -> Verified
 
--- | Run this test up to @Repeat@ times or until it fails
-repeatTester
-  :: Repeat
+data ShouldTerminate
+  = DoTerminateSuccess
+  | DoTerminateFailure
+  | DontTerminate
+
+instance Monoid ShouldTerminate where
+  mempty = DontTerminate
+  mappend DoTerminateSuccess _ = DoTerminateSuccess
+  mappend DoTerminateFailure _ = DoTerminateFailure
+  mappend DontTerminate      t = t
+
+type TestPredicate = TestNum -> Validity -> ShouldTerminate
+
+-- | Run this test up to @TestNum@ times or until it fails
+tester
+  :: TestPredicate
   -> NumNodes
   -> ([Geth] -> ReaderT ClusterEnv Shell ())
   -> IO ()
-repeatTester (Repeat 0) _ _ = return ()
-repeatTester (Repeat n) numNodes cb = do
-  resultVar <- liftIO newEmptyMVar
+tester p numNodes cb = foldr go mempty [0..] >>= \case
+  DoTerminateSuccess -> exit ExitSuccess
+  DoTerminateFailure -> exit failedTestCode
+  DontTerminate      -> putStrLn "all successful!"
 
-  sh $ flip runReaderT defaultClusterEnv $ do
-    let geths = [1..GethId (unNumNodes numNodes)]
-    _ <- when (os == "darwin") PF.acquirePf
+  where
+    go :: TestNum -> IO ShouldTerminate -> IO ShouldTerminate
+    go testNum runMoreTests = do
+      putStrLn $ "test #" ++ show (unTestNum testNum)
+      resultVar <- liftIO newEmptyMVar
 
-    nodes <- setupNodes geths
-    (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts) <-
-      unzip4 <$> traverse runNode nodes
+      sh $ flip runReaderT defaultClusterEnv $ do
+        let geths = [1..GethId (unNumNodes numNodes)]
+        _ <- when (os == "darwin") PF.acquirePf
 
-    -- wait for geth to launch, then start raft and run the test body
-    awaitAll readyAsyncs
-    startRaftAcross nodes
-    cb nodes
+        nodes <- setupNodes geths
+        (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts) <-
+          unzip4 <$> traverse runNode nodes
 
-    liftIO $ do
-      -- pause a second before checking last block
-      td 1
+        -- wait for geth to launch, then start raft and run the test body
+        awaitAll readyAsyncs
+        startRaftAcross nodes
+        cb nodes
 
-      result1 <- verify lastBlockMs terminatedAsyncs
+        liftIO $ do
+          -- pause a second before checking last block
+          td 1
 
-      -- wait an extra five seconds to guarantee raft has a chance to converge
-      case result1 of
-        Falsified (WrongOrder _ _) -> td 5
-        Falsified NoBlockFound -> td 5
-        _ -> return ()
+          result1 <- verify lastBlockMs terminatedAsyncs
 
-      result2 <- verify lastBlockMs terminatedAsyncs 
-      putMVar resultVar result2
+          -- wait an extra five seconds to guarantee raft has a chance to converge
+          case result1 of
+            Falsified (WrongOrder _ _) -> td 5
+            Falsified NoBlockFound -> td 5
+            _ -> return ()
 
-  result <- takeMVar resultVar
-  print result
-  case result of
-    Verified -> repeatTester (Repeat (n - 1)) numNodes cb
-    _ -> exit failedTestCode
+          result2 <- verify lastBlockMs terminatedAsyncs 
+          putMVar resultVar result2
+
+      result <- takeMVar resultVar
+      print result
+      case p testNum result of
+        DontTerminate -> runMoreTests
+        term -> pure term
+
+testOnce :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
+testOnce numNodes =
+  let predicate _ Verified = DoTerminateSuccess
+      predicate _ _        = DoTerminateFailure
+  in tester predicate numNodes
 
 -- | Verify that every node has the same last block and none have terminated.
 verify :: [MVar (Last Block)] -> [Async NodeTerminated] -> IO Validity
@@ -111,9 +138,6 @@ verify lastBlockMs terminatedAsyncs = do
                       lastBlocks
 
   return (verifySameLastBlock results)
-
-tester :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
-tester = repeatTester (Repeat 1)
 
 partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
 partition millis node =

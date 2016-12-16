@@ -8,7 +8,7 @@ import ClusterAsync
 import TestOutline
 
 main :: IO ()
-main = tester (NumNodes 3) $ \nodes -> do
+main = testOnce (NumNodes 3) $ \nodes -> do
   -- have the first one join three seconds after the others
   let late:early = nodes
 
