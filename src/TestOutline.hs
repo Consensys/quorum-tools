@@ -15,6 +15,9 @@ import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
 import           Data.List                (unzip4)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
+import           Data.Text                (Text, pack)
+import qualified Data.Text.IO             as T
+import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
 import qualified IpTables                 as IPT
 import qualified PacketFilter             as PF
 import           System.Info
@@ -108,7 +111,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
             Falsified NoBlockFound -> td 5
             _ -> return ()
 
-          result2 <- verify lastBlockMs terminatedAsyncs 
+          result2 <- verify lastBlockMs terminatedAsyncs
           putMVar resultVar result2
 
       result <- takeMVar resultVar
@@ -161,3 +164,10 @@ withSpammer geths action = do
 
 td :: MonadIO m => Int -> m ()
 td = liftIO . threadDelay . (* second)
+
+timestampedMessage :: MonadIO m => Text -> m ()
+timestampedMessage msg = liftIO $ do
+  zonedTime <- getZonedTime
+  let locale = defaultTimeLocale
+      formattedTime = pack $ formatTime locale "%I:%M:%S.%q" zonedTime
+  T.putStrLn $ formattedTime <> ": " <> msg
