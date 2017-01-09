@@ -11,9 +11,10 @@ import qualified Data.Text                  as T
 import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
+import Checkpoint
 import Cluster
-import SharedPartitioning
 import Control (onExit)
+import SharedPartitioning
 
 iptables :: Format Text r -> r
 iptables args = format ("sudo -n iptables "%args)

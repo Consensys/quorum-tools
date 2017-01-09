@@ -24,13 +24,15 @@ import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson                 (ToJSON (toJSON), Value (String),
                                              encode, object, (.=))
 import           Data.Aeson.Lens            (key, _String)
-import           Data.Bifunctor             (first)
+import           Data.Bifunctor             (first, second)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
-import           Data.List                  (unzip4)
+import           Data.List                  (unzip5)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -44,6 +46,7 @@ import           System.IO                  (BufferMode (..), hClose,
 import           Turtle
 
 import           Control
+import           Checkpoint
 
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
@@ -85,9 +88,6 @@ defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
                                                 , (2, Ip "127.0.0.1")
                                                 , (3, Ip "127.0.0.1")]
                                }
-
-newtype GethId = GethId { gId :: Int }
-  deriving (Show, Eq, Num, Ord, Enum)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
@@ -413,57 +413,62 @@ data Transitioned
   = PreTransition
   | PostTransition
 
-observingTransition :: (a -> Bool) -> Shell a -> Shell (Transitioned, a)
+observingTransition :: (a -> Bool) -> Shell (a, b) -> Shell (a, (Transitioned, b))
 observingTransition test lines = do
   mvar <- liftIO newEmptyMVar
-  line <- lines
+  (line, b) <- lines
   isEmpty <- liftIO $ isEmptyMVar mvar
 
   let thisIsTheLine = test line
   when (isEmpty && thisIsTheLine) $ liftIO $ putMVar mvar ()
 
   let isPost = not isEmpty || thisIsTheLine
-  return (if isPost then PostTransition else PreTransition, line)
+  return (line, (if isPost then PostTransition else PreTransition, b))
 
 data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
 data NodeTerminated = NodeTerminated deriving Eq
+
+-- All http connections for this node are established
+data AllConnected = AllConnected
 
 -- TODO: move from tuple to first-class data type
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
 --       use a typeclass ReportsOnline/ReportsBooted/HasBooted to access the
 --       (Maybe NodeOnline) field.
-observingBoot :: Shell Line -> Shell (Maybe NodeOnline, Line)
-observingBoot lines = first isOnline <$> observingTransition ipcOpened lines
+observingBoot :: Shell (Line, a) -> Shell (Line, (Maybe NodeOnline, a))
+observingBoot lines = (second.first) isOnline <$> observingTransition ipcOpened lines
   where
     ipcOpened line = ("IPC endpoint opened:" `isInfixOf` (lineToText line))
     isOnline = \case
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
 
-observingLastBlock :: Shell (Maybe NodeOnline, Line)
-                   -> Shell (Maybe NodeOnline, Last Block, Line)
+observingLastBlock :: Shell (Line, a)
+                   -> Shell (Line, (Last Block, a))
 observingLastBlock incoming = do
     st <- liftIO $ newMVar (mempty :: Last Block)
-    (mOnline, line) <- incoming
+    (line, a) <- incoming
     case match blockPattern (lineToText line) of
       [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> pure latest))
       _       -> pure ()
-    (mOnline, ,line) <$> liftIO (readMVar st)
+    lastBlock <- liftIO (readMVar st)
+    return (line, (lastBlock, a))
 
   where
     blockPattern :: Pattern Block
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
-observingRaftStatus :: Shell (Maybe NodeOnline, Last Block, Line)
-                    -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Line)
+observingRaftStatus :: Shell (Line, a)
+                    -> Shell (Line, (Last RaftStatus, a))
 observingRaftStatus incoming = do
     st <- liftIO $ newMVar (mempty :: Last RaftStatus)
-    (mOnline,lastBlock, line) <- incoming
+    (line, a) <- incoming
     case match statusPattern (lineToText line) of
       [raftStatus] -> liftIO $ modifyMVar_ st (const $ pure $ pure raftStatus)
       _            -> pure ()
-    (mOnline,lastBlock, ,line) <$> liftIO (readMVar st)
+    lastRaftStatus <- liftIO (readMVar st)
+    return (line, (lastRaftStatus, a))
 
   where
     statusPattern :: Pattern RaftStatus
@@ -476,47 +481,82 @@ observingRaftStatus incoming = do
     toRole "leader"    = Leader
     toRole unknown = error $ "failed to parse unknown raft role: " ++ T.unpack unknown
 
+startObserving :: Shell Line -> Shell (Line, ())
+startObserving incoming = (, ()) <$> incoming
+
+uniqueMatch :: Pattern a -> Text -> Maybe a
+uniqueMatch pat text = case match pat text of
+  [result] -> Just result
+  _ -> Nothing
+
+observingActivation :: Shell (Line, a)
+                    -> Shell (Line, (Set GethId, a))
+observingActivation incoming = do
+  connections <- liftIO $ newMVar (mempty :: Set GethId)
+  (line, a) <- incoming
+  let pat = patternForCheckpoint PeerConnected
+        <|> patternForCheckpoint PeerDisconnected
+      delta = uniqueMatch pat (lineToText line)
+  result <- liftIO $ pureModifyMVar connections (applyDelta delta)
+
+  return (line, (result, a))
+
 instrumentedGethShell :: Geth
-                      -> Shell (Maybe NodeOnline, Last Block, Last RaftStatus, Line)
+                      -> Shell (Line,
+                               (Last RaftStatus,
+                               (Last Block,
+                               (Maybe NodeOnline,
+                               (Set GethId,
+                               ())))))
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
+                           & startObserving
+                           & observingActivation
                            & observingBoot
                            & observingLastBlock
                            & observingRaftStatus
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
--- TODO: take a shell which supports ReportsOnline/ReportsBooted/HasBooted
--- instead of hard-coding to build an instrumentedGethShell
 runNode :: forall m. (MonadManaged m)
-        => Geth
+        => Int
+        -> Geth
         -> m ( Async NodeOnline
              , Async NodeTerminated
              , MVar (Last Block)
-             , MVar (Last RaftStatus) )
-runNode geth = do
+             , MVar (Last RaftStatus)
+             , Async AllConnected )
+runNode numNodes geth = do
+  (onlineMvar, lastBlockMvar, lastRaftMvar, allConnectedMVar) <- liftIO $
+    (,,,) <$> newEmptyMVar <*> newMVar mempty <*> newMVar mempty <*> newEmptyMVar
+
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  (onlineMvar, lastBlockMvar, lastRaftMvar) <- liftIO $
-    (,,) <$> newEmptyMVar <*> newMVar mempty <*> newMVar mempty
+  -- expect one connection to each of the other peers
+      expectedPeerCount = numNodes - 1
 
-  let started :: m (Async NodeOnline)
-      started = fork $ NodeOnline <$ takeMVar onlineMvar
+      started :: m (Async NodeOnline)
+      started = awaitMVar onlineMvar
 
       terminated :: m (Async NodeTerminated)
       terminated = fmap ($> NodeTerminated) processor
 
+      connected :: m (Async AllConnected)
+      connected = awaitMVar allConnectedMVar
+
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
-        \(mOnline, lastBlock, lastRaftStatus, _line) -> do
+        \(_line, (lastRaftStatus, (lastBlock, (mOnline, (connSet, ()))))) -> do
           void $ swapMVar lastBlockMvar lastBlock
           void $ swapMVar lastRaftMvar lastRaftStatus
-          onlineEmpty <- isEmptyMVar onlineMvar
-          when (onlineEmpty && isJust mOnline) $
-            putMVar onlineMvar ()
 
-  ( , ,lastBlockMvar,lastRaftMvar) <$> started <*> terminated
+          when (Set.size connSet == expectedPeerCount) $
+            ensureMVarTransition allConnectedMVar AllConnected
+
+          when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
+
+  ( , ,lastBlockMvar,lastRaftMvar,) <$> started <*> terminated <*> connected
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
@@ -528,8 +568,9 @@ startRaft geth = sendJs geth "raft.startNode();"
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
-  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRafts) <-
-    unzip4 <$> traverse runNode geths
+  let numNodes = length geths
+  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRafts, _establishedConnections) <-
+    unzip5 <$> traverse (runNode numNodes) geths
 
   awaitAll readyAsyncs
 

@@ -12,7 +12,7 @@ import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.List                (unzip4)
+import           Data.List                (unzip5)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Text                (Text, pack)
@@ -23,6 +23,7 @@ import qualified PacketFilter             as PF
 import           System.Info
 import           Turtle
 
+import Checkpoint
 import Cluster
 import ClusterAsync
 import Control (awaitAll)
@@ -92,12 +93,21 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         _ <- when (os == "darwin") PF.acquirePf
 
         nodes <- setupNodes geths
-        (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts) <-
-          unzip4 <$> traverse runNode nodes
+        let numNodes = length nodes
+        (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts, allConnected) <-
+          unzip5 <$> traverse (runNode numNodes) nodes
 
         -- wait for geth to launch, then start raft and run the test body
-        awaitAll readyAsyncs
+        timestampedMessage "awaiting all ready"
+        awaitAll readyAsyncs -- "IPC endpoint opened"
+        timestampedMessage "got all ready"
+
         startRaftAcross nodes
+
+        timestampedMessage "awaiting all TCP connections"
+        awaitAll allConnected -- "peer * became active"
+        timestampedMessage "got all TCP connections"
+
         cb nodes
 
         liftIO $ do

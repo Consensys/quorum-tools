@@ -15,6 +15,7 @@ import qualified Data.Text                  as T
 import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
+import Checkpoint
 import Cluster
 import Control (onExit)
 import SharedPartitioning
