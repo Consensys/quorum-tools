@@ -14,7 +14,6 @@ import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar, takeMVar)
-import           Control.Exception          (bracket)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (<&>), (^.), (^?))
 import           Control.Monad              (replicateM)
@@ -27,7 +26,6 @@ import           Data.Aeson                 (ToJSON (toJSON), Value (String),
 import           Data.Aeson.Lens            (key, _String)
 import           Data.Bifunctor             (first)
 import qualified Data.ByteString.Lazy       as LSB
-import           Data.Foldable              (traverse_)
 import           Data.Functor               (($>))
 import           Data.List                  (unzip4)
 import qualified Data.Map.Strict            as Map
@@ -44,6 +42,8 @@ import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle
+
+import           Control
 
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
@@ -526,9 +526,6 @@ sendJs geth js = shells (gethCommand geth subcmd) empty
 startRaft :: MonadIO m => Geth -> m ()
 startRaft geth = sendJs geth "raft.startNode();"
 
-awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
-awaitAll = liftIO . traverse_ wait
-
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRafts) <-
@@ -539,14 +536,6 @@ runNodesIndefinitely geths = do
   void $ liftIO $ forConcurrently geths startRaft
 
   awaitAll terminatedAsyncs
-
--- | Execute an action before exiting. Exception safe.
---
--- @
---     onExit (putStrLn "exited!") $ \_ -> { code }
--- @
-onExit :: IO () -> (() -> IO r) -> IO r
-onExit action = bracket (pure ()) (const action)
 
 txRpcBody :: Geth -> Value
 txRpcBody geth = object

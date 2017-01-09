@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE BangPatterns               #-}
 
 module PacketFilter (acquirePf, flushPf, partition) where
 
@@ -16,6 +16,7 @@ import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
 import Cluster
+import Control (onExit)
 import SharedPartitioning
 
 pfctl :: Format Text r -> r

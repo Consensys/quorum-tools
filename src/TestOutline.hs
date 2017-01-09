@@ -25,6 +25,7 @@ import           Turtle
 
 import Cluster
 import ClusterAsync
+import Control (awaitAll)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }

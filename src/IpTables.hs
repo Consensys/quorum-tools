@@ -13,6 +13,7 @@ import           Turtle
 
 import Cluster
 import SharedPartitioning
+import Control (onExit)
 
 iptables :: Format Text r -> r
 iptables args = format ("sudo -n iptables "%args)
