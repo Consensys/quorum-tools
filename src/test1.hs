@@ -6,9 +6,9 @@ import Cluster
 import TestOutline
 
 exitP :: TestPredicate
-exitP (TestNum 99) _                        = DoTerminateSuccess
-exitP _            (Falsified NoBlockFound) = DoTerminateFailure
-exitP _            _                        = DontTerminate
+exitP (TestNum 99) _             = DoTerminateSuccess
+exitP _            (Falsified _) = DoTerminateFailure
+exitP _            _             = DontTerminate
 
 main :: IO ()
 main = tester exitP (NumNodes 3) $ \nodes -> do
