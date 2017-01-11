@@ -13,7 +13,7 @@ import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (Async, forConcurrently)
 import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
-                                             readMVar, swapMVar, takeMVar)
+                                             readMVar, swapMVar)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (<&>), (^.), (^?))
 import           Control.Monad              (replicateM)
@@ -438,7 +438,7 @@ data AllConnected = AllConnected
 observingBoot :: Shell (Line, a) -> Shell (Line, (Maybe NodeOnline, a))
 observingBoot lines = (second.first) isOnline <$> observingTransition ipcOpened lines
   where
-    ipcOpened line = ("IPC endpoint opened:" `isInfixOf` (lineToText line))
+    ipcOpened line = "IPC endpoint opened:" `isInfixOf` (lineToText line)
     isOnline = \case
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
@@ -485,7 +485,7 @@ startObserving :: Shell Line -> Shell (Line, ())
 startObserving incoming = (, ()) <$> incoming
 
 uniqueMatch :: Pattern a -> Text -> Maybe a
-uniqueMatch pat text = case match pat text of
+uniqueMatch pat txt = case match pat txt of
   [result] -> Just result
   _ -> Nothing
 
