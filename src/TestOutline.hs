@@ -12,9 +12,11 @@ import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.List                (unzip5)
+import           Data.List                (unzip6)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
+import           Data.Set                 (Set)
+import qualified Data.Set                 as Set
 import           Data.Text                (Text, pack)
 import qualified Data.Text.IO             as T
 import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
@@ -35,6 +37,7 @@ data FailureReason
   = WrongOrder (Last Block) (Last Block)
   | NoBlockFound
   | DidPanic
+  | LostTxes (Set TxId)
   deriving Show
 
 data Validity
@@ -93,9 +96,13 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         _ <- when (os == "darwin") PF.acquirePf
 
         nodes <- setupNodes geths
-        let numNodes = length nodes
-        (readyAsyncs, terminatedAsyncs, lastBlockMs, _lastRafts, allConnected) <-
-          unzip5 <$> traverse (runNode numNodes) nodes
+        (readyAsyncs,
+         terminatedAsyncs,
+         lastBlockMs,
+         _lastRafts,
+         outstandingTxesMs,
+         allConnected)
+         <- unzip6 <$> traverse (runNode (unNumNodes numNodes)) nodes
 
         -- wait for geth to launch, then start raft and run the test body
         timestampedMessage "awaiting all ready"
@@ -114,7 +121,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
           -- pause a second before checking last block
           td 1
 
-          result1 <- verify lastBlockMs terminatedAsyncs
+          result1 <- verify lastBlockMs outstandingTxesMs terminatedAsyncs
 
           -- wait an extra five seconds to guarantee raft has a chance to converge
           case result1 of
@@ -122,7 +129,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
             Falsified NoBlockFound -> td 5
             _ -> return ()
 
-          result2 <- verify lastBlockMs terminatedAsyncs
+          result2 <- verify lastBlockMs outstandingTxesMs terminatedAsyncs
           putMVar resultVar result2
 
       result <- takeMVar resultVar
@@ -138,10 +145,15 @@ testOnce numNodes =
   in tester predicate numNodes
 
 -- | Verify that every node has the same last block and none have terminated.
-verify :: [MVar (Last Block)] -> [Async NodeTerminated] -> IO Validity
-verify lastBlockMs terminatedAsyncs = do
+verify
+  :: [MVar (Last Block)]
+  -> [MVar OutstandingTxes]
+  -> [Async NodeTerminated]
+  -> IO Validity
+verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   -- verify that all have consistent logs
   lastBlocks <- traverse readMVar lastBlockMs
+  outstandingTxes <- traverse readMVar outstandingTxesMs
   meEarlyTerms <- traverse poll terminatedAsyncs
 
   results <- zipWithM (curry $ \case
@@ -151,7 +163,12 @@ verify lastBlockMs terminatedAsyncs = do
                       meEarlyTerms
                       lastBlocks
 
-  return (verifySameLastBlock results)
+  let lostTxes :: Set TxId
+      lostTxes = unOutstandingTxes (mconcat outstandingTxes)
+
+  return $ case Set.null lostTxes of
+    True -> verifySameLastBlock results
+    False -> Falsified (LostTxes lostTxes)
 
 partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
 partition millis node =

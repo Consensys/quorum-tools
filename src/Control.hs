@@ -19,6 +19,9 @@ pureModifyMVar :: MVar a -> (a -> a) -> IO a
 pureModifyMVar var f = modifyMVar var f' where
   f' a = let result = f a in pure (result, result)
 
+pureModifyMVar_ :: MVar a -> (a -> a) -> IO ()
+pureModifyMVar_ var = void . pureModifyMVar var
+
 -- | Fulfil the returned async as soon as the MVar is filled.
 awaitMVar :: MonadManaged m => MVar a -> m (Async a)
 awaitMVar = fork . takeMVar

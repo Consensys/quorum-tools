@@ -27,7 +27,7 @@ import           Data.Aeson.Lens            (key, _String)
 import           Data.Bifunctor             (first, second)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
-import           Data.List                  (unzip5)
+import           Data.List                  (unzip6)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
@@ -101,9 +101,6 @@ data AccountId = AccountId { accountId :: Text }
 data AccountKey = AccountKey { akAccountId :: AccountId
                              , akKey       :: T.Text
                              }
-  deriving (Show, Eq)
-
-data TxId = TxId { txId :: Text }
   deriving (Show, Eq)
 
 data Block = Block Text
@@ -459,6 +456,33 @@ observingLastBlock incoming = do
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
+newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
+  deriving (Monoid)
+
+-- | Helper for the most common (only) use case for matchCheckpoint.
+matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
+matchCheckpoint' cpt line cb = case matchCheckpoint cpt line of
+  Just a -> liftIO (cb a)
+  Nothing -> pure ()
+
+observingTxes
+  :: Shell (Line, a)
+  -> Shell (Line, (OutstandingTxes, a))
+observingTxes incoming = do
+    outstanding <- liftIO $ newMVar mempty
+    (line, a) <- incoming
+
+    matchCheckpoint' TxCreated line $ \tx -> do
+      pureModifyMVar_ outstanding (Set.insert tx)
+
+    matchCheckpoint' TxAccepted line $ \tx -> do
+      pureModifyMVar_ outstanding (Set.delete tx)
+
+    result <- liftIO $ OutstandingTxes <$> readMVar outstanding
+
+    return (line, (result, a))
+
+
 observingRaftStatus :: Shell (Line, a)
                     -> Shell (Line, (Last RaftStatus, a))
 observingRaftStatus incoming = do
@@ -484,30 +508,30 @@ observingRaftStatus incoming = do
 startObserving :: Shell Line -> Shell (Line, ())
 startObserving incoming = (, ()) <$> incoming
 
-uniqueMatch :: Pattern a -> Text -> Maybe a
-uniqueMatch pat txt = case match pat txt of
-  [result] -> Just result
-  _ -> Nothing
-
 observingActivation :: Shell (Line, a)
                     -> Shell (Line, (Set GethId, a))
 observingActivation incoming = do
   connections <- liftIO $ newMVar (mempty :: Set GethId)
   (line, a) <- incoming
-  let pat = patternForCheckpoint PeerConnected
-        <|> patternForCheckpoint PeerDisconnected
-      delta = uniqueMatch pat (lineToText line)
-  result <- liftIO $ pureModifyMVar connections (applyDelta delta)
+
+  matchCheckpoint' PeerConnected line $ \(PeerJoined joined) ->
+    pureModifyMVar_ connections (Set.insert joined)
+
+  matchCheckpoint' PeerDisconnected line $ \(PeerLeft left) ->
+    pureModifyMVar_ connections (Set.delete left)
+
+  result <- liftIO $ readMVar connections
 
   return (line, (result, a))
 
 instrumentedGethShell :: Geth
                       -> Shell (Line,
+                               (OutstandingTxes,
                                (Last RaftStatus,
                                (Last Block,
                                (Maybe NodeOnline,
                                (Set GethId,
-                               ())))))
+                               ()))))))
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & startObserving
@@ -515,6 +539,7 @@ instrumentedGethShell geth = gethShell geth
                            & observingBoot
                            & observingLastBlock
                            & observingRaftStatus
+                           & observingTxes
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
@@ -525,10 +550,16 @@ runNode :: forall m. (MonadManaged m)
              , Async NodeTerminated
              , MVar (Last Block)
              , MVar (Last RaftStatus)
+             , MVar OutstandingTxes
              , Async AllConnected )
 runNode numNodes geth = do
-  (onlineMvar, lastBlockMvar, lastRaftMvar, allConnectedMVar) <- liftIO $
-    (,,,) <$> newEmptyMVar <*> newMVar mempty <*> newMVar mempty <*> newEmptyMVar
+  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, allConnectedMVar)
+    <- liftIO $ (,,,,)
+      <$> newEmptyMVar
+      <*> newMVar mempty
+      <*> newMVar mempty
+      <*> newMVar mempty
+      <*> newEmptyMVar
 
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
@@ -547,16 +578,23 @@ runNode numNodes geth = do
 
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
-        \(_line, (lastRaftStatus, (lastBlock, (mOnline, (connSet, ()))))) -> do
+        \(_line,
+         (outstandingTxes,
+         (lastRaftStatus,
+         (lastBlock,
+         (mOnline,
+         (connSet, ())))))) -> do
           void $ swapMVar lastBlockMvar lastBlock
           void $ swapMVar lastRaftMvar lastRaftStatus
+          void $ swapMVar outstandingTxesMVar outstandingTxes
 
           when (Set.size connSet == expectedPeerCount) $
             ensureMVarTransition allConnectedMVar AllConnected
 
           when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
 
-  ( , ,lastBlockMvar,lastRaftMvar,) <$> started <*> terminated <*> connected
+  (,,lastBlockMvar,lastRaftMvar,outstandingTxesMVar,)
+    <$> started <*> terminated <*> connected
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
@@ -569,8 +607,12 @@ startRaft geth = sendJs geth "raft.startNode();"
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   let numNodes = length geths
-  (readyAsyncs, terminatedAsyncs, _lastBlocks, _lastRafts, _establishedConnections) <-
-    unzip5 <$> traverse (runNode numNodes) geths
+  (readyAsyncs,
+   terminatedAsyncs,
+   _lastBlocks,
+   _lastRafts,
+   _outstandingTxesMVar,
+   _establishedConnections) <- unzip6 <$> traverse (runNode numNodes) geths
 
   awaitAll readyAsyncs
 

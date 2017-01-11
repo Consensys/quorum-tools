@@ -4,36 +4,30 @@
 
 module Checkpoint where
 
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-
 import           Turtle
 
 raftSentinel :: Text
 raftSentinel = "RAFT-CHECKPOINT"
 
-sentinelForCheckpoint :: Checkpoint a -> Text
-sentinelForCheckpoint PeerConnected    = "PEER-CONNECTED"
-sentinelForCheckpoint PeerDisconnected = "PEER-DISCONNECTED"
-
 newtype GethId = GethId { gId :: Int }
   deriving (Show, Eq, Num, Ord, Enum)
 
--- | Signifies a peer join or exit.
-data ConnectionDelta = ConnectionDelta ConnectionActivation GethId deriving Show
-data ConnectionActivation = BecameActive | BecameInactive deriving Show
+data TxId = TxId { txId :: Text }
+  deriving (Show, Eq, Ord)
 
--- | Add or remove a peer from the set of known peers for a node.
-applyDelta :: Maybe ConnectionDelta -> Set GethId -> Set GethId
-applyDelta Nothing set = set
-applyDelta (Just (ConnectionDelta dir gid)) set = case dir of
-  BecameActive -> Set.insert gid set
-  BecameInactive -> Set.delete gid set
+newtype PeerJoined = PeerJoined GethId deriving Show
+newtype PeerLeft = PeerLeft GethId deriving Show
 
 -- | Some checkpoint in the execution of the program.
 data Checkpoint result where
-  PeerConnected :: Checkpoint ConnectionDelta
-  PeerDisconnected :: Checkpoint ConnectionDelta
+  PeerConnected :: Checkpoint PeerJoined
+  PeerDisconnected :: Checkpoint PeerLeft
+
+  BecameMinter :: Checkpoint ()
+  BecameVerifier :: Checkpoint ()
+
+  TxCreated :: Checkpoint TxId
+  TxAccepted :: Checkpoint TxId
 
 -- Note we use @suffix@ because the content is preceded by a timestamp.
 patternForCheckpoint :: Checkpoint a -> Pattern a
@@ -44,9 +38,24 @@ patternForCheckpoint cpt = suffix $
   >> space
   >> mkCheckpointPattern cpt
 
-mkCheckpointPattern :: Checkpoint a -> Pattern a
-mkCheckpointPattern PeerConnected =
-  ConnectionDelta BecameActive . GethId <$> decimal
-mkCheckpointPattern PeerDisconnected =
-  ConnectionDelta BecameInactive . GethId <$> decimal
+sentinelForCheckpoint :: Checkpoint a -> Text
+sentinelForCheckpoint PeerConnected    = "PEER-CONNECTED"
+sentinelForCheckpoint PeerDisconnected = "PEER-DISCONNECTED"
+sentinelForCheckpoint BecameMinter     = "BECAME-MINTER"
+sentinelForCheckpoint BecameVerifier   = "BECAME-VERIFIER"
+sentinelForCheckpoint TxCreated        = "TX-CREATED"
+sentinelForCheckpoint TxAccepted       = "TX-ACCEPTED"
 
+mkCheckpointPattern :: Checkpoint a -> Pattern a
+mkCheckpointPattern PeerConnected = PeerJoined . GethId <$> decimal
+mkCheckpointPattern PeerDisconnected = PeerLeft . GethId <$> decimal
+mkCheckpointPattern BecameMinter = pure ()
+mkCheckpointPattern BecameVerifier = pure ()
+mkCheckpointPattern TxCreated = "0x" >> TxId <$> plus hexDigit
+mkCheckpointPattern TxAccepted = "0x" >> TxId <$> plus hexDigit
+
+matchCheckpoint :: Checkpoint a -> Line -> Maybe a
+matchCheckpoint cpt line =
+  case match (patternForCheckpoint cpt) (lineToText line) of
+    [result] -> Just result
+    _ -> Nothing
