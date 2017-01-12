@@ -1,4 +1,0 @@
----
-geth_dir: '{{ go_path }}/src/github.com/ethereum/go-ethereum'
-ethereum_repo: ssh://git@github.com/noirqs/jpm-goethereum.git
-ethereum_branch: jpm-raft

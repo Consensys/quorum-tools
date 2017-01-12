@@ -1,9 +1,0 @@
----
-
-- name: Ensure github.com is a known host
-  lineinfile:
-    dest: '{{ home_dir }}/.ssh/known_hosts'
-    create: yes
-    state: present
-    line: '{{ github_pubkey }}'
-    regexp: '^github\.com'
