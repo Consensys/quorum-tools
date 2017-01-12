@@ -1,6 +1,6 @@
 To build with docker:
 
-`docker build -t quorum-raft .`
+`./build`
 
 To run a built docker image:
 

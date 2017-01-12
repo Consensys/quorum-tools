@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+cp credentials/id_noirqs docker/
+docker build -t quorum-raft ./docker/
+rm docker/id_noirqs
