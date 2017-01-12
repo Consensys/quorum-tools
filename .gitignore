@@ -3,3 +3,5 @@ raft-*-snap
 .stack-work
 ansible
 geth*.out.*
+id_noirqs
+ethereum-raft-demo.pem
