@@ -4,6 +4,19 @@ provider "aws" {
   region = "${var.aws_region}"
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  filter {
+    name = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-*"]
+  }
+  filter {
+    name = "virtualization-type"
+    values = ["hvm"]
+  }
+  owners = ["099720109477"] # Canonical
+}
+
 resource "aws_vpc" "quorum_raft" {
   cidr_block = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -94,21 +107,107 @@ resource "aws_route_table_association" "c" {
   route_table_id = "${aws_route_table.quorum_raft.id}"
 }
 
-# TODO: dynamically create security group for quorum nodes
-# TODO: dynamically create security group for open SSH
+resource "aws_security_group" "ssh_open" {
+  name = "${var.project} ${var.env} ssh access"
+  description = "Allow ssh connections"
+  vpc_id = "${aws_vpc.quorum_raft.id}"
 
-# resource "aws_instance" "quorum_1" {
-#   ami = "${var.ec2_ami}"
-#   availability_zone = "${aws_subnet.a.availability_zone}"
-#   instance_type = "${lookup(var.instance_types, "quorum")}"
-#   security_groups = ["${var.existing_sg}"]
-#   key_name = "${var.ssh_keypair_name}"
-#   subnet_id = "${aws_subnet.a.id}"
-#   associate_public_ip_address = true
-#
-#   tags {
-#     Project = "${var.project}"
-#     Name = "${var.project} ${var.env} quorum 1"
-#     Environment = "${var.env}"
-#   }
-# }
+  ingress {
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} ssh access"
+  }
+}
+
+resource "aws_security_group" "rpc_sender" {
+  name = "${var.project} ${var.env} rpc sender"
+  description = "Can send RPC traffic to ${var.project} quorum nodes"
+  vpc_id = "${aws_vpc.quorum_raft.id}"
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} rpc sender"
+  }
+}
+
+resource "aws_security_group" "quorum_instance" {
+  name = "${var.project} ${var.env} quorum instance"
+  description = "Allow eth p2p from other quorum nodes and RPC traffic from designated nodes"
+  vpc_id = "${aws_vpc.quorum_raft.id}"
+
+  ingress {
+    from_port = 30400
+    to_port = 30900
+    protocol = "tcp"
+    self = true # incoming traffic comes from this same security group
+  }
+
+  ingress {
+    from_port = 40400
+    to_port = 40900
+    protocol = "tcp"
+    security_groups = ["${aws_security_group.rpc_sender.id}"]
+  }
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} quorum instance"
+  }
+}
+
+resource "aws_instance" "quorum_1" {
+  ami = "${data.aws_ami.ubuntu.id}"
+  availability_zone = "${aws_subnet.a.availability_zone}"
+  instance_type = "${lookup(var.instance_types, "quorum")}"
+  # NOTE: rpc_sender is currently not in this list:
+  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
+  key_name = "${var.ssh_keypair_name}"
+  subnet_id = "${aws_subnet.a.id}"
+  associate_public_ip_address = true
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} quorum 1"
+    Environment = "${var.env}"
+  }
+}
+
+resource "aws_instance" "quorum_2" {
+  ami = "${data.aws_ami.ubuntu.id}"
+  availability_zone = "${aws_subnet.b.availability_zone}"
+  instance_type = "${lookup(var.instance_types, "quorum")}"
+  # NOTE: rpc_sender is currently not in this list:
+  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
+  key_name = "${var.ssh_keypair_name}"
+  subnet_id = "${aws_subnet.b.id}"
+  associate_public_ip_address = true
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} quorum 2"
+    Environment = "${var.env}"
+  }
+}
+
+resource "aws_instance" "quorum_3" {
+  ami = "${data.aws_ami.ubuntu.id}"
+  availability_zone = "${aws_subnet.c.availability_zone}"
+  instance_type = "${lookup(var.instance_types, "quorum")}"
+  # NOTE: rpc_sender is currently not in this list:
+  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
+  key_name = "${var.ssh_keypair_name}"
+  subnet_id = "${aws_subnet.c.id}"
+  associate_public_ip_address = true
+
+  tags {
+    Project = "${var.project}"
+    Name = "${var.project} ${var.env} quorum 3"
+    Environment = "${var.env}"
+  }
+}

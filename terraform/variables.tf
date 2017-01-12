@@ -20,13 +20,10 @@ variable "project" {
 variable "env" {
   default = "demo"
 }
-variable "ec2_ami" {
-  default = "ami-40d28157" # ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20161020
-}
 variable "instance_types" {
   default = {
     quorum = "t2.small"
-    # TODO: other types of nodes, like for metrics or clients sending txes
+    # TODO: other types of nodes, like for metrics or rpc (tx) senders
   }
 }
 variable "subnet_azs" {
@@ -35,10 +32,4 @@ variable "subnet_azs" {
     "b" = "us-east-1c"
     "c" = "us-east-1d"
   }
-}
-#
-# TODO: replace this with a dyn-generated SG
-#
-variable "existing_sg" {
-  default = "sg-8a840df7"
 }
