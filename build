@@ -3,6 +3,15 @@
 set -u
 set -e
 
-cp credentials/id_noirqs docker/
-docker build -t quorum-raft ./docker/
-rm docker/id_noirqs
+cp credentials/id_noirqs docker-quorum/
+cp credentials/id_noirqs docker-harness/
+cp credentials/github.pub docker-quorum/
+cp credentials/github.pub docker-harness/
+
+docker build -t quorum-raft ./docker-quorum/
+docker build -t harness ./docker-harness/
+
+rm docker-quorum/id_noirqs
+rm docker-harness/id_noirqs
+rm docker-quorum/github.pub
+rm docker-harness/github.pub
