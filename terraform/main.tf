@@ -165,8 +165,10 @@ resource "aws_instance" "quorum_1" {
   ami = "${data.aws_ami.ubuntu.id}"
   availability_zone = "${aws_subnet.a.availability_zone}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
-  # NOTE: rpc_sender is currently not in this list:
-  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
+  #
+  # NOTE: rpc_sender is in this list temporarily, until we provision nodes that are dedicated to send txes
+  #
+  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}", "${aws_security_group.rpc_sender.id}"]
   key_name = "${var.ssh_keypair_name}"
   subnet_id = "${aws_subnet.a.id}"
   associate_public_ip_address = true
