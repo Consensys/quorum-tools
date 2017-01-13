@@ -6,3 +6,5 @@ geth*.out.*
 id_noirqs
 terraform.tfvars
 ethereum-raft-demo.pem
+docker-harness/github.pub
+docker-quorum/github.pub
