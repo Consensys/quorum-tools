@@ -18,5 +18,5 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/" &&
     ssh-agent bash -c '\
       ssh-add $HOME/.ssh/id_noirqs; \
       git clone ssh://git@github.com/noirqs/jpm-goethereum.git $GO_ETHEREUM_DIR; \
-      cd $GO_ETHEREUM_DIR && git fetch && git checkout jpm-raft && make all; \
+      cd $GO_ETHEREUM_DIR && git fetch && git checkout jpm-raft && make all && cp build/bin/geth /usr/local/bin; \
     '
