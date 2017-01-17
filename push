@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+# Authenticate docker client with ECR:
+eval `aws ecr get-login --region us-east-1` >/dev/null
+
+# Tag and push quorum-raft:
+docker tag quorum-raft:latest 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-raft:latest
+docker push 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-raft:latest
+
+# Tag and push quorum-harness:
+docker tag quorum-harness:latest 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness:latest
+docker push 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness:latest
