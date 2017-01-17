@@ -29,7 +29,7 @@ import           Data.Aeson.Lens            (key, _String)
 import           Data.Bifunctor             (first, second)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
-import           Data.List                  (unzip6)
+import           Data.List                  (unzip7)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
@@ -478,6 +478,9 @@ observingLastBlock incoming = do
 newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
   deriving (Monoid)
 
+newtype TxAddrs = TxAddrs { unTxAddrs :: Map.Map TxId Addr }
+  deriving (Monoid, Eq)
+
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
 matchCheckpoint' cpt line cb = case matchCheckpoint cpt line of
@@ -486,20 +489,23 @@ matchCheckpoint' cpt line cb = case matchCheckpoint cpt line of
 
 observingTxes
   :: Shell (Line, a)
-  -> Shell (Line, (OutstandingTxes, a))
+  -> Shell (Line, ((OutstandingTxes, TxAddrs), a))
 observingTxes incoming = do
     outstanding <- liftIO $ newMVar mempty
+    addrs <- liftIO $ newMVar mempty
     (line, a) <- incoming
 
-    matchCheckpoint' TxCreated line $ \tx ->
+    matchCheckpoint' TxCreated line $ \(tx, addr) -> do
       pureModifyMVar_ outstanding (Set.insert tx)
+      pureModifyMVar_ addrs (Map.insert tx addr)
 
     matchCheckpoint' TxAccepted line $ \tx ->
       pureModifyMVar_ outstanding (Set.delete tx)
 
-    result <- liftIO $ OutstandingTxes <$> readMVar outstanding
+    txResult <- liftIO $ OutstandingTxes <$> readMVar outstanding
+    addrsResult <- liftIO $ TxAddrs <$> readMVar addrs
 
-    return (line, (result, a))
+    return (line, ((txResult, addrsResult), a))
 
 observingRaftStatus :: Shell (Line, a)
                     -> Shell (Line, (Last RaftStatus, a))
@@ -544,7 +550,7 @@ observingActivation incoming = do
 
 instrumentedGethShell :: Geth
                       -> Shell (Line,
-                               (OutstandingTxes,
+                               ((OutstandingTxes, TxAddrs),
                                (Last RaftStatus,
                                (Last Block,
                                (Maybe NodeOnline,
@@ -569,11 +575,13 @@ runNode :: forall m. (MonadManaged m)
              , MVar (Last Block)
              , MVar (Last RaftStatus)
              , MVar OutstandingTxes
+             , MVar TxAddrs
              , Async AllConnected )
 runNode numNodes geth = do
-  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, allConnectedMVar)
-    <- liftIO $ (,,,,)
+  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, txAddrsMVar, allConnectedMVar)
+    <- liftIO $ (,,,,,)
       <$> newEmptyMVar
+      <*> newMVar mempty
       <*> newMVar mempty
       <*> newMVar mempty
       <*> newMVar mempty
@@ -597,7 +605,7 @@ runNode numNodes geth = do
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
         \(_line,
-         (outstandingTxes,
+         ((outstandingTxes, txAddrs),
          (lastRaftStatus,
          (lastBlock,
          (mOnline,
@@ -605,13 +613,14 @@ runNode numNodes geth = do
           void $ swapMVar lastBlockMvar lastBlock
           void $ swapMVar lastRaftMvar lastRaftStatus
           void $ swapMVar outstandingTxesMVar outstandingTxes
+          void $ swapMVar txAddrsMVar txAddrs
 
           when (Set.size connSet == expectedPeerCount) $
             ensureMVarTransition allConnectedMVar AllConnected
 
           when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
 
-  (,,lastBlockMvar,lastRaftMvar,outstandingTxesMVar,)
+  (,,lastBlockMvar,lastRaftMvar,outstandingTxesMVar,txAddrsMVar,)
     <$> started <*> terminated <*> connected
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
@@ -630,7 +639,8 @@ runNodesIndefinitely geths = do
    _lastBlocks,
    _lastRafts,
    _outstandingTxesMVar,
-   _establishedConnections) <- unzip6 <$> traverse (runNode numNodes) geths
+   _txAddrsMVar,
+   _establishedConnections) <- unzip7 <$> traverse (runNode numNodes) geths
 
   awaitAll readyAsyncs
 
@@ -655,6 +665,7 @@ txRpcBody geth = object
     t :: Text -> Text
     t = id
 
+-- TODO figure out how to send private txes
 sendTx :: MonadIO io => Geth -> io (Either Text TxId)
 sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
   where
