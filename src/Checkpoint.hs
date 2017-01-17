@@ -12,8 +12,11 @@ raftSentinel = "RAFT-CHECKPOINT"
 newtype GethId = GethId { gId :: Int }
   deriving (Show, Eq, Num, Ord, Enum)
 
-data TxId = TxId { txId :: Text }
+newtype TxId = TxId { txId :: Text }
   deriving (Show, Eq, Ord)
+
+newtype Addr = Addr { unAddr :: Text }
+  deriving Eq
 
 newtype PeerJoined = PeerJoined GethId deriving Show
 newtype PeerLeft = PeerLeft GethId deriving Show
@@ -26,7 +29,7 @@ data Checkpoint result where
   BecameMinter :: Checkpoint ()
   BecameVerifier :: Checkpoint ()
 
-  TxCreated :: Checkpoint TxId
+  TxCreated :: Checkpoint (TxId, Addr)
   TxAccepted :: Checkpoint TxId
 
 -- Note we use @suffix@ because the content is preceded by a timestamp.
@@ -51,7 +54,13 @@ mkCheckpointPattern PeerConnected = PeerJoined . GethId <$> decimal
 mkCheckpointPattern PeerDisconnected = PeerLeft . GethId <$> decimal
 mkCheckpointPattern BecameMinter = pure ()
 mkCheckpointPattern BecameVerifier = pure ()
-mkCheckpointPattern TxCreated = "0x" >> TxId <$> plus hexDigit
+mkCheckpointPattern TxCreated = do
+  _ <- "("
+  txId <- "0x" >> plus hexDigit
+  _ <- space
+  addr <- "0x" >> plus hexDigit
+  _ <- ")"
+  return (TxId txId, Addr addr)
 mkCheckpointPattern TxAccepted = "0x" >> TxId <$> plus hexDigit
 
 matchCheckpoint :: Checkpoint a -> Line -> Maybe a

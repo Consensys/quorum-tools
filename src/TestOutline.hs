@@ -12,7 +12,7 @@ import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.List                (unzip6)
+import           Data.List                (unzip7)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
@@ -102,8 +102,9 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
          lastBlockMs,
          _lastRafts,
          outstandingTxesMs,
+         _txAddrsMs,
          allConnected)
-         <- unzip6 <$> traverse (runNode (unNumNodes numNodes)) nodes
+         <- unzip7 <$> traverse (runNode (unNumNodes numNodes)) nodes
 
         -- wait for geth to launch, then start raft and run the test body
         timestampedMessage "awaiting all ready"
@@ -156,6 +157,8 @@ verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   lastBlocks <- traverse readMVar lastBlockMs
   outstandingTxes <- traverse readMVar outstandingTxesMs
   meEarlyTerms <- traverse poll terminatedAsyncs
+
+  -- verify private state
 
   results <- zipWithM (curry $ \case
                         (Just (Left ex), _)     -> throwIO ex
