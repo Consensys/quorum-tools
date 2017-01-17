@@ -161,10 +161,41 @@ resource "aws_security_group" "quorum_instance" {
   }
 }
 
+resource "aws_iam_role" "ecr_accessor" {
+  name = "${var.project}.${var.env}.ecrAccessor"
+  assume_role_policy = <<EOF
+{ "Version":   "2012-10-17"
+, "Statement": [ { "Effect":    "Allow"
+                 , "Principal": { "Service": "ec2.amazonaws.com" }
+                 , "Action":    "sts:AssumeRole" } ] }
+EOF
+}
+
+resource "aws_iam_role_policy" "ecr_accessor" {
+  name = "${var.project}.${var.env}.ecrAccessor"
+  role = "${aws_iam_role.ecr_accessor.id}"
+  policy = <<EOF
+{ "Version":   "2012-10-17"
+, "Statement": [ { "Action":   [ "ecr:GetAuthorizationToken"
+                               , "ecr:BatchCheckLayerAvailability"
+                               , "ecr:GetDownloadUrlForLayer"
+                               , "ecr:BatchGetImage"
+                               ]
+                 , "Effect":   "Allow"
+                 , "Resource": "*" } ] }
+EOF
+}
+
+resource  "aws_iam_instance_profile" "ecr_accessor" {
+  name = "${var.project}.${var.env}.ecrAccessor"
+  roles = ["${aws_iam_role.ecr_accessor.name}"]
+}
+
 resource "aws_instance" "quorum_1" {
   ami = "${data.aws_ami.ubuntu.id}"
   availability_zone = "${aws_subnet.a.availability_zone}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
+  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
   #
   # NOTE: rpc_sender is in this list temporarily, until we provision nodes that are dedicated to send txes
   #
@@ -184,6 +215,7 @@ resource "aws_instance" "quorum_2" {
   ami = "${data.aws_ami.ubuntu.id}"
   availability_zone = "${aws_subnet.b.availability_zone}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
+  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
   # NOTE: rpc_sender is currently not in this list:
   vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
   key_name = "${var.ssh_keypair_name}"
@@ -201,6 +233,7 @@ resource "aws_instance" "quorum_3" {
   ami = "${data.aws_ami.ubuntu.id}"
   availability_zone = "${aws_subnet.c.availability_zone}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
+  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
   # NOTE: rpc_sender is currently not in this list:
   vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
   key_name = "${var.ssh_keypair_name}"

@@ -22,7 +22,7 @@ variable "env" {
 }
 variable "instance_types" {
   default = {
-    quorum = "t2.small"
+    quorum = "m4.large"
     # TODO: other types of nodes, like for metrics or rpc (tx) senders
   }
 }
