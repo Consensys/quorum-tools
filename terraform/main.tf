@@ -155,6 +155,13 @@ resource "aws_security_group" "quorum_instance" {
     security_groups = ["${aws_security_group.rpc_sender.id}"]
   }
 
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} quorum instance"
