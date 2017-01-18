@@ -1,10 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE DuplicateRecordFields      #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
 
 -- Test public / private state consistency
 module Main where
