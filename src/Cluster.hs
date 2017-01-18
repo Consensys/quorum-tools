@@ -129,6 +129,7 @@ data Geth =
        , gethNetworkId :: Int
        , gethVerbosity :: Verbosity
        , gethDataDir   :: DataDir
+       , gethIp        :: Ip
        , gethUrl       :: Text
        }
   deriving (Show, Eq)
@@ -238,18 +239,22 @@ fileContaining contents = do
     hClose handle
   return path
 
+gidIp :: (HasEnv m) => GethId -> m Ip
+gidIp gid = force <$> Map.lookup gid <$> view clusterIps
+  where
+    force = fromMaybe $ error $ "no IP found for " <> show gid
+
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 getEnodeId gid = do
   mkCmd <- setupCommand gid
-  mHost <- Map.lookup gid <$> view clusterIps
+  (Ip ip) <- gidIp gid
 
-  let host = getIp $ forceIp mHost
-      enodeIdShell = do
+  let enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
                        let cmd = mkCmd $ format ("js "%fp) jsPath
                        inshell cmd empty
                    & grep (begins "enode")
-                   & sed (fmap (\a b -> a <> host <> b) chars
+                   & sed (fmap (\a b -> a <> ip <> b) chars
                            <*  text "[::]"
                            <*> chars)
 
@@ -258,7 +263,6 @@ getEnodeId gid = do
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
-    forceIp = fromMaybe $ error $ "no IP found for " <> show gid
 
 -- > allSiblings [1,2,3]
 -- [(1,[2,3]),(2,[1,3]),(3,[1,2])]
@@ -274,6 +278,7 @@ allSiblings as = (\a -> (a, sibs a)) <$> as
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> AccountId -> m Geth
 mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
+  ip <- gidIp gid
 
   Geth <$> pure gid
        <*> pure eid
@@ -284,7 +289,8 @@ mkGeth gid eid aid = do
        <*> view clusterNetworkId
        <*> view clusterVerbosity
        <*> gidDataDir gid
-       <*> pure (format ("http://localhost:"%d) rpcPort')
+       <*> gidIp gid
+       <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
 
 installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
 installAccountKey gid acctKey = do
@@ -485,16 +491,15 @@ observingTxes incoming = do
     outstanding <- liftIO $ newMVar mempty
     (line, a) <- incoming
 
-    matchCheckpoint' TxCreated line $ \tx -> do
+    matchCheckpoint' TxCreated line $ \tx ->
       pureModifyMVar_ outstanding (Set.insert tx)
 
-    matchCheckpoint' TxAccepted line $ \tx -> do
+    matchCheckpoint' TxAccepted line $ \tx ->
       pureModifyMVar_ outstanding (Set.delete tx)
 
     result <- liftIO $ OutstandingTxes <$> readMVar outstanding
 
     return (line, (result, a))
-
 
 observingRaftStatus :: Shell (Line, a)
                     -> Shell (Line, (Last RaftStatus, a))
