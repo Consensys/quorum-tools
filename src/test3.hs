@@ -5,7 +5,6 @@ module Main where
 
 import           Control.Monad              (forM_)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
-import           Data.List                  (unzip7)
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
@@ -20,27 +19,20 @@ import TestOutline hiding (verify)
 main :: IO ()
 main = sh $ flip runReaderT defaultClusterEnv $ do
   let numNodes = 3
-  let gids = [1..GethId numNodes]
+      gids = [1..GethId numNodes]
 
   geths <- setupNodes gids
-  (readyAsyncs,
-   _terminatedAsyncs,
-   _lastBlockMs,
-   _lastRafts,
-   _outstandingTxesMs,
-   _txAddrsMs,
-   allConnected)
-   <- unzip7 <$> traverse (runNode numNodes) geths
+  instruments <- traverse (runNode numNodes) geths
 
   -- wait for geth to launch, then start raft and run the test body
   timestampedMessage "awaiting all ready"
-  awaitAll readyAsyncs -- "IPC endpoint opened"
+  awaitAll (nodeOnline <$> instruments) -- "IPC endpoint opened"
   timestampedMessage "got all ready"
 
   startRaftAcross geths
 
   timestampedMessage "awaiting all TCP connections"
-  awaitAll allConnected -- "peer * became active"
+  awaitAll (allConnected <$> instruments) -- "peer * became active"
   timestampedMessage "got all TCP connections"
 
   storageAddr <- createContract (head geths) simpleStorage
@@ -55,7 +47,7 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
           putStrLn $ "Got wrong value: " <> show val <> " instead of " <> show expected
           exit failedTestCode
 
-  forM_ (zip [1..5000] sendTo) $ \(no, geth) -> do
+  forM_ (zip [1..100] sendTo) $ \(no, geth) -> do
     incrementStorage geth simpleStorage storageAddr
     i <- getStorage geth simpleStorage storageAddr
     expectEq i no
