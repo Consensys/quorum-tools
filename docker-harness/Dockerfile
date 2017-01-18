@@ -1,4 +1,5 @@
-from ubuntu:xenial
+# Our harness shells-out to the geth binary.
+FROM quorum-raft
 
 ENV GEMINI_EXAMPLES_DIR=/root/gemini-examples
 
