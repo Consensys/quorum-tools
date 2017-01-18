@@ -8,3 +8,4 @@ terraform.tfvars
 ethereum-raft-demo.pem
 docker-harness/github.pub
 docker-quorum/github.pub
+cluster-data
