@@ -6,11 +6,12 @@ module Main where
 import           Control.Monad              (forM_)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Data.List                  (unzip7)
+import           Data.Maybe                 (fromMaybe)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import           Text.Read                  (readMaybe)
 
-import Turtle
+import Turtle hiding (match)
 import Checkpoint
 import Cluster hiding (txRpcBody, sendTx)
 import Control
@@ -76,17 +77,24 @@ createContract geth contract@(Contract mem _abi) =
         , "console.log(contractInstance.address);"
         , "contractInstance"
         ]
+
       -- look for TX-CREATED result addr
-      step mAddr line = case matchCheckpoint TxCreated line of
-        Just (_txid, addr) -> Just addr
-        Nothing -> mAddr
-      forceAddr mAddr = case mAddr of
-        Just addr -> addr
-        Nothing -> error "unable to extract addr from contract creation"
-      -- TODO: switch to `find`
+      force = fromMaybe (error "unable to extract addr from contract creation")
       consumer :: Fold Line Addr
-      consumer = Fold step Nothing forceAddr
+      consumer = snd . force <$> find' (matchCheckpoint TxCreated)
+
   in contractCmd geth contract cmd consumer
+
+-- | @(find' predicate)@ returns the first @Just@ predicate result or 'Nothing'
+-- if no element satisfies the predicate
+find' :: (a -> Maybe b) -> Fold a (Maybe b)
+find' predicate = Fold step Nothing id where
+  step accum a =
+    let match = predicate a
+    in case (accum, match) of
+         (Just _b, _)       -> accum
+         (Nothing, Just _b) -> match
+         (Nothing, Nothing) -> Nothing
 
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
 incrementStorage geth contract addr =
