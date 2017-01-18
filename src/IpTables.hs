@@ -1,27 +1,25 @@
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module IpTables where
 
-import           Control.Concurrent         (threadDelay)
-import           Control.Monad.Managed      (MonadManaged)
-import           Control.Monad.Reader.Class (MonadReader (reader))
-import qualified Data.Text                  as T
-import           Prelude                    hiding (FilePath, lines)
+import           Control.Concurrent    (threadDelay)
+import           Control.Monad.Managed (MonadManaged)
+import qualified Data.Text             as T
+import           Prelude               hiding (FilePath, lines)
 import           Turtle
 
-import Checkpoint
-import Cluster
-import Control (onExit)
-import SharedPartitioning
+import           Checkpoint
+import           Cluster
+import           Control               (onExit)
+import           SharedPartitioning
 
 iptables :: Format Text r -> r
 iptables args = format ("sudo -n iptables "%args)
 
-partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
-partition (Millis ms) geth = do
-  gdata <- reader clusterDataRoot
+partition :: (MonadManaged m) => FilePath -> Millis -> GethId -> m ()
+partition gdata (Millis ms) geth = do
   ports <- getPortsForGeth gdata geth
   let n = gId geth
 

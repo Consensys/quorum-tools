@@ -22,6 +22,7 @@ import qualified Data.Text.IO             as T
 import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
 import qualified IpTables                 as IPT
 import qualified PacketFilter             as PF
+import           Prelude                  hiding (FilePath)
 import           System.Info
 import           Turtle
 
@@ -95,7 +96,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         let geths = [1..GethId (unNumNodes numNodes)]
         _ <- when (os == "darwin") PF.acquirePf
 
-        nodes <- setupNodes geths
+        nodes <- wipeAndSetupNodes "gdata" geths
         (readyAsyncs,
          terminatedAsyncs,
          lastBlockMs,
@@ -170,11 +171,11 @@ verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
     True -> verifySameLastBlock results
     False -> Falsified (LostTxes lostTxes)
 
-partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
-partition millis node =
+partition :: (MonadManaged m, HasEnv m) => FilePath -> Millis -> GethId -> m ()
+partition gdata millis node =
   if os == "darwin"
-  then PF.partition millis node >> PF.flushPf
-  else IPT.partition millis node
+  then PF.partition gdata millis node >> PF.flushPf
+  else IPT.partition gdata millis node
 
 startRaftAcross
   :: (Traversable t, MonadIO m, MonadReader ClusterEnv m)

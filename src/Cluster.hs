@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
 
 module Cluster where
@@ -15,11 +16,12 @@ import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (to, (<&>), (^.), (^?))
+import           Control.Lens               (at, makeLenses, to, view, (^.),
+                                             (^?))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
-import           Control.Monad.Reader.Class (MonadReader (ask, reader))
+import           Control.Monad.Reader.Class (MonadReader (ask))
 import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson                 (ToJSON (toJSON), Value (String),
                                              encode, object, (.=))
@@ -43,10 +45,11 @@ import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
-import           Turtle
+import           Turtle                     hiding (view)
+import qualified Turtle                     as Turtle
 
-import           Control
 import           Checkpoint
+import           Control
 
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
@@ -63,31 +66,41 @@ newtype Port = Port { getPort :: Int }
 newtype Ip = Ip { getIp :: Text }
   deriving (Eq, Show)
 
+data DataDir
+  = DataDir { dataDirPath :: FilePath }
+  deriving (Show, Eq)
+
 data ClusterEnv
-  = ClusterEnv { clusterDataRoot     :: FilePath
-               , clusterPassword     :: Text
-               , clusterNetworkId    :: Int
-               , clusterBaseHttpPort :: Port
-               , clusterBaseRpcPort  :: Port
-               , clusterVerbosity    :: Verbosity
-               , clusterIps          :: Map.Map GethId Ip
+  = ClusterEnv { _clusterPassword     :: Text
+               , _clusterNetworkId    :: Int
+               , _clusterBaseHttpPort :: Port
+               , _clusterBaseRpcPort  :: Port
+               , _clusterVerbosity    :: Verbosity
+               , _clusterGenesisJson  :: FilePath
+               , _clusterIps          :: Map.Map GethId Ip
+               , _clusterDataDirs     :: Map.Map GethId DataDir
                }
   deriving (Eq, Show)
+
+makeLenses ''ClusterEnv
 
 type HasEnv = MonadReader ClusterEnv
 
 defaultClusterEnv :: ClusterEnv
-defaultClusterEnv = ClusterEnv { clusterDataRoot     = "gdata"
-                               , clusterPassword     = "abcd"
-                               , clusterNetworkId    = 1418
-                               , clusterBaseHttpPort = 30400
-                               , clusterBaseRpcPort  = 40400
-                               , clusterVerbosity    = 3
-                               , clusterIps    =
-                                   Map.fromList [ (1, Ip "127.0.0.1")
-                                                , (2, Ip "127.0.0.1")
-                                                , (3, Ip "127.0.0.1")]
-                               }
+defaultClusterEnv = ClusterEnv
+  { _clusterPassword     = "abcd"
+  , _clusterNetworkId    = 1418
+  , _clusterBaseHttpPort = 30400
+  , _clusterBaseRpcPort  = 40400
+  , _clusterVerbosity    = 3
+  , _clusterGenesisJson  = "gdata" </> "genesis.json"
+  , _clusterIps          = Map.fromList [ (1, Ip "127.0.0.1")
+                                        , (2, Ip "127.0.0.1")
+                                        , (3, Ip "127.0.0.1")]
+  , _clusterDataDirs     = Map.fromList [ (1, DataDir $ "gdata" </> "geth1")
+                                        , (2, DataDir $ "gdata" </> "geth2")
+                                        , (3, DataDir $ "gdata" </> "geth3")]
+  }
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
@@ -105,10 +118,6 @@ data AccountKey = AccountKey { akAccountId :: AccountId
 
 data Block = Block Text
   deriving (Eq, Show)
-
-data DataDir
-  = DataDir { dataDirPath :: FilePath }
-  deriving (Show, Eq)
 
 data Geth =
   Geth { gethId        :: GethId
@@ -140,14 +149,16 @@ nodeName gid = format ("geth"%d) (gId gid)
 
 gidDataDir :: HasEnv m => GethId -> m DataDir
 gidDataDir gid = do
-  dataDirPathRoot <- reader clusterDataRoot
-  pure . DataDir $ dataDirPathRoot </> fromText (nodeName gid)
+    mDataDir <- view $ clusterDataDirs . at gid
+    pure $ force mDataDir
+  where
+    force = fromMaybe $ error $ "no data dir found for " <> show gid
 
 httpPort :: HasEnv m => GethId -> m Port
-httpPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseHttpPort
+httpPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseHttpPort
 
 rpcPort :: HasEnv m => GethId -> m Port
-rpcPort (GethId gid) = (fromIntegral gid +) <$> reader clusterBaseRpcPort
+rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
 
 rawCommand :: DataDir -> Text -> Text
 rawCommand dir = format ("geth --datadir "%fp%" "%s) (dataDirPath dir)
@@ -178,13 +189,6 @@ gethCommand geth = format ("geth --datadir "%fp       %
                           (gethNetworkId geth)
                           (gethVerbosity geth)
 
-wipeDataDirs :: (MonadIO m, HasEnv m) => m ()
-wipeDataDirs = do
-  gdata <- reader clusterDataRoot
-  dirExists <- testdir gdata
-  when dirExists $ rmtree gdata
-  mktree gdata
-
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
   cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
@@ -211,7 +215,7 @@ inshellWithJoinedErr cmd inputShell = do
 createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
 createAccount dir = do
     let cmd = rawCommand dir "account new"
-    pw <- reader clusterPassword
+    pw <- view clusterPassword
     -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
     let acctShell = inshellWithJoinedErr cmd (select $ textToLines pw
                                                     <> textToLines pw)
@@ -237,7 +241,7 @@ fileContaining contents = do
 getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 getEnodeId gid = do
   mkCmd <- setupCommand gid
-  mHost <- Map.lookup gid <$> reader clusterIps
+  mHost <- Map.lookup gid <$> view clusterIps
 
   let host = getIp $ forceIp mHost
       enodeIdShell = do
@@ -276,9 +280,9 @@ mkGeth gid eid aid = do
        <*> httpPort gid
        <*> pure rpcPort'
        <*> pure aid
-       <*> reader clusterPassword
-       <*> reader clusterNetworkId
-       <*> reader clusterVerbosity
+       <*> view clusterPassword
+       <*> view clusterNetworkId
+       <*> view clusterVerbosity
        <*> gidDataDir gid
        <*> pure (format ("http://localhost:"%d) rpcPort')
 
@@ -350,7 +354,7 @@ generateAccountKeys numAccts = do
 
 createGenesisJson :: (MonadIO m, HasEnv m) => [AccountId] -> m FilePath
 createGenesisJson acctIds = do
-    jsonPath <- reader clusterDataRoot <&> (</> "genesis.json")
+    jsonPath <- view clusterGenesisJson
     output jsonPath contents
     return jsonPath
 
@@ -377,8 +381,6 @@ createGenesisJson acctIds = do
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
-  wipeDataDirs
-
   acctKeys <- generateAccountKeys (length gids)
   genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
 
@@ -390,6 +392,17 @@ setupNodes gids = do
     writeStaticNodes sibs geth
 
   pure geths
+
+wipeLocalClusterRoot :: (MonadIO m) => FilePath -> m ()
+wipeLocalClusterRoot rootDir = do
+  dirExists <- testdir rootDir
+  when dirExists $ rmtree rootDir
+  mktree rootDir
+
+wipeAndSetupNodes :: (MonadIO m, HasEnv m) => FilePath -> [GethId] -> m [Geth]
+wipeAndSetupNodes rootDir gids = do
+  wipeLocalClusterRoot rootDir
+  setupNodes gids
 
 gethShell :: Geth -> Shell Line
 gethShell geth = do
@@ -462,7 +475,7 @@ newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
 matchCheckpoint' cpt line cb = case matchCheckpoint cpt line of
-  Just a -> liftIO (cb a)
+  Just a  -> liftIO (cb a)
   Nothing -> pure ()
 
 observingTxes
@@ -622,16 +635,16 @@ runNodesIndefinitely geths = do
 
 txRpcBody :: Geth -> Value
 txRpcBody geth = object
-  [ "id"      .= (1 :: Int)
-  , "jsonrpc" .= t "2.0"
-  , "method"  .= t "eth_sendTransaction"
-  , "params"  .=
-    [ object
-      [ "from" .= (accountId . gethAccountId $ geth)
-      , "to"   .= t "0000000000000000000000000000000000000000"
+    [ "id"      .= (1 :: Int)
+    , "jsonrpc" .= t "2.0"
+    , "method"  .= t "eth_sendTransaction"
+    , "params"  .=
+      [ object
+        [ "from" .= (accountId . gethAccountId $ geth)
+        , "to"   .= t "0000000000000000000000000000000000000000"
+        ]
       ]
     ]
-  ]
 
   where
     t :: Text -> Text
@@ -660,7 +673,7 @@ spamTransactions gethList =
   in spamInfinite (cycle gethList)
 
 bench :: MonadIO m => Geth -> Seconds -> m ()
-bench geth (Seconds seconds) = view benchShell
+bench geth (Seconds seconds) = Turtle.view benchShell
   where
     luaEscapeSingleQuotes = jsEscapeSingleQuotes
     lua = format ("wrk.method = 'POST'\n"  %

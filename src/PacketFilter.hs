@@ -7,7 +7,6 @@ module PacketFilter (acquirePf, flushPf, partition) where
 import           Control.Concurrent         (threadDelay)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
-import           Control.Monad.Reader.Class (MonadReader (reader))
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                (First(First), getFirst)
 import           Data.Text                  (pack)
@@ -70,9 +69,8 @@ blockPortsRule ports =
 -- | Partition some geth node for a number of milliseconds.
 --
 -- TODO: This will currently only work for partitioning a single node.
-partition :: (MonadManaged m, HasEnv m) => Millis -> GethId -> m ()
-partition (Millis ms) geth = do
-  gdata <- reader clusterDataRoot
+partition :: (MonadManaged m) => FilePath -> Millis -> GethId -> m ()
+partition gdata (Millis ms) geth = do
   ports <- getPortsForGeth gdata geth
   _ <- sh $ inshellWithNoErr
     (pfctl "-f -")

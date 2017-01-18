@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 -- One-second partition
 module Main where
 
@@ -23,7 +24,7 @@ main = tester exitP (NumNodes 3) $ \nodes -> do
     -- all three for another second
     td 1
     timestampedMessage "partitioning"
-    partition 1000 (gethId dropNode)
+    partition "gdata" 1000 (gethId dropNode)
     timestampedMessage "unpartitioning"
     td 5
 
