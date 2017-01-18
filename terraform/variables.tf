@@ -26,6 +26,16 @@ variable "instance_types" {
     # TODO: other types of nodes, like for metrics or rpc (tx) senders
   }
 }
+variable "volume_types" {
+  default = {
+    quorum = "gp2"
+  }
+}
+variable "volume_sizes" {
+  default = {
+    quorum = "50"
+  }
+}
 variable "subnet_azs" {
   default = {
     "a" = "us-east-1b"

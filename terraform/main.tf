@@ -211,6 +211,12 @@ resource "aws_instance" "quorum_1" {
   subnet_id = "${aws_subnet.a.id}"
   associate_public_ip_address = true
 
+  root_block_device {
+    volume_type = "${lookup(var.volume_types, "quorum")}"
+    volume_size = "${lookup(var.volume_sizes, "quorum")}"
+    delete_on_termination = "true"
+  }
+
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} quorum 1"
@@ -229,6 +235,12 @@ resource "aws_instance" "quorum_2" {
   subnet_id = "${aws_subnet.b.id}"
   associate_public_ip_address = true
 
+  root_block_device {
+    volume_type = "${lookup(var.volume_types, "quorum")}"
+    volume_size = "${lookup(var.volume_sizes, "quorum")}"
+    delete_on_termination = "true"
+  }
+
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} quorum 2"
@@ -246,6 +258,12 @@ resource "aws_instance" "quorum_3" {
   key_name = "${var.ssh_keypair_name}"
   subnet_id = "${aws_subnet.c.id}"
   associate_public_ip_address = true
+
+  root_block_device {
+    volume_type = "${lookup(var.volume_types, "quorum")}"
+    volume_size = "${lookup(var.volume_sizes, "quorum")}"
+    delete_on_termination = "true"
+  }
 
   tags {
     Project = "${var.project}"
