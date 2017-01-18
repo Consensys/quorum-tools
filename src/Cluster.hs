@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 
 module Cluster where
 
@@ -29,7 +30,6 @@ import           Data.Aeson.Lens            (key, _String)
 import           Data.Bifunctor             (first, second)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
-import           Data.List                  (unzip7)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
@@ -567,16 +567,20 @@ instrumentedGethShell geth = gethShell geth
   where
     logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
 
+data NodeInstrumentation = NodeInstrumentation
+  { nodeOnline      :: Async NodeOnline
+  , nodeTerminated  :: Async NodeTerminated
+  , lastBlock       :: MVar (Last Block)
+  , lastRaftStatus  :: MVar (Last RaftStatus)
+  , outstandingTxes :: MVar OutstandingTxes
+  , txAddrs         :: MVar TxAddrs
+  , allConnected    :: Async AllConnected
+  }
+
 runNode :: forall m. (MonadManaged m)
         => Int
         -> Geth
-        -> m ( Async NodeOnline
-             , Async NodeTerminated
-             , MVar (Last Block)
-             , MVar (Last RaftStatus)
-             , MVar OutstandingTxes
-             , MVar TxAddrs
-             , Async AllConnected )
+        -> m NodeInstrumentation
 runNode numNodes geth = do
   (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, txAddrsMVar, allConnectedMVar)
     <- liftIO $ (,,,,,)
@@ -620,8 +624,14 @@ runNode numNodes geth = do
 
           when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
 
-  (,,lastBlockMvar,lastRaftMvar,outstandingTxesMVar,txAddrsMVar,)
-    <$> started <*> terminated <*> connected
+  NodeInstrumentation
+    <$> started
+    <*> terminated
+    <*> pure lastBlockMvar
+    <*> pure lastRaftMvar
+    <*> pure outstandingTxesMVar
+    <*> pure txAddrsMVar
+    <*> connected
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
@@ -634,13 +644,10 @@ startRaft geth = sendJs geth "raft.startNode();"
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   let numNodes = length geths
-  (readyAsyncs,
-   terminatedAsyncs,
-   _lastBlocks,
-   _lastRafts,
-   _outstandingTxesMVar,
-   _txAddrsMVar,
-   _establishedConnections) <- unzip7 <$> traverse (runNode numNodes) geths
+      extractInstruments (NodeInstrumentation {nodeOnline, nodeTerminated})
+        = (nodeOnline, nodeTerminated)
+  instruments <- traverse (runNode numNodes) geths
+  let (readyAsyncs, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
 
   awaitAll readyAsyncs
 

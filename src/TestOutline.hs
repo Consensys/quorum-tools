@@ -1,6 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module TestOutline where
@@ -12,7 +12,6 @@ import           Control.Exception        (throwIO)
 import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.List                (unzip7)
 import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
@@ -97,24 +96,22 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         _ <- when (os == "darwin") PF.acquirePf
 
         nodes <- wipeAndSetupNodes "gdata" geths
-        (readyAsyncs,
-         terminatedAsyncs,
-         lastBlockMs,
-         _lastRafts,
-         outstandingTxesMs,
-         _txAddrsMs,
-         allConnected)
-         <- unzip7 <$> traverse (runNode (unNumNodes numNodes)) nodes
+        instruments <- traverse (runNode (unNumNodes numNodes)) nodes
+
+        let verifier = verify
+              (lastBlock <$> instruments)
+              (outstandingTxes <$> instruments)
+              (nodeTerminated <$> instruments)
 
         -- wait for geth to launch, then start raft and run the test body
         timestampedMessage "awaiting all ready"
-        awaitAll readyAsyncs -- "IPC endpoint opened"
+        awaitAll (nodeOnline <$> instruments) -- "IPC endpoint opened"
         timestampedMessage "got all ready"
 
         startRaftAcross nodes
 
         timestampedMessage "awaiting all TCP connections"
-        awaitAll allConnected -- "peer * became active"
+        awaitAll (allConnected <$> instruments) -- "peer * became active"
         timestampedMessage "got all TCP connections"
 
         cb nodes
@@ -123,7 +120,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
           -- pause a second before checking last block
           td 1
 
-          result1 <- verify lastBlockMs outstandingTxesMs terminatedAsyncs
+          result1 <- verifier
 
           -- wait an extra five seconds to guarantee raft has a chance to converge
           case result1 of
@@ -131,7 +128,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
             Falsified NoBlockFound -> td 5
             _ -> return ()
 
-          result2 <- verify lastBlockMs outstandingTxesMs terminatedAsyncs
+          result2 <- verifier
           putMVar resultVar result2
 
       result <- takeMVar resultVar
