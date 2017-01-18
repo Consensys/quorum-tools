@@ -16,7 +16,7 @@ newtype TxId = TxId { txId :: Text }
   deriving (Show, Eq, Ord)
 
 newtype Addr = Addr { unAddr :: Text }
-  deriving Eq
+  deriving (Show, Eq)
 
 newtype PeerJoined = PeerJoined GethId deriving Show
 newtype PeerLeft = PeerLeft GethId deriving Show
@@ -57,7 +57,7 @@ mkCheckpointPattern BecameVerifier = pure ()
 mkCheckpointPattern TxCreated = do
   _ <- "("
   txId <- "0x" >> plus hexDigit
-  _ <- space
+  _ <- ", "
   addr <- "0x" >> plus hexDigit
   _ <- ")"
   return (TxId txId, Addr addr)

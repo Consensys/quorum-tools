@@ -47,7 +47,7 @@ main = sh $ flip runReaderT defaultClusterEnv $ do
 
   let sendTo = cycle geths
 
-  let expectEq :: MonadIO io => Either Text Int -> Int -> io ()
+      expectEq :: MonadIO io => Either Text Int -> Int -> io ()
       expectEq val expected = liftIO $
         if val == Right expected
         then pure ()
@@ -72,14 +72,16 @@ createContract geth contract@(Contract mem _abi) =
         , "  from: '0x" <> fromAddr <> "',"
         , "  data: '" <> mem <> "',"
         , "  gas: '4700000'"
-        , "}, function(e, contract) { console.log(e, contract.address); });"
+        , "}, function(e, contract) {"
+        -- BIG HACK
+        , "  console.log('RAFT-CHECKPOINT TX-CREATED (0x0000000000000000000000000000000000000000000000000000000000000000, ' + contract.address + ')');"
+        , "});"
         , "admin.sleepBlocks(1);"
-        , "console.log(contractInstance.address);"
-        , "contractInstance"
         ]
 
       -- look for TX-CREATED result addr
       force = fromMaybe (error "unable to extract addr from contract creation")
+
       consumer :: Fold Line Addr
       consumer = snd . force <$> find' (matchCheckpoint TxCreated)
 
@@ -99,13 +101,13 @@ find' predicate = Fold step Nothing id where
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
 incrementStorage geth contract addr =
   let fromAddr = accountId $ gethAccountId geth
-      cmd = "contract.at(" <> unAddr addr <> ").increment({ from: " <> fromAddr <> "})"
+      cmd = "contract.at('" <> unAddr addr <> "').increment({ from: '0x" <> fromAddr <> "'})"
       consumer = pure () -- ignore the output
   in contractCmd geth contract cmd consumer
 
 getStorage :: MonadIO io => Geth -> Contract -> Addr -> io (Either Text Int)
 getStorage geth contract addr =
-  let cmd = "contract.at(" <> unAddr addr <> ").get()"
+  let cmd = "contract.at('" <> unAddr addr <> "').get()"
       -- just parse only line
       step _ line = case readMaybe (T.unpack $ lineToText line) of
         Just num -> Right num
