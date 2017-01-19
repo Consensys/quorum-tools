@@ -323,8 +323,12 @@ sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
   where
     ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
 
-loadNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
-loadNode gid = do
+--
+-- NOTE: this only works for the *local* node. the enode ID is obtained from the
+--       local IPC connection.
+--
+loadLocalNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
+loadLocalNode gid = do
   nodeDataDir <- gidDataDir gid
   let js = "console.log(eth.accounts[0] + '!' + admin.nodeInfo.enode)"
   cmd <- setupCommand gid <*> pure (sendJsSubcommand (dataDirPath nodeDataDir) js)
