@@ -3,6 +3,7 @@
 module Main where
 
 import           Control.Monad.Reader (runReaderT)
+import           Data.Foldable        (traverse_)
 import qualified Data.Map.Strict      as Map
 import           Prelude              hiding (FilePath)
 import           Turtle
@@ -10,8 +11,9 @@ import           Turtle
 import           Cluster
 
 main :: IO ()
-main = sh $ flip runReaderT clusterEnv $
-    void $ wipeAndSetupNodes clusterDataRoot [1, 2, 3]
+main = sh $ flip runReaderT clusterEnv $ do
+    geths <- wipeAndSetupNodes clusterDataRoot [1, 2, 3]
+    liftIO $ traverse_ (print . gethEnodeId) geths
 
   where
     clusterDataRoot :: FilePath
