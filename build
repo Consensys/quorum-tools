@@ -8,6 +8,7 @@ cp credentials/id_noirqs docker-harness/
 cp credentials/github.pub docker-quorum/
 cp credentials/github.pub docker-harness/
 
+# Build geth before harness; the latter depends on the former.
 docker build -t quorum-raft ./docker-quorum/
 docker build -t quorum-harness ./docker-harness/
 
