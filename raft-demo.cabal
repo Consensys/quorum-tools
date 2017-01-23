@@ -47,3 +47,11 @@ executable test3
   build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
   other-modules: Cluster, ClusterAsync, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
+
+executable test4
+  hs-source-dirs: src
+  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
+  main-is: test4.hs
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  other-modules: Cluster, ClusterAsync, PacketFilter, IpTables, SharedPartitioning, TestOutline
+  default-language: Haskell2010

@@ -167,6 +167,9 @@ verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   let lostTxes :: Set TxId
       lostTxes = unOutstandingTxes (mconcat outstandingTxes)
 
+  flip mapM_ outstandingTxes $ \(OutstandingTxes o) ->
+    putStrLn $ "Outstanding txes: " ++ show (Set.size o)
+
   return $ case Set.null lostTxes of
     True -> verifySameLastBlock results
     False -> Falsified (LostTxes lostTxes)
