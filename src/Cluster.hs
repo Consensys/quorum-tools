@@ -433,7 +433,7 @@ observingTransition test lines = do
   let isPost = not isEmpty || thisIsTheLine
   return (line, (if isPost then PostTransition else PreTransition, b))
 
-data LeaderElected = LeaderElected
+data AssumedRole = AssumedRole
 data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
 data NodeTerminated = NodeTerminated deriving Eq
 
@@ -522,17 +522,20 @@ observingRaftStatus incoming = do
     toRole "leader"    = Leader
     toRole unknown = error $ "failed to parse unknown raft role: " ++ T.unpack unknown
 
-observingLeader
+observingRoles
   :: Shell (Line, a)
-  -> Shell (Line, (Maybe LeaderElected, a))
-observingLeader incoming = do
-  electedMV <- liftIO $ newEmptyMVar
+  -> Shell (Line, (Maybe AssumedRole, a))
+observingRoles incoming = do
+  roleMV <- liftIO $ newEmptyMVar
   (line, a) <- incoming
 
-  matchCheckpoint' BecameMinter line $ \() -> do
-    ensureMVarTransition electedMV LeaderElected
+  matchCheckpoint' BecameMinter line $ \() ->
+    void $ ensureMVarTransition roleMV AssumedRole
 
-  status <- liftIO $ tryTakeMVar electedMV
+  matchCheckpoint' BecameVerifier line $ \() ->
+    void $ ensureMVarTransition roleMV AssumedRole
+
+  status <- liftIO $ tryTakeMVar roleMV
   return (line, (status, a))
 
 startObserving :: Shell Line -> Shell (Line, ())
@@ -561,12 +564,12 @@ instrumentedGethShell :: Geth
                                (Last Block,
                                (Maybe NodeOnline,
                                (Set GethId,
-                               (Maybe LeaderElected,
+                               (Maybe AssumedRole,
                                ())))))))
 instrumentedGethShell geth = gethShell geth
                            & tee logPath
                            & startObserving
-                           & observingLeader
+                           & observingRoles
                            & observingActivation
                            & observingBoot
                            & observingLastBlock
@@ -583,7 +586,7 @@ data NodeInstrumentation = NodeInstrumentation
   , outstandingTxes :: MVar OutstandingTxes
   , txAddrs         :: MVar TxAddrs
   , allConnected    :: Async AllConnected
-  , leaderElected   :: Async LeaderElected
+  , assumedRole     :: Async AssumedRole
   }
 
 runNode :: forall m. (MonadManaged m)
@@ -591,7 +594,7 @@ runNode :: forall m. (MonadManaged m)
         -> Geth
         -> m NodeInstrumentation
 runNode numNodes geth = do
-  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, txAddrsMVar, allConnectedMVar, leaderElectedMVar)
+  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, txAddrsMVar, allConnectedMVar, assumedRoleMVar)
     <- liftIO $ (,,,,,,)
       <$> newEmptyMVar
       <*> newMVar mempty
@@ -616,8 +619,8 @@ runNode numNodes geth = do
       connected :: m (Async AllConnected)
       connected = awaitMVar allConnectedMVar
 
-      leaderElected :: m (Async LeaderElected)
-      leaderElected = awaitMVar leaderElectedMVar
+      assumedRole :: m (Async AssumedRole)
+      assumedRole = awaitMVar assumedRoleMVar
 
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
@@ -627,7 +630,7 @@ runNode numNodes geth = do
          (lastBlock,
          (mOnline,
          (connSet,
-         (mLeaderElected, ()))))))) -> do
+         (mAssumedRole, ()))))))) -> do
           void $ swapMVar lastBlockMvar lastBlock
           void $ swapMVar lastRaftMvar lastRaftStatus
           void $ swapMVar outstandingTxesMVar outstandingTxes
@@ -638,8 +641,10 @@ runNode numNodes geth = do
 
           when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
 
-          when (isJust mLeaderElected) $ do
-            ensureMVarTransition leaderElectedMVar LeaderElected
+          -- TODO fix a lot of duplication between the two places that produce
+          -- an AssumedRole in an MVar
+          when (isJust mAssumedRole) $
+            ensureMVarTransition assumedRoleMVar AssumedRole
 
   NodeInstrumentation
     <$> started
@@ -649,7 +654,7 @@ runNode numNodes geth = do
     <*> pure outstandingTxesMVar
     <*> pure txAddrsMVar
     <*> connected
-    <*> leaderElected
+    <*> assumedRole
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty

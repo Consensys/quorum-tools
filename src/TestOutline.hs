@@ -28,7 +28,7 @@ import           Turtle
 import Checkpoint
 import Cluster
 import ClusterAsync
-import Control (awaitAll, awaitAny)
+import Control (awaitAll)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -112,7 +112,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
         timestampedMessage "awaiting all TCP connections and a raft leader"
         awaitAll (allConnected <$> instruments) -- "peer * became active"
-        awaitAny (leaderElected <$> instruments)
+        awaitAll (assumedRole <$> instruments)
         timestampedMessage "got all TCP connections"
 
         cb nodes
