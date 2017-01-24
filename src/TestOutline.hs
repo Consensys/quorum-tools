@@ -28,7 +28,7 @@ import           Turtle
 import Checkpoint
 import Cluster
 import ClusterAsync
-import Control (awaitAll)
+import Control (awaitAll, awaitAny)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -110,8 +110,9 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
         startRaftAcross nodes
 
-        timestampedMessage "awaiting all TCP connections"
+        timestampedMessage "awaiting all TCP connections and a raft leader"
         awaitAll (allConnected <$> instruments) -- "peer * became active"
+        awaitAny (leaderElected <$> instruments)
         timestampedMessage "got all TCP connections"
 
         cb nodes
@@ -152,7 +153,7 @@ verify
 verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   -- verify that all have consistent logs
   lastBlocks <- traverse readMVar lastBlockMs
-  outstandingTxes <- traverse readMVar outstandingTxesMs
+  outstandingTxes_ <- traverse readMVar outstandingTxesMs
   meEarlyTerms <- traverse poll terminatedAsyncs
 
   -- verify private state
@@ -160,21 +161,21 @@ verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   results <- zipWithM (curry $ \case
                         (Just (Left ex), _)     -> throwIO ex
                         (Just (Right panic), _) -> pure $ Left panic
-                        (Nothing, lastBlock)    -> pure $ Right lastBlock)
+                        (Nothing, block)    -> pure $ Right block)
                       meEarlyTerms
                       lastBlocks
 
   let lostTxes :: Set TxId
-      lostTxes = unOutstandingTxes (mconcat outstandingTxes)
+      lostTxes = unOutstandingTxes (mconcat outstandingTxes_)
 
-  flip mapM_ outstandingTxes $ \(OutstandingTxes o) ->
-    putStrLn $ "Outstanding txes: " ++ show (Set.size o)
+  flip mapM_ outstandingTxes_ $ \(OutstandingTxes txes) ->
+    putStrLn $ "Outstanding txes: " ++ show (Set.size txes)
 
   return $ case Set.null lostTxes of
     True -> verifySameLastBlock results
     False -> Falsified (LostTxes lostTxes)
 
-partition :: (MonadManaged m, HasEnv m) => FilePath -> Millis -> GethId -> m ()
+partition :: MonadManaged m => FilePath -> Millis -> GethId -> m ()
 partition gdata millis node =
   if os == "darwin"
   then PF.partition gdata millis node >> PF.flushPf
