@@ -264,17 +264,6 @@ getEnodeId gid = do
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
 
--- > allSiblings [1,2,3]
--- [(1,[2,3]),(2,[1,3]),(3,[1,2])]
---
-allSiblings :: (Alternative m, Monad m, Eq a) => m a -> m (a, m a)
-allSiblings as = (\a -> (a, sibs a)) <$> as
-  where
-    sibs me = do
-      sib <- as
-      guard $ me /= sib
-      pure sib
-
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> AccountId -> m Geth
 mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
@@ -398,8 +387,7 @@ setupNodes gids = do
   geths <- liftIO $ forConcurrently (zip gids acctKeys) $ \(gid, acctKey) ->
     runReaderT (createNode genesisJsonPath gid acctKey) clusterEnv
 
-  void $ liftIO $ forConcurrently (allSiblings geths) $ \(geth, sibs) ->
-    writeStaticNodes sibs geth
+  void $ liftIO $ forConcurrently geths $ writeStaticNodes geths
 
   pure geths
 
