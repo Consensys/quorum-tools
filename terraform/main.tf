@@ -155,6 +155,13 @@ resource "aws_security_group" "quorum_instance" {
     security_groups = ["${aws_security_group.rpc_sender.id}"]
   }
 
+  ingress {
+    from_port = 50400
+    to_port = 50900
+    protocol = "tcp"
+    self = true # incoming traffic comes from this same security group
+  }
+
   egress {
     from_port = 0
     to_port = 0
