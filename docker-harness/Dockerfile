@@ -21,6 +21,5 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/" &&
       ssh-add $HOME/.ssh/id_noirqs; \
       git clone ssh://git@github.com/noirqs/gemini-examples.git $GEMINI_EXAMPLES_DIR; \
       cd $GEMINI_EXAMPLES_DIR; \
-      git reset --hard f4b65a8; \
-      cd raft-demo && stack setup && stack build; \
+      git reset --hard f4b65a8 && cd raft-demo && stack setup && stack build; \
     '
