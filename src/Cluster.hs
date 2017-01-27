@@ -607,8 +607,8 @@ runNode numNodes geth = do
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
-  -- expect one connection to each of the other peers
-      expectedPeerCount = numNodes - 1
+      -- with the HTTP transport, each node actually even connects to itself
+      expectedPeerCount = numNodes
 
       started :: m (Async NodeOnline)
       started = awaitMVar onlineMvar

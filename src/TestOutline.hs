@@ -110,10 +110,14 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
         startRaftAcross nodes
 
-        timestampedMessage "awaiting all TCP connections and a raft leader"
-        awaitAll (allConnected <$> instruments) -- "peer * became active"
+        -- XXX: This stuff is out-of-date:
+        --
+        -- timestampedMessage "awaiting all TCP connections"
+        -- awaitAll (allConnected <$> instruments) -- "peer * became active"
+
+        timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
-        timestampedMessage "got all TCP connections"
+        timestampedMessage "initial election succeeded"
 
         cb nodes
 
