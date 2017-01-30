@@ -2,12 +2,12 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
-{-# LANGUAGE NamedFieldPuns             #-}
 
 module Cluster where
 
@@ -24,9 +24,11 @@ import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
 import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
-import           Data.Aeson                 (ToJSON (toJSON), Value (String),
-                                             encode, object, (.=))
+import           Data.Aeson                 (FromJSON (parseJSON),
+                                             ToJSON (toJSON), Value (String),
+                                             decode, encode, object, (.=))
 import           Data.Aeson.Lens            (key, _String)
+import           Data.Aeson.Types           (typeMismatch)
 import           Data.Bifunctor             (first, second)
 import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
@@ -38,7 +40,7 @@ import qualified Data.Set                   as Set
 import           Data.Text                  (isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
-import           Data.Text.Lazy             (toStrict)
+import           Data.Text.Lazy             (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding    as LT
 import           Network.Wreq               (Response, post, responseBody)
 import           Prelude                    hiding (FilePath, lines)
@@ -107,6 +109,10 @@ data EnodeId = EnodeId Text
 
 instance ToJSON EnodeId where
   toJSON (EnodeId eid) = String eid
+
+instance FromJSON EnodeId where
+  parseJSON str@(String _) = EnodeId <$> parseJSON str
+  parseJSON invalid = typeMismatch "EnodeId" invalid
 
 data AccountId = AccountId { accountId :: Text }
   deriving (Show, Eq)
@@ -312,9 +318,27 @@ sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
   where
     ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
 
+-- TODO: switch to a more efficient version
+textEncode :: ToJSON a => a -> Text
+textEncode = toStrict . LT.decodeUtf8 . encode
+
+-- TODO: switch to a more efficient version
+textDecode :: FromJSON a => Text -> Maybe a
+textDecode = decode . LT.encodeUtf8 . fromStrict
+
+writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
+writeStaticNodes sibs geth = output jsonPath contents
+  where
+    jsonPath = dataDirPath (gethDataDir geth) </> "static-nodes.json"
+    contents = select $ textToLines $ textEncode $ gethEnodeId <$> sibs
+
+readStaticNodes :: MonadIO m => DataDir -> m (Maybe [EnodeId])
+readStaticNodes (DataDir path) = textDecode <$> strict (input path)
+
 --
--- NOTE: this only works for the *local* node. the enode ID is obtained from the
---       local IPC connection.
+-- NOTE: this only works for the *local* node. the account ID is obtained from
+--       the local IPC connection. the enode ID is too, but we could start
+--       reading those from `readStaticNodes`.
 --
 loadLocalNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
 loadLocalNode gid = do
@@ -334,16 +358,6 @@ loadLocalNode gid = do
 
   where
     forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
-
--- TODO: switch to a more efficient version
-textEncode :: ToJSON a => a -> Text
-textEncode = toStrict . LT.decodeUtf8 . encode
-
-writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
-writeStaticNodes sibs geth = output jsonPath contents
-  where
-    jsonPath = dataDirPath (gethDataDir geth) </> "static-nodes.json"
-    contents = select $ textToLines $ textEncode $ gethEnodeId <$> sibs
 
 generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
 generateAccountKeys numAccts = do
