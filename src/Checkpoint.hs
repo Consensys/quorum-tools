@@ -56,11 +56,11 @@ mkCheckpointPattern BecameMinter = pure ()
 mkCheckpointPattern BecameVerifier = pure ()
 mkCheckpointPattern TxCreated = do
   _ <- "("
-  txId <- "0x" >> plus hexDigit
+  transactionId <- "0x" >> plus hexDigit
   _ <- ", "
   addr <- "0x" >> plus hexDigit
   _ <- ")"
-  return (TxId txId, Addr addr)
+  return (TxId transactionId, Addr addr)
 mkCheckpointPattern TxAccepted = "0x" >> TxId <$> plus hexDigit
 
 matchCheckpoint :: Checkpoint a -> Line -> Maybe a
