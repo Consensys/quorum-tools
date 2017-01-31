@@ -1,35 +1,51 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Main where
 
 import           Control.Monad.Reader (runReaderT)
-import           Data.Foldable        (traverse_)
 import qualified Data.Map.Strict      as Map
 import           Prelude              hiding (FilePath)
 import           Turtle
 
+import           Checkpoint
 import           Cluster
 
+data Config = Config { numNodes :: Int, numSubnets :: Int, rootDir :: FilePath }
+
+cliParser :: Parser Config
+cliParser = Config <$> optInt  "nodes"   'n' "Number of nodes in the cluster"
+                   <*> optInt  "subnets" 's' "Number of subnets in the cluster"
+                   <*> optPath "path"    'p' "Output path"
+
 main :: IO ()
-main = sh $ flip runReaderT clusterEnv $ do
-    geths <- wipeAndSetupNodes clusterDataRoot [1, 2, 3]
-    liftIO $ traverse_ (print . gethEnodeId) geths
+main = do
+    config <- options "Cluster bootstrapping script" cliParser
+    let gids = gethIds config
+
+    sh $ flip runReaderT (clusterEnv config gids) $
+      wipeAndSetupNodes (rootDir config) gids
 
   where
-    clusterDataRoot :: FilePath
-    clusterDataRoot = "cluster-data"
+    gethIds config = GethId <$> [1..(numNodes config)]
 
-    clusterEnv = defaultClusterEnv
-      { _clusterGenesisJson = clusterDataRoot </> "genesis.json"
+    ipAddr :: Config -> GethId -> Ip
+    ipAddr config (GethId gid) = Ip $ format ("10.0."%d%"."%d) subnet lastOctet
+      where
+        idx = gid - 1 -- Zero-indexed geth id
+        subnet    = 1 + (idx `mod` numNodes config)
+        lastOctet = 101 + (idx `div` numSubnets config)
+
+    dataDir :: Config -> GethId -> DataDir
+    dataDir config (GethId gid) = DataDir $
+      rootDir config </> fromText (format ("geth"%d) gid)
+
+    clusterEnv :: Config -> [GethId] -> ClusterEnv
+    clusterEnv config gids = defaultClusterEnv
+      { _clusterGenesisJson = rootDir config </> "genesis.json"
          --
-         -- TODO: build this from cluster.tf.json:
+         -- NOTE: could get this information from a .tf.json file:
          --
-      , _clusterIps         = Map.fromList
-          [ (1, Ip "10.0.1.104")
-          , (2, Ip "10.0.2.222")
-          , (3, Ip "10.0.3.49") ]
-      , _clusterDataDirs    = Map.fromList
-          [ (1, DataDir $ clusterDataRoot </> "geth1")
-          , (2, DataDir $ clusterDataRoot </> "geth2")
-          , (3, DataDir $ clusterDataRoot </> "geth3") ]
+      , _clusterIps      = Map.fromList [(gid, ipAddr config gid)  | gid <- gids]
+      , _clusterDataDirs = Map.fromList [(gid, dataDir config gid) | gid <- gids]
       }
