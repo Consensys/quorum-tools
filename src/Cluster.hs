@@ -730,10 +730,13 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
 --
 -- Invariant: list has at least one element
 spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions gethList =
-  let spamInfinite (geth:geths) = sendTx geth >> spamInfinite geths
-      spamInfinite _ = error "spamTransactions: list must have at least one element"
-  in spamInfinite (cycle gethList)
+spamTransactions geths = go geths
+  where
+    go (geth:rest) = sendTx geth >> go rest
+    go []          = go geths
+
+spamGeth :: MonadIO m => Geth -> m ()
+spamGeth geth = spamTransactions [geth]
 
 bench :: MonadIO m => Geth -> Seconds -> m ()
 bench geth (Seconds seconds) = Turtle.view benchShell
