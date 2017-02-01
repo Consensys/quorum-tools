@@ -27,6 +27,7 @@ import           Turtle
 
 import Checkpoint
 import Cluster
+import Cluster.Client
 import ClusterAsync
 import Control (awaitAll)
 
