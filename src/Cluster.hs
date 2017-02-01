@@ -17,8 +17,7 @@ import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar, tryTakeMVar)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, makeLenses, to, view, (^.),
-                                             (^?))
+import           Control.Lens               (at, makeLenses, view)
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -27,10 +26,8 @@ import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson                 (FromJSON (parseJSON),
                                              ToJSON (toJSON), Value (String),
                                              decode, encode, object, (.=))
-import           Data.Aeson.Lens            (key, _String)
 import           Data.Aeson.Types           (typeMismatch)
 import           Data.Bifunctor             (first, second)
-import qualified Data.ByteString.Lazy       as LSB
 import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe, isJust)
@@ -42,13 +39,11 @@ import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding    as LT
-import           Network.Wreq               (Response, post, responseBody)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle                     hiding (view)
-import qualified Turtle
 
 import           Checkpoint
 import           Control
@@ -112,7 +107,7 @@ instance ToJSON EnodeId where
 
 instance FromJSON EnodeId where
   parseJSON str@(String _) = EnodeId <$> parseJSON str
-  parseJSON invalid = typeMismatch "EnodeId" invalid
+  parseJSON invalid        = typeMismatch "EnodeId" invalid
 
 data AccountId = AccountId { accountId :: Text }
   deriving (Show, Eq)
@@ -694,61 +689,3 @@ runNodesIndefinitely geths = do
   void $ liftIO $ forConcurrently geths startRaft
 
   awaitAll terminatedAsyncs
-
-txRpcBody :: Geth -> Value
-txRpcBody geth = object
-    [ "id"      .= (1 :: Int)
-    , "jsonrpc" .= t "2.0"
-    , "method"  .= t "eth_sendTransaction"
-    , "params"  .=
-      [ object
-        [ "from" .= (accountId . gethAccountId $ geth)
-        , "to"   .= t "0000000000000000000000000000000000000000"
-        ]
-      ]
-    ]
-
-  where
-    t :: Text -> Text
-    t = id
-
--- TODO figure out how to send private txes
-sendTx :: MonadIO io => Geth -> io (Either Text TxId)
-sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
-  where
-    parse :: Response LSB.ByteString -> Either Text TxId
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text TxId)
-        mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
-
--- | Continuously send transaction requests in a round-robin order. This runs
---   indefinitely. Assumes that the list has at least one element.
-spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions geths = go geths
-  where
-    go (geth:rest) = sendTx geth >> go rest
-    go []          = go geths
-
-spamGeth :: MonadIO m => Geth -> m ()
-spamGeth geth = spamTransactions [geth]
-
-bench :: MonadIO m => Geth -> Seconds -> m ()
-bench geth (Seconds seconds) = Turtle.view benchShell
-  where
-    luaEscapeSingleQuotes = jsEscapeSingleQuotes
-    lua = format ("wrk.method = 'POST'\n"  %
-                  "wrk.body   = '"%s%"'\n" %
-                  "wrk.headers['Content-Type'] = 'application/json'")
-                 (luaEscapeSingleQuotes $ textEncode $ txRpcBody geth)
-
-    benchShell = do
-      luaPath <- using $ fileContaining $ select $ textToLines lua
-      let cmd = format ("wrk -s "%fp%" -c 1 -d "%d%"s -t 1 "%s)
-                       luaPath
-                       seconds
-                       (gethUrl geth)
-      inshell cmd empty

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- Test public / private state consistency
 module Main where
@@ -12,7 +12,8 @@ import           Text.Read                  (readMaybe)
 
 import Turtle hiding (match)
 import Checkpoint
-import Cluster hiding (txRpcBody, sendTx)
+import Cluster
+import Cluster.Client
 import Control
 import TestOutline hiding (verify)
 
