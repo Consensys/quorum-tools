@@ -48,7 +48,7 @@ import           Safe                       (headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle                     hiding (view)
-import qualified Turtle                     as Turtle
+import qualified Turtle
 
 import           Checkpoint
 import           Control
@@ -246,7 +246,7 @@ fileContaining contents = do
   return path
 
 gidIp :: (HasEnv m) => GethId -> m Ip
-gidIp gid = force <$> Map.lookup gid <$> view clusterIps
+gidIp gid = force . Map.lookup gid <$> view clusterIps
   where
     force = fromMaybe $ error $ "no IP found for " <> show gid
 
@@ -461,7 +461,7 @@ data AllConnected = AllConnected
 observingBoot :: Shell (Line, a) -> Shell (Line, (Maybe NodeOnline, a))
 observingBoot lines = (second.first) isOnline <$> observingTransition ipcOpened lines
   where
-    ipcOpened line = "IPC endpoint opened:" `isInfixOf` (lineToText line)
+    ipcOpened line = "IPC endpoint opened:" `isInfixOf` lineToText line
     isOnline = \case
       PreTransition -> Nothing
       PostTransition -> Just NodeOnline
@@ -540,7 +540,7 @@ observingRoles
   :: Shell (Line, a)
   -> Shell (Line, (Maybe AssumedRole, a))
 observingRoles incoming = do
-  roleMV <- liftIO $ newEmptyMVar
+  roleMV <- liftIO newEmptyMVar
   (line, a) <- incoming
 
   matchCheckpoint' BecameMinter line $ \() ->
@@ -726,9 +726,7 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 -- | Continuously send transaction requests in a round-robin order. This runs
---   indefinitely.
---
--- Invariant: list has at least one element
+--   indefinitely. Assumes that the list has at least one element.
 spamTransactions :: MonadIO m => [Geth] -> m ()
 spamTransactions geths = go geths
   where
@@ -754,13 +752,3 @@ bench geth (Seconds seconds) = Turtle.view benchShell
                        seconds
                        (gethUrl geth)
       inshell cmd empty
-
--- TODO: potentially use this
---
--- type IdProducer = MonadState GethId
---
--- produceId :: IdProducer m => m GethId
--- produceId = do
---   id@(GethId i) <- S.get
---   S.put (GethId (i + 1))
---   return id
