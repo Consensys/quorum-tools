@@ -82,6 +82,7 @@ makeLenses ''ClusterEnv
 
 type HasEnv = MonadReader ClusterEnv
 
+-- TODO: make this a function of the cluster size
 defaultClusterEnv :: ClusterEnv
 defaultClusterEnv = ClusterEnv
   { _clusterPassword     = "abcd"
