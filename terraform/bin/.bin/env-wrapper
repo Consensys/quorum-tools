@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -e
+
+die() {
+    echo >&2 "$@"
+    exit 1
+}
+
+print_usage() {
+    die "usage: $0 [plan|apply|show|destroy|output output-name|taint resource-name|untaint resource-name]"
+}
+
+[ "$#" -eq 0 ] && print_usage
+
+env_name=$(basename $0)
+
+if [[ "$1" == "plan" || "$1" == "apply" || "$1" == "destroy" ]]
+then
+    terraform $1 -var "env=${env_name}" -state "state/${env_name}.tfstate"
+elif [[ "$1" == "output" || "$1" == "taint" || "$1" == "untaint" ]]
+then
+    terraform $1 -state "state/${env_name}.tfstate" $2
+elif [[ "$1" == "show" ]]
+then
+    terraform show "state/${env_name}.tfstate"
+else
+    print_usage
+fi

@@ -1,3 +1,7 @@
+variable "env" {
+  description = "Name of the environment"
+  # this value is set by bin/.bin/env-wrapper
+}
 variable "access_key" {
   description = "AWS access key"
   # this value comes from terraform.tfvars
@@ -17,9 +21,6 @@ variable "aws_region" {
 variable "project" {
   default = "quorum-raft"
 }
-variable "env" {
-  default = "demo"
-}
 variable "instance_types" {
   default = {
     quorum = "m4.large"
@@ -37,9 +38,21 @@ variable "volume_sizes" {
   }
 }
 variable "subnet_azs" {
-  default = {
-    "a" = "us-east-1b"
-    "b" = "us-east-1c"
-    "c" = "us-east-1d"
-  }
+  type = "list"
+  default = ["us-east-1b", "us-east-1c", "us-east-1d"]
+}
+variable "num_instances" {
+  default = 3
+}
+variable "local_datadir_root" {
+  default = "cluster-data"
+}
+variable "remote_user" {
+  default = "ubuntu"
+}
+variable "remote_homedir" {
+  default = "/home/ubuntu"
+}
+variable "pem_file" {
+  default = "../credentials/ethereum-raft-demo.pem"
 }

@@ -25,6 +25,7 @@ resource "aws_vpc" "quorum_raft" {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} vpc"
     Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
@@ -35,45 +36,23 @@ resource "aws_internet_gateway" "quorum_raft" {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} internet gateway"
     Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
-resource "aws_subnet" "a" {
+resource "aws_subnet" "subnet" {
+  count = 3
+
   vpc_id = "${aws_vpc.quorum_raft.id}"
 
-  cidr_block = "10.0.1.0/24"
-  availability_zone = "${lookup(var.subnet_azs, "a")}"
+  cidr_block = "10.0.${count.index + 1}.0/24"
+  availability_zone = "${element(var.subnet_azs, count.index)}"
 
   tags {
     Project = "${var.project}"
-    Name = "${var.project} ${var.env} subnet A"
+    Name = "${var.project} ${var.env} subnet ${count.index + 1}"
     Environment = "${var.env}"
-  }
-}
-
-resource "aws_subnet" "b" {
-  vpc_id = "${aws_vpc.quorum_raft.id}"
-
-  cidr_block = "10.0.2.0/24"
-  availability_zone = "${lookup(var.subnet_azs, "b")}"
-
-  tags {
-    Project = "${var.project}"
-    Name = "${var.project} ${var.env} subnet B"
-    Environment = "${var.env}"
-  }
-}
-
-resource "aws_subnet" "c" {
-  vpc_id = "${aws_vpc.quorum_raft.id}"
-
-  cidr_block = "10.0.3.0/24"
-  availability_zone = "${lookup(var.subnet_azs, "c")}"
-
-  tags {
-    Project = "${var.project}"
-    Name = "${var.project} ${var.env} subnet C"
-    Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
@@ -89,21 +68,14 @@ resource "aws_route_table" "quorum_raft" {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} route table"
     Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
-resource "aws_route_table_association" "a" {
-  subnet_id = "${aws_subnet.a.id}"
-  route_table_id = "${aws_route_table.quorum_raft.id}"
-}
+resource "aws_route_table_association" "rta" {
+  count = 3
 
-resource "aws_route_table_association" "b" {
-  subnet_id = "${aws_subnet.b.id}"
-  route_table_id = "${aws_route_table.quorum_raft.id}"
-}
-
-resource "aws_route_table_association" "c" {
-  subnet_id = "${aws_subnet.c.id}"
+  subnet_id = "${element(aws_subnet.subnet.*.id, count.index)}"
   route_table_id = "${aws_route_table.quorum_raft.id}"
 }
 
@@ -122,6 +94,8 @@ resource "aws_security_group" "ssh_open" {
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} ssh access"
+    Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
@@ -133,6 +107,8 @@ resource "aws_security_group" "rpc_sender" {
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} rpc sender"
+    Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
@@ -172,6 +148,8 @@ resource "aws_security_group" "quorum_instance" {
   tags {
     Project = "${var.project}"
     Name = "${var.project} ${var.env} quorum instance"
+    Environment = "${var.env}"
+    Terraformed = "true"
   }
 }
 
@@ -205,9 +183,23 @@ resource  "aws_iam_instance_profile" "ecr_accessor" {
   roles = ["${aws_iam_role.ecr_accessor.name}"]
 }
 
-resource "aws_instance" "quorum_1" {
+resource "null_resource" "cluster_datadirs" {
+  triggers {
+    num_instances = "${var.num_instances}"
+    subnet_azs = "${join(",", var.subnet_azs)}"
+    local_datadir_root = "${var.local_datadir_root}"
+  }
+
+  provisioner "local-exec" {
+    command = "stack exec -- bootstrap --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root}"
+  }
+}
+
+resource "aws_instance" "quorum" {
+  count = "${var.num_instances}"
+  depends_on = ["null_resource.cluster_datadirs"]
+
   ami = "${data.aws_ami.ubuntu.id}"
-  availability_zone = "${aws_subnet.a.availability_zone}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
   iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
   #
@@ -215,8 +207,12 @@ resource "aws_instance" "quorum_1" {
   #
   vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}", "${aws_security_group.rpc_sender.id}"]
   key_name = "${var.ssh_keypair_name}"
-  subnet_id = "${aws_subnet.a.id}"
   associate_public_ip_address = true
+
+  availability_zone = "${element(aws_subnet.subnet.*.availability_zone, count.index % length(aws_subnet.subnet.*.id))}"
+  subnet_id =         "${element(aws_subnet.subnet.*.id,                count.index % length(aws_subnet.subnet.*.id))}"
+
+  private_ip = "${cidrhost(element(aws_subnet.subnet.*.cidr_block, count.index % length(aws_subnet.subnet.*.id)), 101)}"
 
   root_block_device {
     volume_type = "${lookup(var.volume_types, "quorum")}"
@@ -226,55 +222,36 @@ resource "aws_instance" "quorum_1" {
 
   tags {
     Project = "${var.project}"
-    Name = "${var.project} ${var.env} quorum 1"
+    Name = "${var.project} ${var.env} quorum ${count.index + 1}"
     Environment = "${var.env}"
-  }
-}
-
-resource "aws_instance" "quorum_2" {
-  ami = "${data.aws_ami.ubuntu.id}"
-  availability_zone = "${aws_subnet.b.availability_zone}"
-  instance_type = "${lookup(var.instance_types, "quorum")}"
-  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
-  # NOTE: rpc_sender is currently not in this list:
-  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
-  key_name = "${var.ssh_keypair_name}"
-  subnet_id = "${aws_subnet.b.id}"
-  associate_public_ip_address = true
-
-  root_block_device {
-    volume_type = "${lookup(var.volume_types, "quorum")}"
-    volume_size = "${lookup(var.volume_sizes, "quorum")}"
-    delete_on_termination = "true"
+    Terraformed = "true"
   }
 
-  tags {
-    Project = "${var.project}"
-    Name = "${var.project} ${var.env} quorum 2"
-    Environment = "${var.env}"
-  }
-}
-
-resource "aws_instance" "quorum_3" {
-  ami = "${data.aws_ami.ubuntu.id}"
-  availability_zone = "${aws_subnet.c.availability_zone}"
-  instance_type = "${lookup(var.instance_types, "quorum")}"
-  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
-  # NOTE: rpc_sender is currently not in this list:
-  vpc_security_group_ids = ["${aws_security_group.quorum_instance.id}", "${aws_security_group.ssh_open.id}"]
-  key_name = "${var.ssh_keypair_name}"
-  subnet_id = "${aws_subnet.c.id}"
-  associate_public_ip_address = true
-
-  root_block_device {
-    volume_type = "${lookup(var.volume_types, "quorum")}"
-    volume_size = "${lookup(var.volume_sizes, "quorum")}"
-    delete_on_termination = "true"
+  connection {
+    user = "${var.remote_user}"
+    host = "${self.public_ip}"
+    timeout = "1m"
+    key_file = "${var.pem_file}"
   }
 
-  tags {
-    Project = "${var.project}"
-    Name = "${var.project} ${var.env} quorum 3"
-    Environment = "${var.env}"
+  provisioner "file" {
+    source = "${var.local_datadir_root}/geth${count.index + 1}"
+    destination = "${var.remote_homedir}/datadir"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo '${count.index + 1}' >node-id",
+      "echo 'abcd' >password"
+    ]
+  }
+
+  provisioner "remote-exec" {
+    scripts = [
+      "scripts/prepare.sh",
+      "scripts/fetch-quorum-image.sh",
+      "scripts/fetch-harness-image.sh",
+      "scripts/start-quorum.sh"
+    ]
   }
 }
