@@ -22,7 +22,6 @@ import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
-import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
 import           Data.Aeson                 (FromJSON (parseJSON),
                                              ToJSON (toJSON), Value (String),
                                              decode, encode, object, (.=))
@@ -329,30 +328,6 @@ writeStaticNodes sibs geth = output jsonPath contents
 
 readStaticNodes :: MonadIO m => DataDir -> m (Maybe [EnodeId])
 readStaticNodes (DataDir path) = textDecode <$> strict (input path)
-
---
--- NOTE: this only works for the *local* node. the account ID is obtained from
---       the local IPC connection. the enode ID is too, but we could start
---       reading those from `readStaticNodes`.
---
-loadLocalNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
-loadLocalNode gid = do
-  nodeDataDir <- gidDataDir gid
-  let js = "console.log(eth.accounts[0] + '!' + admin.nodeInfo.enode)"
-  cmd <- setupCommand gid <*> pure (sendJsSubcommand (dataDirPath nodeDataDir) js)
-
-  let pat :: Pattern (AccountId, EnodeId)
-      pat = pure (,) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
-                     <*> fmap EnodeId ("!" *> begins "enode")
-
-  (aid, eid) <- fmap forceMaybe $ runMaybeT $ do
-    line <- MaybeT $ fold (inshell cmd empty) Fold.head
-    MaybeT $ return $ headMay $ match pat (lineToText line)
-
-  mkGeth gid eid aid
-
-  where
-    forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
 
 generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
 generateAccountKeys numAccts = do
