@@ -9,22 +9,28 @@ module Cluster.Client
   , loadLocalNode
   ) where
 
-import qualified Control.Foldl             as Fold
-import           Control.Lens              (to, (^.), (^?))
-import           Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
-import           Data.Aeson                (Value, object, (.=))
-import           Data.Aeson.Lens           (key, _String)
-import qualified Data.ByteString.Lazy      as LSB
-import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>))
-import qualified Data.Text                 as T
-import           Data.Text.Lazy            (toStrict)
-import qualified Data.Text.Lazy.Encoding   as LT
-import           Network.Wreq              (Response, post, responseBody)
-import           Network.Wreq.Session      (Session)
-import qualified Network.Wreq.Session      as Sess
-import           Prelude                   hiding (FilePath, lines)
-import           Safe                      (headMay)
+import qualified Control.Foldl              as Fold
+import           Control.Lens               (to, (^.), (^?))
+import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
+import           Control.Monad.Trans.Reader (runReaderT)
+import           Control.RateLimit          (RateLimit (PerExecution),
+                                             dontCombine,
+                                             generateRateLimitedFunction)
+import           Data.Aeson                 (Value, object, (.=))
+import           Data.Aeson.Lens            (key, _String)
+import qualified Data.ByteString.Lazy       as LSB
+import           Data.Maybe                 (fromMaybe)
+import           Data.Monoid                ((<>))
+import qualified Data.Text                  as T
+import           Data.Text.Lazy             (toStrict)
+import qualified Data.Text.Lazy.Encoding    as LT
+import           Data.Time.Units
+import           Network.HTTP.Client        (defaultManagerSettings)
+import           Network.Wreq               (Response, post, responseBody)
+import           Network.Wreq.Session       (Session)
+import qualified Network.Wreq.Session       as Sess
+import           Prelude                    hiding (FilePath, lines)
+import           Safe                       (headMay)
 import           Turtle
 
 import           Checkpoint
@@ -59,17 +65,6 @@ sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
         mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
--- | Continuously send transaction requests in a round-robin order. This runs
---   indefinitely. Assumes that the list has at least one element.
-spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions geths = go geths
-  where
-    go (geth:rest) = sendTx geth >> go rest
-    go []          = go geths
-
-spamGeth :: MonadIO m => Geth -> m ()
-spamGeth geth = spamTransactions [geth]
-
 bench :: MonadIO m => Geth -> Seconds -> m ()
 bench geth (Seconds seconds) = view benchShell
   where
@@ -87,7 +82,17 @@ bench geth (Seconds seconds) = view benchShell
                        (gethUrl geth)
       inshell cmd empty
 
+-- | Continuously send transaction requests in a round-robin order. This runs
+--   indefinitely. Assumes that the list has at least one element.
 --
+-- TODO: this should be converted to use 'spam' below, re-using pooled
+-- connections.
+--
+spamTransactions :: MonadIO m => [Geth] -> m ()
+spamTransactions geths = go geths
+  where
+    go (geth:rest) = sendTx geth >> go rest
+    go []          = go geths
 
 --
 -- NOTE: this only works for the *local* node. the account ID is obtained from
@@ -112,3 +117,31 @@ loadLocalNode gid = do
 
   where
     forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
+
+every :: TimeUnit a => a -> RateLimit a
+every = PerExecution
+
+perSecond :: Integer -> RateLimit Millisecond
+perSecond times = every $
+  fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
+
+spam :: (MonadIO m, TimeUnit a) => Session -> RateLimit a -> Geth -> m ()
+spam session rateLimit geth = do
+  let url = T.unpack $ gethUrl geth
+      postBody = Sess.post session url
+  waitThenPost <- liftIO $
+    generateRateLimitedFunction rateLimit postBody dontCombine
+  forever $ liftIO $ waitThenPost (txRpcBody geth)
+
+spamGeth :: (MonadIO m, TimeUnit a) => Geth -> RateLimit a -> m ()
+spamGeth geth rateLimit =
+    liftIO $ Sess.withSessionControl Nothing mgrSettings $ \session ->
+      spam session rateLimit geth
+
+  where
+    mgrSettings = defaultManagerSettings
+
+main :: IO ()
+main = do
+  g1 <- runReaderT (loadLocalNode 1) defaultClusterEnv
+  spamGeth g1 (100 & perSecond)

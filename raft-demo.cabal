@@ -11,7 +11,7 @@ executable cluster
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: Main.hs
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
 
@@ -20,7 +20,7 @@ executable bootstrap
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: Bootstrap.hs
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
 
@@ -28,7 +28,7 @@ executable test1
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: test1.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
 
@@ -36,7 +36,7 @@ executable test2
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: test2.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
 
@@ -44,7 +44,7 @@ executable test3
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: test3.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
 
@@ -52,6 +52,6 @@ executable test4
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
   main-is: test4.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time
+  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
   other-modules: Cluster, ClusterAsync, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline
   default-language: Haskell2010
