@@ -11,6 +11,15 @@ import           Turtle
 import           Checkpoint
 import           Cluster
 
+
+--
+-- TODO: probably rename this AwsBootstrap / aws-bootstrap
+--
+-- TODO: add a separate binary (aws-transactor) that sends txes to the cluster,
+--       perhaps per a poisson distribution. such a binary could wait until the
+--       local node says that the cluster has a leader.
+--
+
 data Config = Config { numNodes :: Int, numSubnets :: Int, rootDir :: FilePath }
 
 cliParser :: Parser Config
@@ -20,7 +29,7 @@ cliParser = Config <$> optInt  "nodes"   'n' "Number of nodes in the cluster"
 
 main :: IO ()
 main = do
-    config <- options "Cluster bootstrapping script" cliParser
+    config <- options "AWS cluster bootstrapping script" cliParser
     let gids = gethIds config
 
     sh $ flip runReaderT (clusterEnv config gids) $
@@ -29,6 +38,7 @@ main = do
   where
     gethIds config = GethId <$> [1..(numNodes config)]
 
+    -- Here we follow the convention used in our Terraform scripts.
     ipAddr :: Config -> GethId -> Ip
     ipAddr config (GethId gid) = Ip $ format ("10.0."%d%"."%d) subnet lastOctet
       where
