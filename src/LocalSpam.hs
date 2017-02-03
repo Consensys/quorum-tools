@@ -7,9 +7,9 @@ import           Control.RateLimit    (RateLimit)
 import           Data.Time.Units      (Millisecond)
 import           Turtle
 
-import           Checkpoint           (GethId (..))
+import           Checkpoint           (GethId(..))
 import           Cluster              (mkLocalEnv)
-import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
+import           Cluster.Client       (loadLocalNode, spamGeth, perSecond)
 
 cliParser :: Parser (GethId, RateLimit Millisecond)
 cliParser = (,) <$> gethIdP <*> rateLimitP
