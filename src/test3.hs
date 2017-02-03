@@ -17,13 +17,15 @@ import Cluster.Client
 import Control
 import TestOutline hiding (verify)
 
+clusterSize :: Int
+clusterSize = 3
+
 main :: IO ()
-main = sh $ flip runReaderT defaultClusterEnv $ do
-  let numNodes = 3
-      gids = [1..GethId numNodes]
+main = sh $ flip runReaderT (mkLocalEnv clusterSize) $ do
+  let gids = clusterGids clusterSize
 
   geths <- setupNodes gids
-  instruments <- traverse (runNode numNodes) geths
+  instruments <- traverse (runNode clusterSize) geths
 
   -- wait for geth to launch, then start raft and run the test body
   timestampedMessage "awaiting all ready"

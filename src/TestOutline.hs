@@ -92,7 +92,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
       putStrLn $ "test #" ++ show (unTestNum testNum)
       resultVar <- liftIO newEmptyMVar
 
-      sh $ flip runReaderT defaultClusterEnv $ do
+      sh $ flip runReaderT (mkLocalEnv 3) $ do
         let geths = [1..GethId (unNumNodes numNodes)]
         _ <- when (os == "darwin") PF.acquirePf
 
