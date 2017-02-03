@@ -659,12 +659,6 @@ sendJs geth js = shells (gethCommand geth subcmd) empty
   where
     subcmd = sendJsSubcommand (dataDirPath $ gethDataDir geth) js
 
---
--- TODO: REMOVE THIS
---
-startRaft :: MonadIO m => Geth -> m ()
-startRaft geth = sendJs geth "raft.version;"
-
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   let numNodes = length geths
@@ -672,9 +666,5 @@ runNodesIndefinitely geths = do
         = (nodeOnline, nodeTerminated)
   instruments <- traverse (runNode numNodes) geths
   let (readyAsyncs, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
-
-  awaitAll readyAsyncs
-
-  void $ liftIO $ forConcurrently geths startRaft
 
   awaitAll terminatedAsyncs

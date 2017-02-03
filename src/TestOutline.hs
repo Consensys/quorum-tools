@@ -109,13 +109,6 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         awaitAll (nodeOnline <$> instruments) -- "IPC endpoint opened"
         timestampedMessage "got all ready"
 
-        startRaftAcross nodes
-
-        -- XXX: This stuff is out-of-date:
-        --
-        -- timestampedMessage "awaiting all TCP connections"
-        -- awaitAll (allConnected <$> instruments) -- "peer * became active"
-
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
         timestampedMessage "initial election succeeded"
@@ -185,12 +178,6 @@ partition gdata millis node =
   if os == "darwin"
   then PF.partition gdata millis node >> PF.flushPf
   else IPT.partition gdata millis node
-
-startRaftAcross
-  :: (Traversable t, MonadIO m, MonadReader ClusterEnv m)
-  => t Geth
-  -> m ()
-startRaftAcross gs = void $ forConcurrently' gs startRaft
 
 -- TODO make this not callback-based
 -- spammer :: MonadManaged m =>
