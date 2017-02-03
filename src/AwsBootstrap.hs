@@ -11,9 +11,6 @@ import           Turtle
 import           Checkpoint
 import           Cluster
 
-
---
--- TODO: probably rename this AwsBootstrap / aws-bootstrap
 --
 -- TODO: add a separate binary (aws-transactor) that sends txes to the cluster,
 --       perhaps per a poisson distribution. such a binary could wait until the
