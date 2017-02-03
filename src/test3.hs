@@ -32,8 +32,6 @@ main = sh $ flip runReaderT (mkLocalEnv clusterSize) $ do
   awaitAll (nodeOnline <$> instruments) -- "IPC endpoint opened"
   timestampedMessage "got all ready"
 
-  startRaftAcross geths
-
   timestampedMessage "awaiting all TCP connections"
   awaitAll (allConnected <$> instruments) -- "peer * became active"
   timestampedMessage "got all TCP connections"
