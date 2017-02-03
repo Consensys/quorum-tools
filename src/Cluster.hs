@@ -82,22 +82,35 @@ makeLenses ''ClusterEnv
 
 type HasEnv = MonadReader ClusterEnv
 
--- TODO: make this a function of the cluster size
-defaultClusterEnv :: ClusterEnv
-defaultClusterEnv = ClusterEnv
+emptyClusterEnv :: ClusterEnv
+emptyClusterEnv = ClusterEnv
   { _clusterPassword     = "abcd"
   , _clusterNetworkId    = 1418
   , _clusterBaseHttpPort = 30400
   , _clusterBaseRpcPort  = 40400
   , _clusterVerbosity    = 3
   , _clusterGenesisJson  = "gdata" </> "genesis.json"
-  , _clusterIps          = Map.fromList [ (1, Ip "127.0.0.1")
-                                        , (2, Ip "127.0.0.1")
-                                        , (3, Ip "127.0.0.1")]
-  , _clusterDataDirs     = Map.fromList [ (1, DataDir $ "gdata" </> "geth1")
-                                        , (2, DataDir $ "gdata" </> "geth2")
-                                        , (3, DataDir $ "gdata" </> "geth3")]
+  , _clusterIps          = Map.fromList []
+  , _clusterDataDirs     = Map.fromList []
   }
+
+clusterGids :: Int -> [GethId]
+clusterGids size = GethId <$> [1..size]
+
+mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> Int -> ClusterEnv
+mkClusterEnv mkIp mkDataDir size = emptyClusterEnv
+    { _clusterIps      = Map.fromList [(gid, mkIp gid)      | gid <- gids]
+    , _clusterDataDirs = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
+    }
+  where
+    gids = clusterGids size
+
+mkLocalEnv :: Int -> ClusterEnv
+mkLocalEnv = mkClusterEnv mkIp mkDataDir
+  where
+    mkIp = const $ Ip "127.0.0.1"
+    mkDataDir (GethId gid) = DataDir $
+      "gdata" </> fromText (format ("geth"%d) gid)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)

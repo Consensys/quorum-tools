@@ -12,7 +12,7 @@ module Cluster.Client
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (to, (^.), (^?))
 import           Control.Monad.Trans.Maybe  (MaybeT (..), runMaybeT)
-import           Control.Monad.Trans.Reader (runReaderT)
+-- import           Control.Monad.Trans.Reader (runReaderT)
 import           Control.RateLimit          (RateLimit (PerExecution),
                                              dontCombine,
                                              generateRateLimitedFunction)
@@ -141,7 +141,9 @@ spamGeth geth rateLimit =
   where
     mgrSettings = defaultManagerSettings
 
-main :: IO ()
-main = do
-  g1 <- runReaderT (loadLocalNode 1) defaultClusterEnv
-  spamGeth g1 (100 & perSecond)
+-- TODO: put this in a binary local-spam, like aws-spam:
+--
+-- main :: IO ()
+-- main = do
+--   g1 <- runReaderT (loadLocalNode 1) (mkLocalEnv 3)
+--   spamGeth g1 (100 & perSecond)
