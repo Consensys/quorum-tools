@@ -19,5 +19,5 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/" &&
       ssh-add $HOME/.ssh/id_noirqs; \
       git clone ssh://git@github.com/noirqs/jpm-goethereum.git $GO_ETHEREUM_DIR; \
       cd $GO_ETHEREUM_DIR; \
-      git reset --hard 40db1358 && make all && cp build/bin/geth /usr/local/bin; \
+      git reset --hard af855a35450a6125d23bc0e561e732108e01b8ae && make all && cp build/bin/geth /usr/local/bin; \
     '
