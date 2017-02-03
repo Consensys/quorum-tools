@@ -12,6 +12,7 @@ main = testOnce (NumNodes 3) $ \nodes -> do
   -- have the first one join three seconds after the others
   let late:early = nodes
 
+  -- XXX this is out of date
   startRaftAcross early
 
   -- while sending transactions to the started nodes, wait three seconds before
