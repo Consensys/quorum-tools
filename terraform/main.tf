@@ -191,7 +191,7 @@ resource "null_resource" "cluster_datadirs" {
   }
 
   provisioner "local-exec" {
-    command = "stack exec -- bootstrap --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root}"
+    command = "stack exec -- aws-bootstrap --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root}"
   }
 }
 
