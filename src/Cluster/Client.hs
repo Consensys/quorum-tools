@@ -10,9 +10,7 @@ module Cluster.Client
   , perSecond
   ) where
 
-import qualified Control.Foldl             as Fold
 import           Control.Lens              (to, (^.), (^?))
-import           Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import           Control.RateLimit         (RateLimit (PerExecution),
                                             dontCombine,
                                             generateRateLimitedFunction)
@@ -30,7 +28,6 @@ import           Network.Wreq              (Response, post, responseBody)
 import           Network.Wreq.Session      (Session)
 import qualified Network.Wreq.Session      as Sess
 import           Prelude                   hiding (FilePath, lines)
-import           Safe                      (headMay)
 import           Turtle
 
 import           Checkpoint
@@ -96,27 +93,13 @@ spamTransactions geths = go geths
 
 --
 -- NOTE: this only works for the *local* node. the account ID is obtained from
---       the local IPC connection. the enode ID is too, but we could start
---       reading those from `readStaticNodes`.
+--       the local data dir.
 --
 loadLocalNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
 loadLocalNode gid = do
-  nodeDataDir <- gidDataDir gid
-  let js = "console.log(eth.accounts[0] + '!' + admin.nodeInfo.enode)"
-  cmd <- setupCommand gid <*> pure (sendJsSubcommand (dataDirPath nodeDataDir) js)
-
-  let pat :: Pattern (AccountId, EnodeId)
-      pat = pure (,) <*> fmap (AccountId . T.pack) ("0x" *> count 40 hexDigit)
-                     <*> fmap EnodeId              ("!" *> begins "enode")
-
-  (aid, eid) <- fmap forceMaybe $ runMaybeT $ do
-    line <- MaybeT $ fold (inshell cmd empty) Fold.head
-    MaybeT $ return $ headMay $ match pat (lineToText line)
-
+  eid <- readEnodeId gid
+  aid <- readAccountId gid
   mkGeth gid eid aid
-
-  where
-    forceMaybe = fromMaybe $ error "unable to extract account and enode ID"
 
 every :: TimeUnit a => a -> RateLimit a
 every = PerExecution

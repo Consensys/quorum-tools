@@ -24,8 +24,10 @@ import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
 import           Data.Aeson                 (FromJSON (parseJSON),
                                              ToJSON (toJSON), Value (String),
-                                             decode, encode, object, (.=))
-import           Data.Aeson.Types           (typeMismatch)
+                                             decode, encode, object, withObject,
+                                             (.:), (.=))
+import           Data.Aeson.Types           (parseMaybe, typeMismatch)
+import qualified Data.Aeson.Types           as Aeson
 import           Data.Bifunctor             (first, second)
 import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
@@ -39,7 +41,7 @@ import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding    as LT
 import           Prelude                    hiding (FilePath, lines)
-import           Safe                       (headMay)
+import           Safe                       (atMay, headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
 import           Turtle                     hiding (view)
@@ -109,8 +111,7 @@ mkLocalEnv :: Int -> ClusterEnv
 mkLocalEnv = mkClusterEnv mkIp mkDataDir
   where
     mkIp = const $ Ip "127.0.0.1"
-    mkDataDir (GethId gid) = DataDir $
-      "gdata" </> fromText (format ("geth"%d) gid)
+    mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
 
 data EnodeId = EnodeId Text
   deriving (Show, Eq)
@@ -258,8 +259,10 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
   where
     force = fromMaybe $ error $ "no IP found for " <> show gid
 
-getEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
-getEnodeId gid = do
+-- | We need to use the RPC interface to get the EnodeId if we haven't yet
+-- started up geth.
+requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
+requestEnodeId gid = do
   mkCmd <- setupCommand gid
   (Ip ip) <- gidIp gid
 
@@ -298,7 +301,7 @@ mkGeth gid eid aid = do
 installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
 installAccountKey gid acctKey = do
   dir <- gidDataDir gid
-  let keystoreDir = (dataDirPath dir) </> "keystore"
+  let keystoreDir = dataDirPath dir </> "keystore"
       jsonPath = keystoreDir </> fromText (nodeName gid)
   output jsonPath (select $ textToLines $ akKey acctKey)
 
@@ -310,7 +313,7 @@ createNode :: (MonadIO m, HasEnv m)
 createNode genesisJsonPath gid acctKey = do
   initNode genesisJsonPath gid
   installAccountKey gid acctKey
-  eid <- getEnodeId gid
+  eid <- requestEnodeId gid
   mkGeth gid eid (akAccountId acctKey)
 
 shellEscapeSingleQuotes :: Text -> Text
@@ -340,8 +343,38 @@ writeStaticNodes sibs geth = output jsonPath contents
     jsonPath = dataDirPath (gethDataDir geth) </> "static-nodes.json"
     contents = select $ textToLines $ textEncode $ gethEnodeId <$> sibs
 
-readStaticNodes :: MonadIO m => DataDir -> m (Maybe [EnodeId])
-readStaticNodes (DataDir path) = textDecode <$> strict (input path)
+readStaticNodes :: MonadIO m => DataDir -> m [EnodeId]
+readStaticNodes (DataDir ddPath) = force . textDecode <$> strict (input path)
+  where
+    path = ddPath </> "static-nodes.json"
+    force = fromMaybe $ error "failed to load enodes from static-nodes.json"
+
+-- | If we've already started up geth in the past, we don't need to use RPC
+-- interface to get the EnodeId; we can read it directly from the datadir.
+readEnodeId :: (HasEnv m, MonadIO m) => GethId -> m EnodeId
+readEnodeId gid = do
+    nodeDataDir <- gidDataDir gid
+    enodeIds <- readStaticNodes nodeDataDir
+    let nodeIdx = gId gid - 1
+    return $ forceEnodeId $ enodeIds `atMay` nodeIdx
+
+  where
+    forceEnodeId = fromMaybe $ error $
+      "enode ID not found in list for " <> show gid
+
+readAccountId :: (HasEnv m, MonadIO m) => GethId -> m AccountId
+readAccountId gid = do
+    (DataDir ddPath) <- gidDataDir gid
+    let keyPath = ddPath </> "keystore" </> fromText (nodeName gid)
+    keyContents <- strict $ input keyPath
+    pure $ force $ parseMaybe aidParser =<< textDecode keyContents
+
+  where
+    aidParser :: Value -> Aeson.Parser AccountId
+    aidParser = withObject "AccountId" $ \obj ->
+      fmap AccountId $ obj .: "address"
+
+    force = fromMaybe $ error "failed to load account ID from keystore"
 
 generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
 generateAccountKeys numAccts = do
@@ -574,7 +607,7 @@ instrumentedGethShell geth = gethShell geth
                            & observingRaftStatus
                            & observingTxes
   where
-    logPath = fromText $ format ("geth"%d%".out") $ gId . gethId $ geth
+    logPath = fromText $ nodeName (gethId geth) <> ".out"
 
 data NodeInstrumentation = NodeInstrumentation
   { nodeOnline      :: Async NodeOnline
