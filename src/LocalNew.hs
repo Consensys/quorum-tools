@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Creates and starts a new cluster, destroying old datadirs in the process.
 module Main where
 
 import           Control.Monad.Reader (runReaderT)
