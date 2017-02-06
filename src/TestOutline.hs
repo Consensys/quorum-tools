@@ -8,8 +8,6 @@ module TestOutline where
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
 import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar, takeMVar)
-import           Control.Exception        (throwIO)
-import           Control.Monad            (zipWithM)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
 import           Data.Monoid              (Last (Last))
@@ -46,21 +44,18 @@ data Validity
   | Falsified FailureReason
   deriving Show
 
+instance Monoid Validity where
+  mempty = Verified
+
+  mappend Verified f@(Falsified _) = f
+  mappend f@(Falsified _) _        = f
+  mappend _ _                      = Verified
+
 second :: Int
 second = 10 ^ (6 :: Int)
 
 failedTestCode :: ExitCode
 failedTestCode = ExitFailure 1
-
-verifySameLastBlock :: [Either NodeTerminated (Last Block)] -> Validity
-verifySameLastBlock results = case allSame results of
-  NotSame a b -> Falsified $ case (a, b) of
-    (Left NodeTerminated, _) -> DidPanic
-    (_, Left NodeTerminated) -> DidPanic
-    (Right b1, Right b2)     -> WrongOrder b1 b2
-  Same (Left NodeTerminated)  -> Falsified DidPanic
-  Same (Right (Last Nothing)) -> Falsified NoBlockFound
-  _                           -> Verified
 
 data ShouldTerminate
   = DoTerminateSuccess
@@ -106,7 +101,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
         -- wait for geth to launch, then start raft and run the test body
         timestampedMessage "awaiting all ready"
-        awaitAll (nodeOnline <$> instruments) -- "IPC endpoint opened"
+        awaitAll (nodeOnline <$> instruments)
         timestampedMessage "got all ready"
 
         timestampedMessage "awaiting a successful raft election"
@@ -142,36 +137,47 @@ testOnce numNodes =
       predicate _ _        = DoTerminateFailure
   in tester predicate numNodes
 
--- | Verify that every node has the same last block and none have terminated.
+-- | Verify nodes show normal behavior:
+--
+-- * None have exited (this assumes termination is an error)
+-- * There are no lost transactions
+-- * The nodes all have the same last block
 verify
   :: [MVar (Last Block)]
   -> [MVar OutstandingTxes]
   -> [Async NodeTerminated]
   -> IO Validity
 verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
-  -- verify that all have consistent logs
   lastBlocks <- traverse readMVar lastBlockMs
   outstandingTxes_ <- traverse readMVar outstandingTxesMs
-  meEarlyTerms <- traverse poll terminatedAsyncs
-
-  -- verify private state
-
-  results <- zipWithM (curry $ \case
-                        (Just (Left ex), _)     -> throwIO ex
-                        (Just (Right panic), _) -> pure $ Left panic
-                        (Nothing, block)    -> pure $ Right block)
-                      meEarlyTerms
-                      lastBlocks
-
-  let lostTxes :: Set TxId
-      lostTxes = unOutstandingTxes (mconcat outstandingTxes_)
+  earlyTerminations <- traverse poll terminatedAsyncs
 
   flip mapM_ outstandingTxes_ $ \(OutstandingTxes txes) ->
     putStrLn $ "Outstanding txes: " ++ show (Set.size txes)
 
-  return $ case Set.null lostTxes of
-    True -> verifySameLastBlock results
-    False -> Falsified (LostTxes lostTxes)
+  let noEarlyTerminations = mconcat $ flip map earlyTerminations $ \case
+        Just _  -> Falsified DidPanic -- assume termination is unexpected
+        Nothing -> Verified
+
+  pure $ mconcat
+    [ noEarlyTerminations
+    , verifyLastBlocks lastBlocks
+    , verifyOutstandingTxes outstandingTxes_
+    ]
+
+verifyLastBlocks :: [Last Block] -> Validity
+verifyLastBlocks blocks = case allSame blocks of
+  NotSame a b -> Falsified $ WrongOrder a b
+  Same (Last Nothing) -> Falsified NoBlockFound
+  _ -> Verified
+
+verifyOutstandingTxes :: [OutstandingTxes] -> Validity
+verifyOutstandingTxes txes =
+  let lostTxes :: Set TxId
+      lostTxes = unOutstandingTxes (mconcat txes)
+  in if Set.null lostTxes
+     then Verified
+     else Falsified (LostTxes lostTxes)
 
 partition :: MonadManaged m => FilePath -> Millis -> GethId -> m ()
 partition gdata millis node =

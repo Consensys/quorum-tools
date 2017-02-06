@@ -39,6 +39,7 @@ library
     Mains.LocalStart
     Mains.PartitionTest
     Mains.PublicStateTest
+    Mains.RestartNodeTest
     Mains.Test2
   other-modules:
     ClusterAsync
@@ -112,8 +113,25 @@ test-suite leader-partition-test
   build-depends    : base, raft-demo
   default-language : Haskell2010
 
+
 test-suite public-state-test
   main-is          : PublicStateTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
+
+test-suite restart-cluster-test
+  main-is          : RestartClusterTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
+
+test-suite restart-node-test
+  main-is          : RestartNodeTest.hs
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
