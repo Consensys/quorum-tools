@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+cp credentials/id_noirqs docker-harness/
+cp credentials/github.pub docker-harness/
+
+docker build -t quorum-harness ./docker-harness/
+
+rm docker-harness/id_noirqs
+rm docker-harness/github.pub

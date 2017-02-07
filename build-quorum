@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+cp credentials/id_noirqs docker-quorum/
+cp credentials/github.pub docker-quorum/
+
+docker build -t quorum-raft ./docker-quorum/
+
+rm docker-quorum/id_noirqs
+rm docker-quorum/github.pub
