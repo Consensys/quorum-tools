@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main where
+module Mains.LocalSpam where
 
 import           Control.Monad.Reader (runReaderT)
 import           Control.RateLimit    (RateLimit)
@@ -19,8 +19,8 @@ cliParser = (,) <$> gethIdP <*> rateLimitP
     rateLimitP = perSecond <$>
       optInteger "rps"  'r' "The number of requests per second"
 
-main :: IO ()
-main = do
+localSpamMain :: IO ()
+localSpamMain = do
     (gid, rateLimit) <- options "Local geth spammer" cliParser
     geth <- runReaderT (loadLocalNode gid) (mkLocalEnv maxClusterSize)
     spamGeth geth rateLimit

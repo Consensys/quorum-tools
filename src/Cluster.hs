@@ -698,6 +698,6 @@ runNodesIndefinitely geths = do
       extractInstruments (NodeInstrumentation {nodeOnline, nodeTerminated})
         = (nodeOnline, nodeTerminated)
   instruments <- traverse (runNode numNodes) geths
-  let (readyAsyncs, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
+  let (_, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
 
   awaitAll terminatedAsyncs

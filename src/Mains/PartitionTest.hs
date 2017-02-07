@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- One-second partition
-module Main where
+module Mains.PartitionTest where
 
 import Cluster
 import TestOutline
@@ -11,8 +11,8 @@ exitP (TestNum 99) _             = DoTerminateSuccess
 exitP _            (Falsified _) = DoTerminateFailure
 exitP _            _             = DontTerminate
 
-main :: IO ()
-main = tester exitP (NumNodes 3) $ \nodes -> do
+partitionTestMain :: IO ()
+partitionTestMain = tester exitP (NumNodes 3) $ \nodes -> do
   let dropNode:stableNodes = nodes
 
   timestampedMessage "starting test with a pause"

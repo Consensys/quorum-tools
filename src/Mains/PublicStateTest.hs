@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- Test public / private state consistency
-module Main where
+module Mains.PublicStateTest where
 
 import           Control.Monad              (forM_)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -13,15 +13,14 @@ import           Text.Read                  (readMaybe)
 import Turtle hiding (match)
 import Checkpoint
 import Cluster
-import Cluster.Client
 import Control
 import TestOutline hiding (verify)
 
 clusterSize :: Int
 clusterSize = 3
 
-main :: IO ()
-main = sh $ flip runReaderT (mkLocalEnv clusterSize) $ do
+publicStateTestMain :: IO ()
+publicStateTestMain = sh $ flip runReaderT (mkLocalEnv clusterSize) $ do
   let gids = clusterGids clusterSize
 
   geths <- setupNodes gids

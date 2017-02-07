@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- Leader partition
-module Main where
+module Mains.LeaderPartitionTest where
 
 import Cluster
 import TestOutline
@@ -10,8 +10,8 @@ exitP (TestNum 9) _             = DoTerminateSuccess
 exitP _           (Falsified _) = DoTerminateFailure
 exitP _           _             = DontTerminate
 
-main :: IO ()
-main = tester exitP (NumNodes 3) $ \nodes -> do
+leaderPartitionTestMain :: IO ()
+leaderPartitionTestMain = tester exitP (NumNodes 3) $ \nodes -> do
   let dropNode:_stableNodes = nodes
 
   timestampedMessage "starting test with a pause"

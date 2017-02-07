@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections     #-}
 
-module Main where
+module Mains.AwsBootstrap where
 
 import           Control.Monad.Reader (runReaderT)
 import           Prelude              hiding (FilePath)
@@ -35,8 +35,8 @@ mkBootstrapEnv config = (mkClusterEnv (awsIp size subnets) mkDataDir size)
     mkDataDir (GethId gid) = DataDir $
       dataRoot </> fromText (format ("geth"%d) gid)
 
-main :: IO ()
-main = do
+awsBootstrapMain :: IO ()
+awsBootstrapMain = do
     config <- options "AWS cluster bootstrapping script" cliParser
 
     sh $ flip runReaderT (mkBootstrapEnv config) $

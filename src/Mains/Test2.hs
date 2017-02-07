@@ -1,5 +1,5 @@
 -- Late-joining node
-module Main where
+module Mains.Test2 where
 
 --
 --
@@ -33,5 +33,5 @@ module Main where
 --     -- run it for ten seconds
 --     td 10
 
-main :: IO ()
-main = return ()
+test2Main :: IO ()
+test2Main = return ()
