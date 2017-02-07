@@ -6,79 +6,116 @@ license-file: LICENSE.md
 build-type: Simple
 cabal-version: >=1.10
 
-executable local-new
+library
   hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: LocalNew.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
+  ghc-options: -Wall -fwarn-tabs
+  build-depends:
+    base                  == 4.9.*,
+    text                  == 1.2.*,
+    mtl                   == 2.2.*,
+    async                 == 2.1.*,
+    managed               == 1.0.*,
+    foldl                 == 1.2.*,
+    lens                  == 4.14.* || == 4.15.*,
+    lens-aeson            == 1.0.*,
+    bytestring            == 0.10.*,
+    turtle                == 1.3.*,
+    aeson                 == 0.11.* || == 1.1.*,
+    wreq                  == 0.4.*,
+    safe                  == 0.3.*,
+    transformers          == 0.5.*,
+    containers            == 0.5.*,
+    symmetric-properties  == 0.1.*,
+    time                  == 1.6.* || == 1.8.*,
+    rate-limit            == 1.1.*,
+    time-units            == 1.0.*,
+    http-client           == 0.4.*
+  exposed-modules:
+    Mains.AwsBootstrap
+    Mains.AwsSpam
+    Mains.LeaderPartitionTest
+    Mains.LocalNew
+    Mains.LocalSpam
+    Mains.LocalStart
+    Mains.PartitionTest
+    Mains.PublicStateTest
+    Mains.Test2
+  other-modules:
+    ClusterAsync
+    Cluster
+    Cluster.Client
+    Cluster.Aws
+    PacketFilter
+    IpTables
+    SharedPartitioning
+    TestOutline
+    Checkpoint
+    Control
   default-language: Haskell2010
+
+executable local-new
+  main-is          : LocalNew.hs
+  hs-source-dirs   : app
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
 executable local-start
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: LocalStart.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+  main-is          : LocalStart.hs
+  hs-source-dirs   : app
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
 executable local-spam
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: LocalSpam.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+  main-is          : LocalSpam.hs
+  hs-source-dirs   : app
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
 executable aws-bootstrap
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: AwsBootstrap.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+  main-is          : AwsBootstrap.hs
+  hs-source-dirs   : app
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
 executable aws-spam
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: AwsSpam.hs
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+  main-is          : AwsSpam.hs
+  hs-source-dirs   : app
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
-executable test1
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: test1.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+test-suite partition-test
+  main-is          : PartitionTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
-executable test2
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: test2.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+test-suite test2
+  main-is          : Test2.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
-executable test3
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: test3.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+test-suite leader-partition-test
+  main-is          : LeaderPartitionTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
 
-executable test4
-  hs-source-dirs: src
-  ghc-options: -Wall -fwarn-tabs -threaded -rtsopts
-  main-is: test4.hs
-  build-depends: base, text, mtl, async, managed, foldl, lens, lens-aeson, bytestring, turtle, aeson, wreq, safe, transformers, containers, symmetric-properties, time, rate-limit, time-units, http-client
-  other-modules: Cluster, ClusterAsync, Cluster.Aws, Cluster.Client, PacketFilter, IpTables, SharedPartitioning, TestOutline, Checkpoint, Control
-  default-language: Haskell2010
+test-suite public-state-test
+  main-is          : PublicStateTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010

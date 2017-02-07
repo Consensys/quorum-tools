@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main where
+module Mains.AwsSpam where
 
 import           Control.Monad.Reader (runReaderT)
 import           Control.RateLimit    (RateLimit)
@@ -35,8 +35,8 @@ cEnv = mkClusterEnv (awsIp maxClusterSize numSubnets) mkDataDir maxClusterSize
 readGidFromHomedir :: IO GethId
 readGidFromHomedir = GethId . read <$> readFile "/home/ubuntu/node-id"
 
-main :: IO ()
-main = do
+awsSpamMain :: IO ()
+awsSpamMain = do
   rateLimit <- options "Spams the local node with public transactions" cliParser
   gid <- readGidFromHomedir
   geth <- runReaderT (loadLocalNode gid) cEnv
