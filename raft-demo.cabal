@@ -122,13 +122,13 @@ test-suite public-state-test
   build-depends    : base, raft-demo
   default-language : Haskell2010
 
-test-suite restart-cluster-test
-  main-is          : RestartClusterTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
-  default-language : Haskell2010
+-- test-suite restart-cluster-test
+--   main-is          : RestartClusterTest.hs
+--   type             : exitcode-stdio-1.0
+--   hs-source-dirs   : tests
+--   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+--   build-depends    : base, raft-demo
+--   default-language : Haskell2010
 
 test-suite restart-node-test
   main-is          : RestartNodeTest.hs
