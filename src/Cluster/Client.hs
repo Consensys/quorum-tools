@@ -30,8 +30,8 @@ import qualified Network.Wreq.Session      as Sess
 import           Prelude                   hiding (FilePath, lines)
 import           Turtle
 
-import           Checkpoint
 import           Cluster
+import           Cluster.Types
 
 txRpcBody :: Geth -> Value
 txRpcBody geth = object

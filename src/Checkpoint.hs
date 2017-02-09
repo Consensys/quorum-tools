@@ -1,36 +1,14 @@
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Checkpoint where
 
 import           Turtle
 
+import           Cluster.Types
+
 raftSentinel :: Text
 raftSentinel = "RAFT-CHECKPOINT"
-
-newtype GethId = GethId { gId :: Int }
-  deriving (Show, Eq, Num, Ord, Enum)
-
-newtype TxId = TxId { txId :: Text }
-  deriving (Show, Eq, Ord)
-
-newtype Addr = Addr { unAddr :: Text }
-  deriving (Show, Eq)
-
-newtype PeerJoined = PeerJoined GethId deriving Show
-newtype PeerLeft = PeerLeft GethId deriving Show
-
--- | Some checkpoint in the execution of the program.
-data Checkpoint result where
-  PeerConnected :: Checkpoint PeerJoined
-  PeerDisconnected :: Checkpoint PeerLeft
-
-  BecameMinter :: Checkpoint ()
-  BecameVerifier :: Checkpoint ()
-
-  TxCreated :: Checkpoint (TxId, Addr)
-  TxAccepted :: Checkpoint TxId
 
 -- Note we use @suffix@ because the content is preceded by a timestamp.
 patternForCheckpoint :: Checkpoint a -> Pattern a
@@ -67,4 +45,4 @@ matchCheckpoint :: Checkpoint a -> Line -> Maybe a
 matchCheckpoint cpt line =
   case match (patternForCheckpoint cpt) (lineToText line) of
     [result] -> Just result
-    _ -> Nothing
+    _        -> Nothing

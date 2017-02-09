@@ -23,8 +23,8 @@ import           Prelude                  hiding (FilePath)
 import           System.Info
 import           Turtle
 
-import Checkpoint
 import Cluster
+import Cluster.Types
 import Cluster.Client
 import ClusterAsync
 import Control (awaitAll)
@@ -47,9 +47,9 @@ data Validity
 instance Monoid Validity where
   mempty = Verified
 
-  mappend Verified f@(Falsified _) = f
-  mappend f@(Falsified _) _        = f
-  mappend _ _                      = Verified
+  mappend Verified falsified@(Falsified _) = falsified
+  mappend falsified@(Falsified _) _        = falsified
+  mappend _ _                              = Verified
 
 second :: Int
 second = 10 ^ (6 :: Int)

@@ -9,8 +9,8 @@ import Control.Monad.Reader     (ReaderT (runReaderT))
 import Data.Monoid              (Last)
 import Turtle
 
-import Checkpoint
 import Cluster
+import Cluster.Types
 import TestOutline
 
 numNodes :: Int

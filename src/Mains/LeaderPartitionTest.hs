@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- Leader partition
+
+-- Partitioning leader from the cluster
 module Mains.LeaderPartitionTest where
 
-import Cluster
+import Cluster.Types
 import TestOutline
 
 exitP :: TestPredicate

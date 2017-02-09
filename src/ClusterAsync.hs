@@ -1,16 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+
 module ClusterAsync where
 
 import Control.Concurrent.Async   (Async, async, forConcurrently)
 import Control.Monad.Reader       (ReaderT (ReaderT, runReaderT), ask)
 import Turtle                     (MonadIO, Shell, liftIO, sh)
 
-import Cluster
+import Cluster.Types
 
 -- | An asynchronous action with access to the cluster environment.
-newtype ClusterAsync a = ClusterAsync
-  { runClusterAsync :: ReaderT ClusterEnv Async a }
+newtype ClusterAsync a
+  = ClusterAsync { runClusterAsync :: ReaderT ClusterEnv Async a }
   deriving Functor
 
 -- | Spawn an asynchronous cluster action.
