@@ -37,6 +37,23 @@ readNodeInfo instruments = (,)
   <$> readMVar (lastBlock instruments)
   <*> readMVar (outstandingTxes instruments)
 
+--   seconds  |   spammer    |    node 1    |    nodes 2 / 3
+-- ---------------------------------------------------------
+--      1     |      ^       |       ^      |         ^
+--      2     |      |       |       |      |         |
+--      3     |      |       |       |      |         |
+--      4     |      v       |       |      |         |
+--      5     |              |       v      |         |
+--      6     |              |              |         |
+--      7     |              |       ^      |         |
+--      8     |      ^       |       |      |         |
+--      9     |      |       |       |      |         |
+--      10    |      |       |       |      |         |
+--      11    |      v       |       |      |         |
+--      12    |              |       |      |         |
+--      13    |              |       |      |         |
+--      14    |              |       v      |         v
+
 node1Plan :: Geth -> IO NodeInfo
 node1Plan geth = do
   run $ do
@@ -48,7 +65,7 @@ node1Plan geth = do
 
   readNodeInfo <=< run $ do
     instruments <- runNode numNodes geth
-    td 5
+    td 8
     pure instruments
 
 nodes23Plan :: Geth -> IO NodeInfo
@@ -59,6 +76,7 @@ nodes23Plan geth =
     withSpammer [geth] $ td 4
     td 3
     withSpammer [geth] $ td 4
+    td 3
     pure instruments
 
 
