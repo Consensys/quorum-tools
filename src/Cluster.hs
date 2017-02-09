@@ -121,7 +121,7 @@ gethCommand geth = format ("geth --datadir "%fp       %
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
   cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
-  shells cmd empty
+  void $ sh $ inshellWithErr cmd empty
 
 readAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
 readAccountKey dir acctId@(AccountId aid) = do
@@ -182,7 +182,7 @@ requestEnodeId gid = do
   let enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
                        let cmd = mkCmd $ format ("js "%fp) jsPath
-                       inshell cmd empty
+                       inshellWithJoinedErr cmd empty
                    & grep (begins "enode")
                    & sed (fmap (\a b -> a <> ip <> b) chars
                            <*  text "[::]"
@@ -577,7 +577,7 @@ runNode numNodes geth = do
     <*> assumedRole
 
 sendJs :: MonadIO m => Geth -> Text -> m ()
-sendJs geth js = shells (gethCommand geth subcmd) empty
+sendJs geth js = void $ sh $ inshellWithErr (gethCommand geth subcmd) empty
   where
     subcmd = sendJsSubcommand (gethDataDir geth) js
 
