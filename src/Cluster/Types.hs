@@ -159,3 +159,9 @@ data Checkpoint result where
 
   TxCreated        :: Checkpoint (TxId, Addr)
   TxAccepted       :: Checkpoint TxId
+
+-- Packet filtering
+
+newtype PfToken = PfToken Text
+
+newtype Pid = Pid Int

@@ -15,10 +15,6 @@ import           Turtle
 import           Cluster
 import           Cluster.Types
 
-newtype PfToken = PfToken Text
-
-newtype Pid = Pid Int
-
 inshellWithNoErr :: Text -> Shell Line -> Shell Line
 inshellWithNoErr cmd inputShell = do
   line <- inshellWithErr cmd inputShell
