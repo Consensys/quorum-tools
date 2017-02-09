@@ -25,12 +25,6 @@ newtype GethId = GethId { gId :: Int }
 clusterGids :: Int -> [GethId]
 clusterGids size = GethId <$> [1..size]
 
-newtype TxId = TxId { txId :: Text }
-  deriving (Show, Eq, Ord)
-
-newtype Addr = Addr { unAddr :: Text }
-  deriving (Show, Eq)
-
 newtype Verbosity = Verbosity Int
   deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
 
@@ -83,9 +77,6 @@ data AccountKey = AccountKey { akAccountId :: AccountId
                              }
   deriving (Show, Eq)
 
-data Block = Block Text
-  deriving (Eq, Show)
-
 data Geth =
   Geth { gethId        :: GethId
        , gethEnodeId   :: EnodeId
@@ -100,6 +91,17 @@ data Geth =
        , gethUrl       :: Text
        }
   deriving (Show, Eq)
+
+-- Addresses, transactions and blocks
+
+newtype Addr = Addr { unAddr :: Text }
+  deriving (Show, Eq)
+
+newtype TxId = TxId { txId :: Text }
+  deriving (Show, Eq, Ord)
+
+newtype Block = Block Text
+  deriving (Eq, Show)
 
 newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
   deriving (Monoid)
