@@ -76,7 +76,6 @@ mkLocalEnv = mkClusterEnv mkIp mkDataDir
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
 
-
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
 
@@ -239,12 +238,16 @@ shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
 jsEscapeSingleQuotes :: Text -> Text
 jsEscapeSingleQuotes = replace "'" "\\'"
 
-sendJsSubcommand :: FilePath -> Text -> Text
-sendJsSubcommand nodeDataDir js = format ("--exec '"%s%"' attach "%s)
-                                         (shellEscapeSingleQuotes js)
-                                         ipcEndpoint
+ipcPath :: DataDir -> FilePath
+ipcPath datadir = dataDirPath datadir </> "geth.ipc"
+
+sendJsSubcommand :: DataDir -> Text -> Text
+sendJsSubcommand datadir js = format ("--exec '"%s%"' attach "%s)
+                                     (shellEscapeSingleQuotes js)
+                                     ipcEndpoint
   where
-    ipcEndpoint = format ("ipc:"%fp) $ nodeDataDir </> "geth.ipc"
+    ipcEndpoint :: Text
+    ipcEndpoint = format ("ipc:"%fp) $ ipcPath datadir
 
 -- TODO: switch to a more efficient version
 textEncode :: ToJSON a => a -> Text
@@ -579,7 +582,7 @@ runNode numNodes geth = do
 sendJs :: MonadIO m => Geth -> Text -> m ()
 sendJs geth js = shells (gethCommand geth subcmd) empty
   where
-    subcmd = sendJsSubcommand (dataDirPath $ gethDataDir geth) js
+    subcmd = sendJsSubcommand (gethDataDir geth) js
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do

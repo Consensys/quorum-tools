@@ -113,7 +113,7 @@ contractCmd geth (Contract _mem abi) cmd consumer =
   let pw = gethPassword geth
       unlockLine = "personal.unlockAccount(eth.accounts[0], '" <> pw <> "');"
       contractLine = "var contract = web3.eth.contract(" <> abi <> ");"
-      dataDir = dataDirPath $ gethDataDir geth
+      dataDir = gethDataDir geth
       cmd' = T.unlines [unlockLine, contractLine, cmd]
 
       -- almost sendJs, but output-aware
