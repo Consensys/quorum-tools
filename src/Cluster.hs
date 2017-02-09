@@ -47,9 +47,6 @@ import           Checkpoint
 import           Cluster.Types
 import           Control
 
-clusterGids :: Int -> [GethId]
-clusterGids size = GethId <$> [1..size]
-
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
   { _clusterPassword     = "abcd"

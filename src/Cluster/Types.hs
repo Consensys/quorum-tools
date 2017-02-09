@@ -22,6 +22,9 @@ import           Turtle                   (FilePath)
 newtype GethId = GethId { gId :: Int }
   deriving (Show, Eq, Num, Ord, Enum)
 
+clusterGids :: Int -> [GethId]
+clusterGids size = GethId <$> [1..size]
+
 newtype TxId = TxId { txId :: Text }
   deriving (Show, Eq, Ord)
 

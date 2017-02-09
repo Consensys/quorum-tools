@@ -6,8 +6,9 @@ module Mains.LocalNew where
 import           Control.Monad.Reader (runReaderT)
 import           Turtle
 
-import           Cluster              (clusterGids, mkLocalEnv,
-                                       runNodesIndefinitely, wipeAndSetupNodes)
+import           Cluster              (mkLocalEnv, runNodesIndefinitely,
+                                       wipeAndSetupNodes)
+import           Cluster.Types
 
 localNewMain :: IO ()
 localNewMain = sh $ flip runReaderT (mkLocalEnv clusterSize) $ do
