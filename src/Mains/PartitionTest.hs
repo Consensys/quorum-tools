@@ -3,7 +3,7 @@
 -- One-second partition
 module Mains.PartitionTest where
 
-import Cluster
+import Cluster.Types
 import TestOutline
 
 exitP :: TestPredicate

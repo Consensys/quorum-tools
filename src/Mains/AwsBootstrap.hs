@@ -7,8 +7,8 @@ import           Control.Monad.Reader (runReaderT)
 import           Prelude              hiding (FilePath)
 import           Turtle
 
-import           Checkpoint
 import           Cluster
+import           Cluster.Types
 import           Cluster.Aws          (awsIp)
 
 data AwsConfig

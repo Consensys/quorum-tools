@@ -7,8 +7,8 @@ import           Control.RateLimit    (RateLimit)
 import           Data.Time.Units      (Millisecond)
 import           Turtle
 
-import           Checkpoint           (GethId(..))
 import           Cluster
+import           Cluster.Types
 import           Cluster.Aws          (awsIp)
 import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
 

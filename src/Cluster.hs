@@ -1,32 +1,29 @@
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Cluster where
 
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
+import           Control.Concurrent.MVar    (isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar, tryTakeMVar)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, makeLenses, view)
+import           Control.Lens               (at, view)
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
-import           Data.Aeson                 (FromJSON (parseJSON),
-                                             ToJSON (toJSON), Value (String),
-                                             decode, encode, object, withObject,
-                                             (.:), (.=))
-import           Data.Aeson.Types           (parseMaybe, typeMismatch)
+import           Data.Aeson                 (FromJSON, ToJSON, Value, decode,
+                                             encode, object, withObject, (.:),
+                                             (.=))
+import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bifunctor             (first, second)
 import           Data.Functor               (($>))
@@ -35,7 +32,7 @@ import           Data.Maybe                 (fromMaybe, isJust)
 import           Data.Monoid                (Last, (<>))
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
-import           Data.Text                  (isInfixOf, pack, replace)
+import           Data.Text                  (Text, isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import           Data.Text.Lazy             (fromStrict, toStrict)
@@ -47,42 +44,11 @@ import           System.IO                  (BufferMode (..), hClose,
 import           Turtle                     hiding (view)
 
 import           Checkpoint
+import           Cluster.Types
 import           Control
 
-newtype Verbosity = Verbosity Int
-  deriving (Eq, Show, Num, Enum, Ord, Real, Integral)
-
-newtype Millis = Millis Int
-  deriving Num
-
-newtype Seconds = Seconds Int
-  deriving Num
-
-newtype Port = Port { getPort :: Int }
-  deriving (Eq, Show, Enum, Ord, Num, Real, Integral)
-
-newtype Ip = Ip { getIp :: Text }
-  deriving (Eq, Show)
-
-data DataDir
-  = DataDir { dataDirPath :: FilePath }
-  deriving (Show, Eq)
-
-data ClusterEnv
-  = ClusterEnv { _clusterPassword     :: Text
-               , _clusterNetworkId    :: Int
-               , _clusterBaseHttpPort :: Port
-               , _clusterBaseRpcPort  :: Port
-               , _clusterVerbosity    :: Verbosity
-               , _clusterGenesisJson  :: FilePath
-               , _clusterIps          :: Map.Map GethId Ip
-               , _clusterDataDirs     :: Map.Map GethId DataDir
-               }
-  deriving (Eq, Show)
-
-makeLenses ''ClusterEnv
-
-type HasEnv = MonadReader ClusterEnv
+clusterGids :: Int -> [GethId]
+clusterGids size = GethId <$> [1..size]
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
@@ -95,9 +61,6 @@ emptyClusterEnv = ClusterEnv
   , _clusterIps          = Map.fromList []
   , _clusterDataDirs     = Map.fromList []
   }
-
-clusterGids :: Int -> [GethId]
-clusterGids size = GethId <$> [1..size]
 
 mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> Int -> ClusterEnv
 mkClusterEnv mkIp mkDataDir size = emptyClusterEnv
@@ -113,54 +76,8 @@ mkLocalEnv = mkClusterEnv mkIp mkDataDir
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
 
-data EnodeId = EnodeId Text
-  deriving (Show, Eq)
 
-instance ToJSON EnodeId where
-  toJSON (EnodeId eid) = String eid
-
-instance FromJSON EnodeId where
-  parseJSON str@(String _) = EnodeId <$> parseJSON str
-  parseJSON invalid        = typeMismatch "EnodeId" invalid
-
-data AccountId = AccountId { accountId :: Text }
-  deriving (Show, Eq)
-
-data AccountKey = AccountKey { akAccountId :: AccountId
-                             , akKey       :: T.Text
-                             }
-  deriving (Show, Eq)
-
-data Block = Block Text
-  deriving (Eq, Show)
-
-data Geth =
-  Geth { gethId        :: GethId
-       , gethEnodeId   :: EnodeId
-       , gethHttpPort  :: Port
-       , gethRpcPort   :: Port
-       , gethAccountId :: AccountId
-       , gethPassword  :: Text
-       , gethNetworkId :: Int
-       , gethVerbosity :: Verbosity
-       , gethDataDir   :: DataDir
-       , gethIp        :: Ip
-       , gethUrl       :: Text
-       }
-  deriving (Show, Eq)
-
-data RaftRole
-  = Leader
-  | Candidate
-  | Follower
-  deriving (Eq, Show)
-
-data RaftStatus
-  = RaftStatus { raftRole :: RaftRole
-               , raftTerm :: Int }
-  deriving Show
-
-nodeName :: GethId -> T.Text
+nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
 
 gidDataDir :: HasEnv m => GethId -> m DataDir
@@ -448,10 +365,6 @@ tee filepath lines = do
   liftIO $ T.hPutStrLn handle $ lineToText line
   return line
 
-data Transitioned
-  = PreTransition
-  | PostTransition
-
 observingTransition :: (a -> Bool) -> Shell (a, b) -> Shell (a, (Transitioned, b))
 observingTransition test lines = do
   mvar <- liftIO newEmptyMVar
@@ -463,13 +376,6 @@ observingTransition test lines = do
 
   let isPost = not isEmpty || thisIsTheLine
   return (line, (if isPost then PostTransition else PreTransition, b))
-
-data AssumedRole = AssumedRole
-data NodeOnline = NodeOnline -- IPC is up; ready for us to start raft
-data NodeTerminated = NodeTerminated deriving Eq
-
--- All http connections for this node are established
-data AllConnected = AllConnected
 
 -- TODO: move from tuple to first-class data type
 -- TODO: once we have >1 data type (e.g. regular vs partition testing), we can
@@ -498,12 +404,6 @@ observingLastBlock incoming = do
     blockPattern :: Pattern Block
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
-
-newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
-  deriving (Monoid)
-
-newtype TxAddrs = TxAddrs { unTxAddrs :: Map.Map TxId Addr }
-  deriving (Monoid, Eq)
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
@@ -609,17 +509,6 @@ instrumentedGethShell geth = gethShell geth
   where
     logPath = fromText $ nodeName (gethId geth) <> ".out"
 
-data NodeInstrumentation = NodeInstrumentation
-  { nodeOnline      :: Async NodeOnline
-  , nodeTerminated  :: Async NodeTerminated
-  , lastBlock       :: MVar (Last Block)
-  , lastRaftStatus  :: MVar (Last RaftStatus)
-  , outstandingTxes :: MVar OutstandingTxes
-  , txAddrs         :: MVar TxAddrs
-  , allConnected    :: Async AllConnected
-  , assumedRole     :: Async AssumedRole
-  }
-
 runNode :: forall m. (MonadManaged m)
         => Int
         -> Geth
@@ -695,8 +584,8 @@ sendJs geth js = shells (gethCommand geth subcmd) empty
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   let numNodes = length geths
-      extractInstruments (NodeInstrumentation {nodeOnline, nodeTerminated})
-        = (nodeOnline, nodeTerminated)
+      extractInstruments NodeInstrumentation {nodeOnline, nodeTerminated} =
+        (nodeOnline, nodeTerminated)
   instruments <- traverse (runNode numNodes) geths
   let (_, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
 

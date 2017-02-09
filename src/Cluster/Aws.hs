@@ -6,8 +6,7 @@ module Cluster.Aws
 
 import Turtle
 
-import Checkpoint
-import Cluster
+import Cluster.Types
 
 --
 -- TODO: use newtypes

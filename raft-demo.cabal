@@ -44,8 +44,9 @@ library
   other-modules:
     ClusterAsync
     Cluster
-    Cluster.Client
     Cluster.Aws
+    Cluster.Client
+    Cluster.Types
     PacketFilter
     IpTables
     SharedPartitioning

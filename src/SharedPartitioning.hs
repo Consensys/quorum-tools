@@ -11,8 +11,9 @@ import           Data.Monoid                (First(First), getFirst)
 import           Prelude                    hiding (FilePath, lines)
 import           Text.Read                  (readMaybe)
 import           Turtle
+
 import           Cluster
-import           Checkpoint
+import           Cluster.Types
 
 newtype PfToken = PfToken Text
 

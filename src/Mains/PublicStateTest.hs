@@ -13,6 +13,7 @@ import           Text.Read                  (readMaybe)
 import Turtle hiding (match)
 import Checkpoint
 import Cluster
+import Cluster.Types
 import Control
 import TestOutline hiding (verify)
 
