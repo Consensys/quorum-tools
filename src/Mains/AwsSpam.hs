@@ -10,7 +10,8 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Aws          (dockerHostIp, internalAwsIp)
-import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
+import           Cluster.Client       (BenchType(..), loadLocalNode, perSecond,
+                                       spamGeth)
 import           Cluster.Types
 
 data SpamConfig = SpamConfig { rateLimit   :: RateLimit Millisecond
@@ -45,4 +46,4 @@ awsSpamMain = do
   config <- options "Spams the local node with public transactions" cliParser
   gid <- readGidFromHomedir
   geth <- runReaderT (loadLocalNode gid) (cEnv (clusterType config) gid)
-  spamGeth geth (rateLimit config)
+  spamGeth BenchEmptyTx geth (rateLimit config)

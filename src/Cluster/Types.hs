@@ -15,9 +15,13 @@ import           Data.Aeson.Types         (typeMismatch)
 import           Data.Map.Strict          (Map)
 import           Data.Monoid              (Last)
 import           Data.Set                 (Set)
+import           Data.String
 import           Data.Text                (Text)
 import           Prelude                  hiding (FilePath)
 import           Turtle                   (FilePath)
+
+-- TODO: move to Cluster.Types.Util
+import           Cluster.Util
 
 -- Constellation
 
@@ -133,6 +137,18 @@ data Geth =
 newtype Addr = Addr { unAddr :: Text }
   deriving (Show, Eq)
 
+data Operation = Call | SendTransaction | SendTransactionAsync
+
+data Tx = Tx
+  -- (txFrom is implicitly eth.accounts[0])
+  { txTo :: Maybe Bytes20
+  , txMethod :: UnencodedMethod
+  , txPrivacy :: Privacy
+  , txOperation :: Operation
+  }
+
+newtype UnencodedMethod = UnencodedMethod Text deriving IsString
+
 newtype TxId = TxId { txId :: Text }
   deriving (Show, Eq, Ord)
 
@@ -207,15 +223,15 @@ newtype Pid = Pid Int
 -- Contracts
 
 -- | A contract may be visible to everyone or only to a list of public keys
-data ContractPrivacy
+data Privacy
   = Public
-  | PrivateFor [Text]
+  | PrivateFor [Addr]
 
 -- A contract is:
 -- * its privacy
 -- * bytecode
 -- * abi
-data Contract = Contract ContractPrivacy Text Text
+data Contract = Contract Privacy [UnencodedMethod] Text Text
 
 -- AWS support
 
