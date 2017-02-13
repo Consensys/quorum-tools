@@ -187,7 +187,7 @@ partition gdata millis node =
   else IPT.partition gdata millis node
 
 spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions = mapM_ (`spamGeth` perSecond 10)
+spamTransactions = mapM_ $ \geth -> spamGeth BenchEmptyTx geth $ perSecond 10
 
 withSpammer :: (MonadIO m, MonadReader ClusterEnv m) => [Geth] -> m () -> m ()
 withSpammer geths action = do

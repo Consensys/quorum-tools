@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- TODO rename this to Cluster.Types.Hex?
 module Cluster.Util where
 
 import           Crypto.Hash
@@ -17,6 +18,7 @@ import qualified Data.Text.Encoding      as T
 import           Data.Text.Lazy          (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding as LT
 import           Numeric                 (showHex)
+import           Turtle.Pattern          (Pattern, count, hexDigit)
 
 -- TODO: switch to a more efficient version
 textEncode :: ToJSON a => a -> Text
@@ -31,6 +33,12 @@ newtype Bytes20 = Bytes20 { unBytes20 :: ByteString }
 
 -- holds 32 bytes / 64 chars
 newtype Bytes32 = Bytes32 { unBytes32 :: ByteString }
+
+bytes20P :: Pattern Bytes20
+bytes20P = Bytes20 . B8.pack <$> count 40 hexDigit
+
+bytes32P :: Pattern Bytes32
+bytes32P = Bytes32 . B8.pack <$> count 64 hexDigit
 
 instance Show Bytes20 where
   show = T.unpack . hexPrefixed

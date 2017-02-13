@@ -123,7 +123,7 @@ gethCommand geth = format ("geth --datadir "%fp       %
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
-                          (consensusOptions $ gethConsensusPeer geth)
+                          (consensusOptions (gethConsensusPeer geth))
   where
     consensusOptions :: ConsensusPeer -> Text
     consensusOptions RaftPeer = "--raft"
@@ -225,11 +225,9 @@ mkConsensusPeer gid (QuorumChain (bmGid, bmAid) voterAccts)
   where
     mVoterAcct = Map.lookup gid voterAccts
 
-mkGeth :: (MonadIO m, HasEnv m)
-       => GethId
-       -> EnodeId
-       -> AccountId
-       -> m Geth
+mkGeth
+  :: (MonadIO m, HasEnv m)
+  => GethId -> EnodeId -> AccountId -> m Geth
 mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
   ip <- gidIp gid

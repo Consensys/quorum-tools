@@ -1,28 +1,26 @@
 {-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Cluster.Client
-  ( sendTx
+  ( BenchType(..)
   , spamGeth
+  , sendTx
   , bench
   , loadLocalNode
   , perSecond
   ) where
 
-import           Control.Lens            (to, (^.), (^?))
 import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
-import           Data.Aeson              (Value, object, (.=))
-import           Data.Aeson.Lens         (key, _String)
-import qualified Data.ByteString.Lazy    as LSB
-import           Data.Maybe              (fromMaybe)
+import           Data.Aeson              (Value(Array, String), object, (.=))
 import           Data.Monoid             ((<>))
 import qualified Data.Text               as T
-import           Data.Text.Lazy          (toStrict)
-import qualified Data.Text.Lazy.Encoding as LT
+import qualified Data.Text.Encoding      as T
 import           Data.Time.Units
+import qualified Data.Vector             as V
 import           Network.HTTP.Client     (defaultManagerSettings)
-import           Network.Wreq            (Response, post, responseBody)
+import           Network.Wreq            (post)
 import           Network.Wreq.Session    (Session)
 import qualified Network.Wreq.Session    as Sess
 import           Prelude                 hiding (FilePath, lines)
@@ -30,13 +28,23 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Types
-import           Cluster.Util            (textEncode)
+import           Cluster.Util
 
-txRpcBody :: Geth -> Value
-txRpcBody geth = object
+t :: Text -> Text
+t = id
+
+encodeMethod :: UnencodedMethod -> Bytes32
+encodeMethod (UnencodedMethod signature)
+  = sha3Bytes (T.encodeUtf8 signature)
+
+bytesText :: Bytes32 -> Text
+bytesText (Bytes32 bs) = T.decodeUtf8 bs
+
+emptyTxRpcBody :: Geth -> Value
+emptyTxRpcBody geth = object
     [ "id"      .= (1 :: Int)
     , "jsonrpc" .= t "2.0"
-    , "method"  .= t "eth_sendTransaction"
+    , "method"  .= t "eth_sendTransactionAsync"
     , "params"  .=
       [ object
         [ "from" .= (accountId . gethAccountId $ geth)
@@ -45,30 +53,67 @@ txRpcBody geth = object
       ]
     ]
 
-  where
-    t :: Text -> Text
-    t = id
+txRpcBody :: Tx -> Geth -> Value
+txRpcBody (Tx maybeTo method privacy op) geth = object
+    [ "id"      .= (1 :: Int)
+    , "jsonrpc" .= t "2.0"
+    , "method"  .= opName
+    , "params"  .= [ object params'' ]
+    ] where
+        params =
+          [ "from" .= ("0x" <> accountId (gethAccountId geth))
+          , "data" .= ("0x" <> bytesText (encodeMethod method))
+          ]
 
-sendTx :: MonadIO io => Geth -> io (Either Text TxId)
-sendTx geth = liftIO $ parse <$> post (T.unpack $ gethUrl geth) (txRpcBody geth)
-  where
-    parse :: Response LSB.ByteString -> Either Text TxId
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text TxId)
-        mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
+        params' = case privacy of
+          Public -> params
+          PrivateFor addrs ->
+            let addrsVal = Array (String . unAddr <$> V.fromList addrs)
+            in params <> ["privateFor" .= addrsVal]
 
-bench :: MonadIO m => Geth -> Seconds -> m ()
-bench geth (Seconds seconds) = view benchShell
+        params'' = case maybeTo of
+          Nothing -> params'
+          Just toBytes -> params' <> ["to" .= hexPrefixed toBytes]
+
+        opName :: Text
+        opName = case op of
+          Call                 -> "eth_call"
+          SendTransaction      -> "eth_sendTransaction"
+          SendTransactionAsync -> "eth_sendTransactionAsync"
+
+sendTx :: MonadIO io => Geth -> Tx -> io ()
+sendTx geth tx
+  = liftIO $ void $ post (T.unpack $ gethUrl geth) (txRpcBody tx geth)
+  -- TODO: temporarily disabling parsing of result, though we'll want this when
+  -- we port getStorage to rpc
+  --
+  -- where
+  --   parse :: Response LSB.ByteString -> Either Text TxId
+  --   parse r = fromMaybe parseFailure mParsed
+  --     where
+  --       parseFailure = Left $ toStrict $
+  --         "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+  --       mParsed :: Maybe (Either Text TxId)
+  --       mParsed = (r^?responseBody.key "result"._String.to (Right . TxId))
+  --             <|> (r^?responseBody.key "error".key "message"._String.to Left)
+
+data BenchType
+  = BenchEmptyTx
+  | BenchTx Tx
+
+benchTxBody :: BenchType -> Geth -> Value
+benchTxBody = \case
+  BenchEmptyTx -> emptyTxRpcBody
+  BenchTx tx -> txRpcBody tx
+
+bench :: MonadIO m => BenchType -> Geth -> Seconds -> m ()
+bench benchTy geth (Seconds seconds) = view benchShell
   where
     luaEscapeSingleQuotes = jsEscapeSingleQuotes
     lua = format ("wrk.method = 'POST'\n"  %
                   "wrk.body   = '"%s%"'\n" %
                   "wrk.headers['Content-Type'] = 'application/json'")
-                 (luaEscapeSingleQuotes $ textEncode $ txRpcBody geth)
+                 (luaEscapeSingleQuotes $ textEncode $ benchTxBody benchTy geth)
 
     benchShell = do
       luaPath <- using $ fileContaining $ select $ textToLines lua
@@ -95,18 +140,19 @@ perSecond :: Integer -> RateLimit Millisecond
 perSecond times = every $
   fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
 
-spam :: (MonadIO m, TimeUnit a) => Session -> RateLimit a -> Geth -> m ()
-spam session rateLimit geth = do
+spam :: (MonadIO m, TimeUnit a) => BenchType -> Session -> RateLimit a -> Geth -> m ()
+spam benchTy session rateLimit geth = do
   let gUrl = T.unpack $ gethUrl geth
       postBody = Sess.post session gUrl
+      txBody = benchTxBody benchTy geth
   waitThenPost <- liftIO $
     generateRateLimitedFunction rateLimit postBody dontCombine
-  forever $ liftIO $ waitThenPost (txRpcBody geth)
+  forever $ liftIO $ waitThenPost txBody
 
-spamGeth :: (MonadIO m, TimeUnit a) => Geth -> RateLimit a -> m ()
-spamGeth geth rateLimit =
+spamGeth :: (MonadIO m, TimeUnit a) => BenchType -> Geth -> RateLimit a -> m ()
+spamGeth benchTy geth rateLimit =
     liftIO $ Sess.withSessionControl Nothing mgrSettings $ \session ->
-      spam session rateLimit geth
+      spam benchTy session rateLimit geth
 
   where
     mgrSettings = defaultManagerSettings
