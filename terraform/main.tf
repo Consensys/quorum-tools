@@ -212,7 +212,7 @@ resource "aws_instance" "quorum" {
   availability_zone = "${element(aws_subnet.subnet.*.availability_zone, count.index % length(aws_subnet.subnet.*.id))}"
   subnet_id =         "${element(aws_subnet.subnet.*.id,                count.index % length(aws_subnet.subnet.*.id))}"
 
-  private_ip = "${cidrhost(element(aws_subnet.subnet.*.cidr_block, count.index % length(aws_subnet.subnet.*.id)), 101)}"
+  private_ip = "${cidrhost(element(aws_subnet.subnet.*.cidr_block, count.index % length(aws_subnet.subnet.*.id)), 101 + (count.index / length(aws_subnet.subnet.*.id)))}"
 
   root_block_device {
     volume_type = "${lookup(var.volume_types, "quorum")}"
