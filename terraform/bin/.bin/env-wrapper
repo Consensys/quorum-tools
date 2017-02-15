@@ -8,14 +8,14 @@ die() {
 }
 
 print_usage() {
-    die "usage: $0 [plan|apply|show|destroy|output[ output-name]|taint resource-name|untaint resource-name]"
+    die "usage: $0 [plan|apply|show|console|refresh|destroy|output[ output-name]|taint resource-name|untaint resource-name]"
 }
 
 [ "$#" -eq 0 ] && print_usage
 
 env_name=$(basename $0)
 
-if [[ "$1" == "plan" || "$1" == "apply" || "$1" == "destroy" ]]
+if [[ "$1" == "plan" || "$1" == "apply" || "$1" == "destroy" || "$1" == "console" || "$1" == "refresh" ]]
 then
     terraform $1 -var "env=${env_name}" -state "state/${env_name}.tfstate"
 elif [[ "$1" == "output" || "$1" == "taint" || "$1" == "untaint" ]]
