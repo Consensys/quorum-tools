@@ -14,10 +14,6 @@ variable "ssh_keypair_name" {
   description = "Name of the SSH keypair for logging into instances"
   default = "ethereum-raft-demo"
 }
-variable "aws_region" {
-  description = "AWS region"
-  default = "us-east-1"
-}
 variable "project" {
   default = "quorum-raft"
 }
@@ -37,6 +33,26 @@ variable "volume_sizes" {
     quorum = "50"
   }
 }
+variable "local_datadir_root" {
+  default = "cluster-data"
+}
+variable "remote_user" {
+  default = "ubuntu"
+}
+variable "remote_homedir" {
+  default = "/home/ubuntu"
+}
+variable "pem_file" {
+  default = "../credentials/ethereum-raft-demo.pem"
+}
+
+#
+# Variables that can be overridden by multi-region settings:
+#
+variable "aws_region" {
+  description = "AWS region"
+  default = "us-east-1"
+}
 variable "subnet_azs" {
   type = "list"
   default = ["us-east-1b", "us-east-1c", "us-east-1d"]
@@ -51,15 +67,4 @@ variable "quorum_eip_ids" {
   description = "Pre-allocated elastic IP( ID)s to be associated with quorum nodes. This is primarily for supporting multi-region clusters."
   default = []
 }
-variable "local_datadir_root" {
-  default = "cluster-data"
-}
-variable "remote_user" {
-  default = "ubuntu"
-}
-variable "remote_homedir" {
-  default = "/home/ubuntu"
-}
-variable "pem_file" {
-  default = "../credentials/ethereum-raft-demo.pem"
-}
+# [End of variables overridden by multi-region settings.]
