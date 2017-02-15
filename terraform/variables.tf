@@ -60,9 +60,6 @@ variable "subnet_azs" {
 variable "num_instances" {
   default = 3
 }
-variable "num_subnets" {
-  default = 3
-}
 variable "quorum_eip_ids" {
   description = "Pre-allocated elastic IP( ID)s to be associated with quorum nodes. This is primarily for supporting multi-region clusters."
   default = []

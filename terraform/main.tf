@@ -41,7 +41,7 @@ resource "aws_internet_gateway" "quorum_raft" {
 }
 
 resource "aws_subnet" "subnet" {
-  count = "${var.num_subnets}"
+  count = "${length(var.subnet_azs)}"
 
   vpc_id = "${aws_vpc.quorum_raft.id}"
 
@@ -73,7 +73,7 @@ resource "aws_route_table" "quorum_raft" {
 }
 
 resource "aws_route_table_association" "rta" {
-  count = "${var.num_subnets}"
+  count = "${length(var.subnet_azs)}"
 
   subnet_id = "${element(aws_subnet.subnet.*.id, count.index)}"
   route_table_id = "${aws_route_table.quorum_raft.id}"
