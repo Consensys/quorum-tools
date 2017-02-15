@@ -255,3 +255,9 @@ resource "aws_instance" "quorum" {
     ]
   }
 }
+
+resource "aws_eip_association" "quorum_eip_association" {
+  count = "${length(var.quorum_eip_ids)}"
+  instance_id = "${element(aws_instance.quorum.*.id, count.index)}"
+  allocation_id = "${element(var.quorum_eip_ids, count.index)}"
+}
