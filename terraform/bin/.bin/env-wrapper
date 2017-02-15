@@ -8,7 +8,7 @@ die() {
 }
 
 print_usage() {
-    die "usage: $0 [plan|apply|show|destroy|output output-name|taint resource-name|untaint resource-name]"
+    die "usage: $0 [plan|apply|show|destroy|output[ output-name]|taint resource-name|untaint resource-name]"
 }
 
 [ "$#" -eq 0 ] && print_usage
