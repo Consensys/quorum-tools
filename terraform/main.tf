@@ -235,13 +235,13 @@ resource "aws_instance" "quorum" {
   }
 
   provisioner "file" {
-    source = "${var.local_datadir_root}/geth${count.index + 1}"
+    source = "${var.local_datadir_root}/geth${var.first_geth_id + count.index}"
     destination = "${var.remote_homedir}/datadir"
   }
 
   provisioner "remote-exec" {
     inline = [
-      "echo '${count.index + 1}' >node-id",
+      "echo '${var.first_geth_id + count.index}' >node-id",
       "echo 'abcd' >password"
     ]
   }

@@ -64,4 +64,8 @@ variable "quorum_eip_ids" {
   description = "Pre-allocated elastic IP( ID)s to be associated with quorum nodes. This is primarily for supporting multi-region clusters."
   default = []
 }
+variable "first_geth_id" {
+  description = "Amount to add to the instance's count.index to calculate gethId. This is primarily for supporting multi-region clusters."
+  default = 1
+}
 # [End of variables overridden by multi-region settings.]
