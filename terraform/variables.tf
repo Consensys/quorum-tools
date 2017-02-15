@@ -44,6 +44,9 @@ variable "subnet_azs" {
 variable "num_instances" {
   default = 3
 }
+variable "num_subnets" {
+  default = 3
+}
 variable "local_datadir_root" {
   default = "cluster-data"
 }
