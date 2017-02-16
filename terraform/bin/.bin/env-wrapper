@@ -13,17 +13,35 @@ print_usage() {
 
 [ "$#" -eq 0 ] && print_usage
 
-env_name=$(basename $0)
+# Set up variables
+
+bin_name=$(basename $0)
+bin_components=(${bin_name//-/ }) # Split binary name on a dash
+num_components=${#bin_components[@]}
+
+if [ ${num_components} -eq 2 ]
+then
+    env_name=${bin_components[0]}
+    region=${bin_components[1]}
+    state_file="state/${env_name}-${region}.tfstate"
+    var_file_flag="-var-file multi-region-vars/${region}.tfvars"
+else
+    env_name=${bin_name}
+    state_file="state/${env_name}.tfstate"
+    var_file_flag=""
+fi
+
+# Process command
 
 if [[ "$1" == "plan" || "$1" == "apply" || "$1" == "destroy" || "$1" == "console" || "$1" == "refresh" ]]
 then
-    terraform $1 -var "env=${env_name}" -state "state/${env_name}.tfstate"
+    terraform $1 -var "env=${env_name}" ${var_file_flag} -state ${state_file}
 elif [[ "$1" == "output" || "$1" == "taint" || "$1" == "untaint" ]]
 then
-    terraform $1 -state "state/${env_name}.tfstate" $2
+    terraform $1 -state ${state_file} $2
 elif [[ "$1" == "show" ]]
 then
-    terraform show "state/${env_name}.tfstate"
+    terraform show ${state_file}
 else
     print_usage
 fi
