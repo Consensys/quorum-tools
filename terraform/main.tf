@@ -239,6 +239,16 @@ resource "aws_instance" "quorum" {
     destination = "${var.remote_homedir}/datadir"
   }
 
+  provisioner "file" {
+    source = "../credentials/id_tunneler"
+    destination = "${var.remote_homedir}/.ssh/id_tunneler"
+  }
+
+  provisioner "file" {
+    source = "../credentials/id_tunneler.pub"
+    destination = "${var.remote_homedir}/.ssh/id_tunneler.pub"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "echo '${var.first_geth_id + count.index}' >node-id",

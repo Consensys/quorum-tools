@@ -12,3 +12,8 @@ sudo sh -c 'echo "deb https://apt.dockerproject.org/repo ubuntu-xenial main" > /
 sudo apt-get update -y
 sudo apt-get install -y linux-image-extra-$(uname -r) linux-image-extra-virtual
 sudo apt-get install -y docker-engine awscli
+
+# Allow SSH access from other quorum nodes for multi-region setups.
+cat /home/ubuntu/.ssh/id_tunneler.pub >> /home/ubuntu/.ssh/authorized_keys
+chmod 600 /home/ubuntu/.ssh/id_tunneler.pub
+chmod 600 /home/ubuntu/.ssh/id_tunneler
