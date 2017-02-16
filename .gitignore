@@ -4,6 +4,7 @@ raft-*-snap
 ansible
 geth*.out.*
 id_noirqs
+id_tunneler
 terraform.tfvars
 ethereum-raft-demo.pem
 docker-harness/github.pub
