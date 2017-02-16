@@ -9,7 +9,7 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Types
-import           Cluster.Aws          (awsIp)
+import           Cluster.Aws          (internalAwsIp)
 import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
 
 --
@@ -24,7 +24,9 @@ cliParser = perSecond <$>
   optInteger "rps"  'r' "The number of requests per second"
 
 cEnv :: ClusterEnv
-cEnv = mkClusterEnv (awsIp maxClusterSize numSubnets) mkDataDir maxClusterSize
+cEnv = mkClusterEnv (internalAwsIp maxClusterSize numSubnets)
+                    mkDataDir
+                    maxClusterSize
   where
     -- We don't need the exact cluster size here; just something higher than the
     -- geth ID we want to spam:

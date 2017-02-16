@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Cluster.Aws
-  ( awsIp
+  ( internalAwsIp
   ) where
 
 import Turtle
@@ -11,8 +11,8 @@ import Cluster.Types
 --
 -- TODO: use newtypes
 --
-awsIp :: Int -> Int -> GethId -> Ip
-awsIp clusterSize subnets (GethId gid) =
+internalAwsIp :: Int -> Int -> GethId -> Ip
+internalAwsIp clusterSize subnets (GethId gid) =
     Ip $ format ("10.0."%d%"."%d) subnet lastOctet
   where
     idx = gid - 1 -- Zero-indexed geth id
