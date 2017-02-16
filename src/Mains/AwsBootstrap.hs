@@ -9,7 +9,7 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Types
-import           Cluster.Aws          (awsIp)
+import           Cluster.Aws          (internalAwsIp)
 
 data AwsConfig
   = AwsConfig { numNodes   :: Int
@@ -24,7 +24,9 @@ cliParser = AwsConfig
   <*> optPath "path"    'p' "Output path"
 
 mkBootstrapEnv :: AwsConfig -> ClusterEnv
-mkBootstrapEnv config = (mkClusterEnv (awsIp size subnets) mkDataDir size)
+mkBootstrapEnv config = (mkClusterEnv (internalAwsIp size subnets)
+                                      mkDataDir
+                                      size)
     { _clusterGenesisJson = dataRoot </> "genesis.json"
     }
   where
