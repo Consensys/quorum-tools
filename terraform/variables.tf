@@ -47,8 +47,12 @@ variable "pem_file" {
 }
 
 #
-# Variables that can be overridden by multi-region settings:
+# Variables that can be overridden by multi-region settings (see: multi-region-vars/*.tfvars):
 #
+variable "multi_region" {
+  description = "Whether the cluster spans AWS regions. This is a boolean represented as a string until TF supports first-class booleans."
+  default = "0"
+}
 variable "aws_region" {
   description = "AWS region"
   default = "us-east-1"

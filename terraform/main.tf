@@ -242,7 +242,8 @@ resource "aws_instance" "quorum" {
   provisioner "remote-exec" {
     inline = [
       "echo '${var.first_geth_id + count.index}' >node-id",
-      "echo 'abcd' >password"
+      "echo 'abcd' >password",
+      "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type"
     ]
   }
 
