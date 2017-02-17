@@ -167,3 +167,9 @@ data Checkpoint result where
 newtype PfToken = PfToken Text
 
 newtype Pid = Pid Int
+
+-- AWS support
+
+data AwsClusterType
+  = SingleRegion
+  | MultiRegion
