@@ -2,6 +2,8 @@
 
 set -e
 
+ssh_key_name="ethereum-raft-demo.pem"
+
 die() {
     echo >&2 "$@"
     exit 1
@@ -11,7 +13,18 @@ print_usage() {
     die "usage: $0 [plan|apply|show|console|refresh|destroy|output[ output-name]|taint resource-name|untaint resource-name]"
 }
 
+check_ssh_key() {
+    ssh-add -l | grep "${ssh_key_name}" >/dev/null
+}
+
+add_ssh_key() {
+    echo "SSH key not found in agent. trying to use ssh-add to add ${ssh_key_name}..."
+    ssh-add "../credentials/${ssh_key_name}"
+}
+
 [ "$#" -eq 0 ] && print_usage
+
+check_ssh_key || add_ssh_key
 
 # Set up variables
 
