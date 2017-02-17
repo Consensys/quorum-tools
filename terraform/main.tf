@@ -233,6 +233,7 @@ resource "aws_instance" "quorum" {
       "scripts/prepare.sh",
       "scripts/fetch-quorum-image.sh",
       "scripts/fetch-harness-image.sh",
+      "scripts/possibly-start-tunnels.sh",
       "scripts/start-quorum.sh"
     ]
   }
