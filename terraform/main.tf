@@ -161,7 +161,7 @@ resource "null_resource" "cluster_datadirs" {
   }
 
   provisioner "local-exec" {
-    command = "stack exec -- aws-bootstrap --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root}"
+    command = "stack exec -- aws-bootstrap-region --first-geth-id ${var.first_geth_id} --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root} ${var.multi_region ? "--multi-region" : ""}"
   }
 }
 
@@ -223,7 +223,8 @@ resource "aws_instance" "quorum" {
     inline = [
       "echo '${var.first_geth_id + count.index}' >node-id",
       "echo 'abcd' >password",
-      "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type"
+      "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type",
+      "echo '${var.total_cluster_size}' >cluster-size"
     ]
   }
 

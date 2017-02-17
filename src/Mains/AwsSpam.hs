@@ -23,10 +23,10 @@ cliParser :: Parser (RateLimit Millisecond)
 cliParser = perSecond <$>
   optInteger "rps"  'r' "The number of requests per second"
 
-cEnv :: ClusterEnv
-cEnv = mkClusterEnv (internalAwsIp maxClusterSize numSubnets)
-                    mkDataDir
-                    maxClusterSize
+cEnv :: GethId -> ClusterEnv
+cEnv gid = mkClusterEnv (internalAwsIp maxClusterSize numSubnets)
+                        mkDataDir
+                        [gid]
   where
     -- We don't need the exact cluster size here; just something higher than the
     -- geth ID we want to spam:
@@ -41,5 +41,5 @@ awsSpamMain :: IO ()
 awsSpamMain = do
   rateLimit <- options "Spams the local node with public transactions" cliParser
   gid <- readGidFromHomedir
-  geth <- runReaderT (loadLocalNode gid) cEnv
+  geth <- runReaderT (loadLocalNode gid) (cEnv gid)
   spamGeth geth rateLimit

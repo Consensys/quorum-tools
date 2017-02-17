@@ -59,19 +59,18 @@ emptyClusterEnv = ClusterEnv
   , _clusterDataDirs     = Map.fromList []
   }
 
-mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> Int -> ClusterEnv
-mkClusterEnv mkIp mkDataDir size = emptyClusterEnv
+mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
+mkClusterEnv mkIp mkDataDir gids = emptyClusterEnv
     { _clusterIps      = Map.fromList [(gid, mkIp gid)      | gid <- gids]
     , _clusterDataDirs = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
     }
-  where
-    gids = clusterGids size
 
 mkLocalEnv :: Int -> ClusterEnv
-mkLocalEnv = mkClusterEnv mkIp mkDataDir
+mkLocalEnv size = mkClusterEnv mkIp mkDataDir gids
   where
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
+    gids = clusterGids size
 
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)

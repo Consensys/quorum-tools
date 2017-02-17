@@ -64,8 +64,11 @@ variable "subnet_azs" {
   type = "list"
   default = ["us-east-1b", "us-east-1c", "us-east-1d"]
 }
+variable "total_cluster_size" {
+  default = 3 # Number of quorum nodes in this cluster across all aws regions.
+}
 variable "num_instances" {
-  default = 3
+  default = 3 # This is less than total_cluster_size when we are running a multi-region setup.
 }
 variable "quorum_eip_ids" {
   description = "Pre-allocated elastic IP( ID)s to be associated with quorum nodes. This is primarily for supporting multi-region clusters."
