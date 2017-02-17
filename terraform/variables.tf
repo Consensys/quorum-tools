@@ -45,6 +45,9 @@ variable "remote_homedir" {
 variable "pem_file" {
   default = "../credentials/ethereum-raft-demo.pem"
 }
+variable "precreated_global_quorum_iam_instance_profile_id" {
+  default = "quorum-raft.global.ecrAccessor" # This was the output of provisioning the permanent "global" IAM infrastructure.
+}
 
 #
 # Variables that can be overridden by multi-region settings (see: multi-region-vars/*.tfvars):

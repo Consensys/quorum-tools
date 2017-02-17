@@ -153,36 +153,6 @@ resource "aws_security_group" "quorum_instance" {
   }
 }
 
-resource "aws_iam_role" "ecr_accessor" {
-  name = "${var.project}.${var.env}.ecrAccessor"
-  assume_role_policy = <<EOF
-{ "Version":   "2012-10-17"
-, "Statement": [ { "Effect":    "Allow"
-                 , "Principal": { "Service": "ec2.amazonaws.com" }
-                 , "Action":    "sts:AssumeRole" } ] }
-EOF
-}
-
-resource "aws_iam_role_policy" "ecr_accessor" {
-  name = "${var.project}.${var.env}.ecrAccessor"
-  role = "${aws_iam_role.ecr_accessor.id}"
-  policy = <<EOF
-{ "Version":   "2012-10-17"
-, "Statement": [ { "Action":   [ "ecr:GetAuthorizationToken"
-                               , "ecr:BatchCheckLayerAvailability"
-                               , "ecr:GetDownloadUrlForLayer"
-                               , "ecr:BatchGetImage"
-                               ]
-                 , "Effect":   "Allow"
-                 , "Resource": "*" } ] }
-EOF
-}
-
-resource  "aws_iam_instance_profile" "ecr_accessor" {
-  name = "${var.project}.${var.env}.ecrAccessor"
-  roles = ["${aws_iam_role.ecr_accessor.name}"]
-}
-
 resource "null_resource" "cluster_datadirs" {
   triggers {
     num_instances = "${var.num_instances}"
@@ -201,7 +171,7 @@ resource "aws_instance" "quorum" {
 
   ami = "${data.aws_ami.ubuntu.id}"
   instance_type = "${lookup(var.instance_types, "quorum")}"
-  iam_instance_profile = "${aws_iam_instance_profile.ecr_accessor.id}"
+  iam_instance_profile = "${var.precreated_global_quorum_iam_instance_profile_id}"
   #
   # NOTE: rpc_sender is in this list temporarily, until we provision nodes that are dedicated to send txes
   #

@@ -23,12 +23,17 @@ if [ ${num_components} -eq 2 ]
 then
     env_name=${bin_components[0]}
     region=${bin_components[1]}
-    state_file="state/${env_name}-${region}.tfstate"
-    var_file_flag="-var-file multi-region-vars/${region}.tfvars"
+    state_file="$(pwd)/state/${env_name}-${region}.tfstate"
+    var_file_flag="-var-file $(pwd)/multi-region-vars/${region}.tfvars"
 else
     env_name=${bin_name}
-    state_file="state/${env_name}.tfstate"
+    state_file="$(pwd)/state/${env_name}.tfstate"
     var_file_flag=""
+
+    if [[ "${env_name}" == "global" ]]
+    then
+        cd global
+    fi
 fi
 
 # Process command
