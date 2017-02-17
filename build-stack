@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+cp credentials/id_noirqs docker-stack/
+cp credentials/github.pub docker-stack/
+
+docker build -t quorum-stack ./docker-stack/
+
+rm docker-stack/id_noirqs
+rm docker-stack/github.pub

@@ -1,18 +1,24 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -u
 set -e
 
-cp credentials/id_noirqs docker-quorum/
-cp credentials/id_noirqs docker-harness/
-cp credentials/github.pub docker-quorum/
-cp credentials/github.pub docker-harness/
-
 # Build geth before harness; the latter depends on the former.
-docker build -t quorum-raft ./docker-quorum/
-docker build -t quorum-harness ./docker-harness/
+NAMES=(quorum-raft quorum-stack quorum-constellation quorum-harness)
+DIRS=(./docker-quorum/ ./docker-stack/ ./docker-constellation/ ./docker-harness/)
+SECRETS=(id_noirqs github.pub)
 
-rm docker-quorum/id_noirqs
-rm docker-harness/id_noirqs
-rm docker-quorum/github.pub
-rm docker-harness/github.pub
+for i in `seq 0 3`
+do
+  for secret in ${SECRETS[@]}
+  do
+    cp credentials/${secret} ${DIRS[$i]}
+  done
+
+  docker build -t ${NAMES[$i]} ${DIRS[$i]}
+
+  for secret in ${SECRETS[@]}
+  do
+    rm ${DIRS[$i]}${secret}
+  done
+done

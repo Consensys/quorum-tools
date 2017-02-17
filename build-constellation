@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+set -u
+set -e
+
+cp credentials/id_noirqs docker-constellation/
+cp credentials/github.pub docker-constellation/
+
+docker build -t quorum-constellation ./docker-constellation/
+
+rm docker-constellation/id_noirqs
+rm docker-constellation/github.pub
