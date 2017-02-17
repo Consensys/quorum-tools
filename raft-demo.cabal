@@ -76,7 +76,7 @@ executable local-spam
   build-depends    : base, raft-demo
   default-language : Haskell2010
 
-executable aws-bootstrap-region
+executable aws-bootstrap
   main-is          : AwsBootstrap.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts

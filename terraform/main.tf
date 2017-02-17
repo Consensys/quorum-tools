@@ -161,7 +161,7 @@ resource "null_resource" "cluster_datadirs" {
   }
 
   provisioner "local-exec" {
-    command = "stack exec -- aws-bootstrap-region --first-geth-id ${var.first_geth_id} --nodes ${var.num_instances} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root} ${var.multi_region ? "--multi-region" : ""}"
+    command = "${var.multi_region ? (var.first_geth_id == "1" ? "stack exec -- aws-bootstrap --cluster-size ${var.total_cluster_size} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root} --multi-region" : "echo skipping datadir creation for multi-region cluster beyond the first region") : "stack exec -- aws-bootstrap --cluster-size ${var.total_cluster_size} --subnets ${length(var.subnet_azs)} --path ${var.local_datadir_root}" }"
   }
 }
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections     #-}
 
--- | Bootstraps a cluster for a single AWS region.
+-- | Bootstraps an AWS cluster
 module Mains.AwsBootstrap where
 
 import           Control.Monad.Reader (runReaderT)
@@ -14,22 +14,19 @@ import           Cluster.Aws          (internalAwsIp)
 import           Cluster.Types
 
 data AwsConfig
-  = AwsConfig { numNodes    :: Int
-              , numSubnets  :: Int
+  = AwsConfig { numSubnets  :: Int
               , rootDir     :: FilePath
               , clusterType :: AwsClusterType
-              , firstGid    :: GethId
+              , clusterSize :: Int
               }
 
 cliParser :: Parser AwsConfig
 cliParser = AwsConfig
-  <$> optInt  "nodes"         'n' "Number of nodes in the region"
-  <*> optInt  "subnets"       's' "Number of subnets in the region"
+  <$> optInt  "subnets"       's' "Number of subnets in the region"
   <*> optPath "path"          'p' "Output path"
   <*> fmap (bool SingleRegion MultiRegion)
-           (switch  "multi-region" 'g' "Whether the cluster is multi-region")
-  <*> fmap GethId
-           (optInt  "first-geth-id" 'i' "First geth ID in the region")
+           (switch  "multi-region" 'm' "Whether the cluster is multi-region")
+  <*> optInt "cluster-size"   'n' "Total cluster size across all regions"
 
 mkBootstrapEnv :: AwsConfig -> [GethId] -> ClusterEnv
 mkBootstrapEnv config gids = (mkClusterEnv mkIp mkDataDir gids)
@@ -37,7 +34,7 @@ mkBootstrapEnv config gids = (mkClusterEnv mkIp mkDataDir gids)
     }
   where
     dataRoot = rootDir config
-    size     = numNodes config
+    size     = clusterSize config
     subnets  = numSubnets config
 
     mkDataDir (GethId gid) = DataDir $
@@ -51,8 +48,8 @@ mkBootstrapEnv config gids = (mkClusterEnv mkIp mkDataDir gids)
 
 awsBootstrapMain :: IO ()
 awsBootstrapMain = do
-  config <- options "Bootstraps a cluster for a single AWS region" cliParser
-  let gids = take (numNodes config) (enumFrom $ firstGid config)
+  config <- options "Bootstraps an AWS cluster" cliParser
+  let gids = clusterGids $ clusterSize config
 
   sh $ flip runReaderT (mkBootstrapEnv config gids) $
     wipeAndSetupNodes (rootDir config) gids
