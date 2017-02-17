@@ -13,10 +13,6 @@ import           Cluster
 import           Cluster.Aws          (internalAwsIp)
 import           Cluster.Types
 
-data AwsClusterType
-  = SingleRegion
-  | MultiRegion
-
 data AwsConfig
   = AwsConfig { numNodes    :: Int
               , numSubnets  :: Int
