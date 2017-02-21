@@ -2,6 +2,7 @@
 
 module Cluster.Aws
   ( internalAwsIp
+  , dockerHostIp
   ) where
 
 import Turtle
@@ -18,3 +19,6 @@ internalAwsIp clusterSize subnets (GethId gid) =
     idx = gid - 1 -- Zero-indexed geth id
     subnet    = 1 + (idx `mod` clusterSize)
     lastOctet = 101 + (idx `div` subnets)
+
+dockerHostIp :: Ip
+dockerHostIp = Ip "172.17.0.1"
