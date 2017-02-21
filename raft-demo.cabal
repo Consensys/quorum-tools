@@ -38,6 +38,7 @@ library
     Mains.LocalSpam
     Mains.LocalStart
     Mains.PartitionTest
+    Mains.PrivateStateTest
     Mains.PublicStateTest
     Mains.RestartNodeTest
     Mains.Test2
@@ -114,9 +115,16 @@ test-suite leader-partition
   build-depends    : base, raft-demo
   default-language : Haskell2010
 
-
 test-suite public-state
   main-is          : PublicStateTest.hs
+  type             : exitcode-stdio-1.0
+  hs-source-dirs   : tests
+  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
+  build-depends    : base, raft-demo
+  default-language : Haskell2010
+
+test-suite private-state
+  main-is          : PrivateStateTest.hs
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts

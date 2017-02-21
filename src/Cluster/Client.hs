@@ -110,8 +110,8 @@ perSecond times = every $
 
 spam :: (MonadIO m, TimeUnit a) => Session -> RateLimit a -> Geth -> m ()
 spam session rateLimit geth = do
-  let url = T.unpack $ gethUrl geth
-      postBody = Sess.post session url
+  let gUrl = T.unpack $ gethUrl geth
+      postBody = Sess.post session gUrl
   waitThenPost <- liftIO $
     generateRateLimitedFunction rateLimit postBody dontCombine
   forever $ liftIO $ waitThenPost (txRpcBody geth)
