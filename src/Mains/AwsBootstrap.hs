@@ -10,7 +10,7 @@ import           Prelude              hiding (FilePath)
 import           Turtle
 
 import           Cluster
-import           Cluster.Aws          (internalAwsIp)
+import           Cluster.Aws          (dockerHostIp, internalAwsIp)
 import           Cluster.Types
 
 data AwsConfig
@@ -44,7 +44,7 @@ mkBootstrapEnv config gids = (mkClusterEnv mkIp mkDataDir gids)
     -- the open internet, we do so through local SSH tunnels.
     mkIp = case clusterType config of
       SingleRegion -> internalAwsIp size subnets
-      MultiRegion  -> const $ Ip "127.0.0.1"
+      MultiRegion  -> const dockerHostIp
 
 awsBootstrapMain :: IO ()
 awsBootstrapMain = do

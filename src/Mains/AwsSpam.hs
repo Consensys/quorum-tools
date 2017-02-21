@@ -9,7 +9,7 @@ import           Data.Time.Units      (Millisecond)
 import           Turtle
 
 import           Cluster
-import           Cluster.Aws          (internalAwsIp)
+import           Cluster.Aws          (dockerHostIp, internalAwsIp)
 import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
 import           Cluster.Types
 
@@ -35,7 +35,7 @@ cEnv cType gid = mkClusterEnv mkIp mkDataDir [gid]
 
     mkIp = case cType of
       SingleRegion -> internalAwsIp maxClusterSize numSubnets
-      MultiRegion  -> const $ Ip "127.0.0.1"
+      MultiRegion  -> const dockerHostIp
 
 readGidFromHomedir :: IO GethId
 readGidFromHomedir = GethId . read <$> readFile "/home/ubuntu/node-id"
