@@ -231,8 +231,7 @@ resource "aws_instance" "quorum" {
   provisioner "remote-exec" {
     scripts = [
       "scripts/prepare.sh",
-      "scripts/fetch-quorum-image.sh",
-      "scripts/fetch-harness-image.sh",
+      "scripts/fetch-images.sh",
       "scripts/possibly-start-tunnels.sh",
       "scripts/start-quorum.sh"
     ]
