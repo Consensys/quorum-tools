@@ -1,9 +1,0 @@
-#!/usr/bin/env sh
-
-set -u
-set -e
-
-# Build geth before harness; the latter depends on the former.
-
-./build-quorum
-./build-harness
