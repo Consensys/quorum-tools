@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+
 module Constellation where
 
 import           Control.Concurrent         (threadDelay)
@@ -26,6 +27,7 @@ copyKeys conf = sh $ do
 
 setupConstellationNode :: MonadManaged io => ConstellationConfig -> io FilePath
 setupConstellationNode conf = do
+  copyKeys conf
   confFile <- mktempfile "/tmp" "constellation"
   liftIO $ writeTextFile confFile (confText conf)
   return confFile
@@ -40,7 +42,7 @@ startConstellationNode confPath = do
   liftIO $ threadDelay 50000
 
 keydir :: ConstellationConfig -> FilePath
-keydir (ConstellationConfig {datadir = DataDir dir}) = dir </> "keys"
+keydir ConstellationConfig {datadir = DataDir dir} = dir </> "keys"
 
 confText :: ConstellationConfig -> Text
 confText conf =
