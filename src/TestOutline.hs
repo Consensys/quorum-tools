@@ -8,6 +8,7 @@ module TestOutline where
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
 import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar, takeMVar)
+import           Control.Monad            (forM_)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
 import           Data.Monoid              (Last (Last))
@@ -152,7 +153,7 @@ verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
   outstandingTxes_ <- traverse readMVar outstandingTxesMs
   earlyTerminations <- traverse poll terminatedAsyncs
 
-  flip mapM_ outstandingTxes_ $ \(OutstandingTxes txes) ->
+  forM_ outstandingTxes_ $ \(OutstandingTxes txes) ->
     putStrLn $ "Outstanding txes: " ++ show (Set.size txes)
 
   let noEarlyTerminations = mconcat $ flip map earlyTerminations $ \case
@@ -185,8 +186,9 @@ partition gdata millis node =
   then PF.partition gdata millis node >> PF.flushPf
   else IPT.partition gdata millis node
 
--- TODO make this not callback-based
--- spammer :: MonadManaged m =>
+spamTransactions :: MonadIO m => [Geth] -> m ()
+spamTransactions = mapM_ (`spamGeth` perSecond 10)
+
 withSpammer :: (MonadIO m, MonadReader ClusterEnv m) => [Geth] -> m () -> m ()
 withSpammer geths action = do
   spammer <- clusterAsync $ spamTransactions geths

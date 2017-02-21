@@ -3,7 +3,6 @@
 
 module Cluster.Client
   ( sendTx
-  , spamTransactions
   , spamGeth
   , bench
   , loadLocalNode
@@ -78,18 +77,6 @@ bench geth (Seconds seconds) = view benchShell
                        seconds
                        (gethUrl geth)
       inshell cmd empty
-
--- | Continuously send transaction requests in a round-robin order. This runs
---   indefinitely. Assumes that the list has at least one element.
---
--- TODO: this should be converted to use 'spam' below, re-using pooled
--- connections.
---
-spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions geths = go geths
-  where
-    go (geth:rest) = sendTx geth >> go rest
-    go []          = go geths
 
 --
 -- NOTE: this only works for the *local* node. the account ID is obtained from
