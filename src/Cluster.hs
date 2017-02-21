@@ -15,7 +15,7 @@ import           Control.Concurrent.MVar    (isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar, tryTakeMVar)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, view)
+import           Control.Lens               (at, view, (^.))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -41,7 +41,7 @@ import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
-import           Turtle                     hiding (view)
+import           Turtle                     hiding (view, env)
 
 import           Checkpoint
 import           Cluster.Types
@@ -49,14 +49,15 @@ import           Control
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
-  { _clusterPassword     = "abcd"
-  , _clusterNetworkId    = 1418
-  , _clusterBaseHttpPort = 30400
-  , _clusterBaseRpcPort  = 40400
-  , _clusterVerbosity    = 3
-  , _clusterGenesisJson  = "gdata" </> "genesis.json"
-  , _clusterIps          = Map.fromList []
-  , _clusterDataDirs     = Map.fromList []
+  { _clusterPassword           = "abcd"
+  , _clusterNetworkId          = 1418
+  , _clusterBaseHttpPort       = 30400
+  , _clusterBaseRpcPort        = 40400
+  , _clusterVerbosity          = 3
+  , _clusterGenesisJson        = "gdata" </> "genesis.json"
+  , _clusterIps                = Map.empty
+  , _clusterDataDirs           = Map.empty
+  , _clusterConstellationConfs = Map.empty
   }
 
 mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
@@ -75,12 +76,13 @@ mkLocalEnv size = mkClusterEnv mkIp mkDataDir gids
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
 
-gidDataDir :: HasEnv m => GethId -> m DataDir
-gidDataDir gid = do
-    mDataDir <- view $ clusterDataDirs . at gid
-    pure $ force mDataDir
+pureGidDataDir :: GethId -> ClusterEnv -> DataDir
+pureGidDataDir gid env = force $ env ^. clusterDataDirs . at gid
   where
     force = fromMaybe $ error $ "no data dir found for " <> show gid
+
+gidDataDir :: HasEnv m => GethId -> m DataDir
+gidDataDir gid = pureGidDataDir gid <$> ask
 
 httpPort :: HasEnv m => GethId -> m Port
 httpPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseHttpPort
@@ -124,7 +126,8 @@ initNode genesisJsonPath gid = do
 
 readAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
 readAccountKey dir acctId@(AccountId aid) = do
-    paths <- fold (ls $ dataDirPath dir <> "keystore") Fold.list
+    let keystoreDir = dataDirPath dir </> "keystore"
+    paths <- fold (ls keystoreDir) Fold.list
     let mPath = headMay $ filter (format fp
                                     >>> match (contains $ text aid)
                                     >>> null
@@ -209,6 +212,7 @@ mkGeth gid eid aid = do
        <*> gidDataDir gid
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
+       <*> (Map.lookup gid <$> view clusterConstellationConfs)
 
 installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
 installAccountKey gid acctKey = do
@@ -234,16 +238,8 @@ shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
 jsEscapeSingleQuotes :: Text -> Text
 jsEscapeSingleQuotes = replace "'" "\\'"
 
-ipcPath :: DataDir -> FilePath
-ipcPath datadir = dataDirPath datadir </> "geth.ipc"
-
-sendJsSubcommand :: DataDir -> Text -> Text
-sendJsSubcommand datadir js = format ("--exec '"%s%"' attach "%s)
-                                     (shellEscapeSingleQuotes js)
-                                     ipcEndpoint
-  where
-    ipcEndpoint :: Text
-    ipcEndpoint = format ("ipc:"%fp) $ ipcPath datadir
+gethIpcPath :: DataDir -> FilePath
+gethIpcPath datadir = dataDirPath datadir </> "geth.ipc"
 
 -- TODO: switch to a more efficient version
 textEncode :: ToJSON a => a -> Text
@@ -352,6 +348,11 @@ wipeAndSetupNodes rootDir gids = do
 gethShell :: Geth -> Shell Line
 gethShell geth = do
   pwPath <- using $ fileContaining $ select $ textToLines $ gethPassword geth
+
+  case gethConstellationConfig geth of
+    Just conf -> export "PRIVATE_CONFIG" (format fp conf)
+    Nothing -> pure ()
+
   inshellWithJoinedErr (gethCommand geth $
                                     format ("--unlock 0 --password "%fp) pwPath)
                        empty
@@ -496,15 +497,16 @@ instrumentedGethShell :: Geth
                                (Set GethId,
                                (Maybe AssumedRole,
                                ())))))))
-instrumentedGethShell geth = gethShell geth
-                           & tee logPath
-                           & startObserving
-                           & observingRoles
-                           & observingActivation
-                           & observingBoot
-                           & observingLastBlock
-                           & observingRaftStatus
-                           & observingTxes
+instrumentedGethShell geth
+  = gethShell geth
+  & tee logPath
+  & startObserving
+  & observingRoles
+  & observingActivation
+  & observingBoot
+  & observingLastBlock
+  & observingRaftStatus
+  & observingTxes
   where
     logPath = fromText $ nodeName (gethId geth) <> ".out"
 
@@ -574,11 +576,6 @@ runNode numNodes geth = do
     <*> pure txAddrsMVar
     <*> connected
     <*> assumedRole
-
-sendJs :: MonadIO m => Geth -> Text -> m ()
-sendJs geth js = void $ sh $ inshellWithErr (gethCommand geth subcmd) empty
-  where
-    subcmd = sendJsSubcommand (gethDataDir geth) js
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do

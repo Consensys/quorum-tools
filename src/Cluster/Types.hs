@@ -19,6 +19,17 @@ import           Data.Text                (Text)
 import           Prelude                  hiding (FilePath)
 import           Turtle                   (FilePath)
 
+-- Constellation
+
+data ConstellationConfig = ConstellationConfig
+  { url :: Text
+  , datadir :: DataDir
+  , constellationGethId :: GethId
+  , otherNodes :: [Text]
+  } deriving (Eq, Show)
+
+-- Geth / Cluster
+
 newtype GethId = GethId { gId :: Int }
   deriving (Show, Eq, Num, Ord, Enum)
 
@@ -44,14 +55,15 @@ data DataDir = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
 data ClusterEnv
-  = ClusterEnv { _clusterPassword     :: Text
-               , _clusterNetworkId    :: Int
-               , _clusterBaseHttpPort :: Port
-               , _clusterBaseRpcPort  :: Port
-               , _clusterVerbosity    :: Verbosity
-               , _clusterGenesisJson  :: FilePath
-               , _clusterIps          :: Map GethId Ip
-               , _clusterDataDirs     :: Map GethId DataDir
+  = ClusterEnv { _clusterPassword           :: Text
+               , _clusterNetworkId          :: Int
+               , _clusterBaseHttpPort       :: Port
+               , _clusterBaseRpcPort        :: Port
+               , _clusterVerbosity          :: Verbosity
+               , _clusterGenesisJson        :: FilePath
+               , _clusterIps                :: Map GethId Ip
+               , _clusterDataDirs           :: Map GethId DataDir
+               , _clusterConstellationConfs :: Map GethId FilePath
                }
   deriving (Eq, Show)
 
@@ -89,6 +101,7 @@ data Geth =
        , gethDataDir   :: DataDir
        , gethIp        :: Ip
        , gethUrl       :: Text
+       , gethConstellationConfig :: Maybe FilePath
        }
   deriving (Show, Eq)
 
@@ -167,6 +180,19 @@ data Checkpoint result where
 newtype PfToken = PfToken Text
 
 newtype Pid = Pid Int
+
+-- Contracts
+
+-- | A contract may be visible to everyone or only to a list of public keys
+data ContractPrivacy
+  = Public
+  | PrivateFor [Text]
+
+-- A contract is:
+-- * its privacy
+-- * bytecode
+-- * abi
+data Contract = Contract ContractPrivacy Text Text
 
 -- AWS support
 

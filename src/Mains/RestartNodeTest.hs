@@ -98,8 +98,8 @@ restartNodeTestMain = do
         verifyLastBlocks lastBlocks <> verifyOutstandingTxes outstandingTxes_
 
   case result of
-    Falsified f -> do
+    Falsified reason -> do
       putStrLn $ "falsified"
-      print f
+      print reason
       exit failedTestCode
     _           -> putStrLn "all successful!"

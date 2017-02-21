@@ -6,7 +6,8 @@ import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar,
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
 import           Data.Foldable              (traverse_, toList)
-import           Turtle                     (MonadIO, void, fork, liftIO, wait)
+import           Turtle                     (MonadIO, void, fork, liftIO, wait,
+                                             Fold(..))
 
 -- | Non-blocking MVar put.
 --
@@ -43,3 +44,14 @@ awaitAny = liftIO . void . waitAny . toList
 -- @
 onExit :: IO () -> (() -> IO r) -> IO r
 onExit action = bracket (pure ()) (const action)
+
+-- | @(find' predicate)@ returns the first @Just@ predicate result or 'Nothing'
+-- if no element satisfies the predicate
+find' :: (a -> Maybe b) -> Fold a (Maybe b)
+find' predicate = Fold step Nothing id where
+  step accum a =
+    let match = predicate a
+    in case (accum, match) of
+         (Just _b, _)       -> accum
+         (Nothing, Just _b) -> match
+         (Nothing, Nothing) -> Nothing

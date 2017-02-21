@@ -55,7 +55,7 @@ getPorts (Pid pid) =
   in nub <$> fold (inshell cmd "") findPorts
 
 getPid :: MonadIO io => DataDir -> io Pid
-getPid datadir =
+getPid gDataDir =
   let pidPat :: Pattern Pid
       pidPat = do
         str <- "p" *> bounded 2 6 digit
@@ -75,10 +75,10 @@ getPid datadir =
       findPid = Fold step mempty forceFirst
 
   in do
-       let cmd' = format ("lsof -Fp "%fp) (ipcPath datadir)
+       let cmd' = format ("lsof -Fp "%fp) (gethIpcPath gDataDir)
        fold (inshell cmd' "") findPid
 
 getPortsForGeth :: MonadIO io => FilePath -> GethId -> io [Port]
-getPortsForGeth ddRoot gid = getPid datadir >>= getPorts
+getPortsForGeth ddRoot gid = getPid gDataDir >>= getPorts
   where
-    datadir = DataDir $ ddRoot </> fromText (nodeName gid)
+    gDataDir = DataDir $ ddRoot </> fromText (nodeName gid)
