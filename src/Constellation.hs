@@ -17,8 +17,7 @@ fShow = fromString . show
 -- | Copy the contellation's keypair to its datadir
 copyKeys :: MonadIO io => ConstellationConfig -> io ()
 copyKeys conf = sh $ do
-  let predir = "credentials/constellation-keys"
-        </> fShow (gId (constellationGethId conf))
+  let predir = "credentials/constellation-keys" </> fShow (gId (ccGethId conf))
       postdir = keydir conf
 
   file <- ls predir
@@ -42,13 +41,13 @@ startConstellationNode confPath = do
   liftIO $ threadDelay 50000
 
 keydir :: ConstellationConfig -> FilePath
-keydir ConstellationConfig {datadir = DataDir dir} = dir </> "keys"
+keydir ConstellationConfig {ccDatadir = DataDir dir} = dir </> "keys"
 
 confText :: ConstellationConfig -> Text
 confText conf =
   let kdir = keydir conf
       ConstellationConfig
-        {url, datadir = DataDir dir, constellationGethId, otherNodes} = conf
+        {ccUrl, ccDatadir = DataDir dir, ccGethId, ccOtherNodes} = conf
 
       lf :: Format r r
       lf = "\n"
@@ -65,9 +64,9 @@ confText conf =
         "privateKeyPath = "%quote fp%lf%
         "storagePath = "%quote fp%lf
 
-  in format contents url (9000 + gId constellationGethId)
+  in format contents ccUrl (9000 + gId ccGethId)
        (dir </> "constellation.ipc")
-       otherNodes
+       ccOtherNodes
        (kdir </> "constellation.pub")
        (kdir </> "constellation.key")
        (dir </> "constellation")
