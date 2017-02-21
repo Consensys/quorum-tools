@@ -13,7 +13,7 @@ We use [docker](https://www.docker.com/) to build images for AWS and [Terraform]
 We'll start with an example of the basic deployment workflow, then detail what all the pieces do.
 
 ```console
-$ ./build && push
+$ ./build-all && ./push
 Sending build context to Docker daemon 4.608 kB
 Step 1/7 : FROM ubuntu:xenial
  ---> 12543ced0f6f
