@@ -22,10 +22,10 @@ import           Turtle                   (FilePath)
 -- Constellation
 
 data ConstellationConfig = ConstellationConfig
-  { url :: Text
-  , datadir :: DataDir
-  , constellationGethId :: GethId
-  , otherNodes :: [Text]
+  { ccUrl        :: Text
+  , ccDatadir    :: DataDir
+  , ccGethId     :: GethId
+  , ccOtherNodes :: [Text]
   } deriving (Eq, Show)
 
 -- Geth / Cluster
