@@ -33,7 +33,6 @@ constellationStartup = do
       gethIds = [1, 2, 3]
       firmament = map (mkConstellationConfig clusterEnv gethIds) gethIds
 
-  mapM_ copyKeys firmament
   confFiles <- mapM setupConstellationNode firmament
   mapM_ startConstellationNode confFiles
 
