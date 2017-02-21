@@ -14,7 +14,7 @@ start_tunnel() {
     echo "starting tunnel to geth ${gid} at ${eip}:${port}"
 
     # I couldn't figure out how to get docker to cooperate with starting an SSH tunnel inside of it, so we use nohup and background for now:
-    nohup bash -c "until (ssh -M -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_tunneler -N -L ${port}:localhost:${port} ubuntu@${eip}); do echo 're-establishing tunnel to geth ${gid}:${port}'; done" &
+    nohup bash -c "until (ssh -M -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_tunneler -N -L 0.0.0.0:${port}:localhost:${port} ubuntu@${eip}); do echo 're-establishing tunnel to geth ${gid}:${port}'; done" &
 }
 
 start_tunnels() {
