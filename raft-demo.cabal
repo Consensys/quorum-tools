@@ -47,7 +47,9 @@ library
     Cluster
     Cluster.Aws
     Cluster.Client
+    Cluster.StateTestsShared
     Cluster.Types
+    Constellation
     PacketFilter
     IpTables
     SharedPartitioning
