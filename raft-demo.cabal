@@ -29,7 +29,13 @@ library
     time                  == 1.6.* || == 1.8.*,
     rate-limit            == 1.1.*,
     time-units            == 1.0.*,
-    http-client           == 0.4.*
+    http-client           == 0.4.*,
+    base16-bytestring     == 0.1.*,
+    cryptonite            == 0.21.*,
+    byteable              == 0.1.*,
+    unordered-containers  == 0.2.*,
+    vector                == 0.12.*,
+    memory                == 0.14.*
   exposed-modules:
     Mains.AwsBootstrap
     Mains.AwsSpam
@@ -47,8 +53,11 @@ library
     Cluster
     Cluster.Aws
     Cluster.Client
+    Cluster.Genesis
+    Cluster.GenesisCode
     Cluster.StateTestsShared
     Cluster.Types
+    Cluster.Util
     Constellation
     PacketFilter
     IpTables
