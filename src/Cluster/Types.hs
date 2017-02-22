@@ -54,6 +54,26 @@ newtype Ip = Ip { getIp :: Text }
 data DataDir = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
+data AccountId = AccountId { accountId :: Text }
+  deriving (Show, Eq)
+
+data AccountKey = AccountKey { akAccountId :: AccountId
+                             , akKey       :: Text
+                             }
+  deriving (Show, Eq)
+
+data Consensus
+  = Raft
+  | QuorumChain { qcBlockMaker    :: (GethId, AccountId)
+                , qcVoterAccounts :: Map GethId AccountId }
+  deriving (Eq, Show)
+
+data ConsensusPeer
+  = RaftPeer
+  | QuorumChainPeer { qcVoterAccount      :: Maybe AccountId
+                    , qcBlockMakerAccount :: Maybe AccountId }
+  deriving (Eq, Show)
+
 data ClusterEnv
   = ClusterEnv { _clusterPassword           :: Text
                , _clusterNetworkId          :: Int
@@ -64,6 +84,7 @@ data ClusterEnv
                , _clusterIps                :: Map GethId Ip
                , _clusterDataDirs           :: Map GethId DataDir
                , _clusterConstellationConfs :: Map GethId FilePath
+               , _clusterConsensus          :: Consensus
                }
   deriving (Eq, Show)
 
@@ -81,26 +102,19 @@ instance FromJSON EnodeId where
   parseJSON str@(String _) = EnodeId <$> parseJSON str
   parseJSON invalid        = typeMismatch "EnodeId" invalid
 
-data AccountId = AccountId { accountId :: Text }
-  deriving (Show, Eq)
-
-data AccountKey = AccountKey { akAccountId :: AccountId
-                             , akKey       :: Text
-                             }
-  deriving (Show, Eq)
-
 data Geth =
-  Geth { gethId        :: GethId
-       , gethEnodeId   :: EnodeId
-       , gethHttpPort  :: Port
-       , gethRpcPort   :: Port
-       , gethAccountId :: AccountId
-       , gethPassword  :: Text
-       , gethNetworkId :: Int
-       , gethVerbosity :: Verbosity
-       , gethDataDir   :: DataDir
-       , gethIp        :: Ip
-       , gethUrl       :: Text
+  Geth { gethId                  :: GethId
+       , gethEnodeId             :: EnodeId
+       , gethHttpPort            :: Port
+       , gethRpcPort             :: Port
+       , gethAccountId           :: AccountId
+       , gethPassword            :: Text
+       , gethNetworkId           :: Int
+       , gethVerbosity           :: Verbosity
+       , gethDataDir             :: DataDir
+       , gethConsensusPeer       :: ConsensusPeer
+       , gethIp                  :: Ip
+       , gethUrl                 :: Text
        , gethConstellationConfig :: Maybe FilePath
        }
   deriving (Show, Eq)

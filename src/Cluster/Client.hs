@@ -10,28 +10,28 @@ module Cluster.Client
   , perSecond
   ) where
 
-import           Control.Lens              (to, (^.), (^?))
-import           Control.RateLimit         (RateLimit (PerExecution),
-                                            dontCombine,
-                                            generateRateLimitedFunction)
-import           Data.Aeson                (Value, object, (.=))
-import           Data.Aeson.Lens           (key, _String)
-import qualified Data.ByteString.Lazy      as LSB
-import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>))
-import qualified Data.Text                 as T
-import           Data.Text.Lazy            (toStrict)
-import qualified Data.Text.Lazy.Encoding   as LT
+import           Control.Lens            (to, (^.), (^?))
+import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
+                                          generateRateLimitedFunction)
+import           Data.Aeson              (Value, object, (.=))
+import           Data.Aeson.Lens         (key, _String)
+import qualified Data.ByteString.Lazy    as LSB
+import           Data.Maybe              (fromMaybe)
+import           Data.Monoid             ((<>))
+import qualified Data.Text               as T
+import           Data.Text.Lazy          (toStrict)
+import qualified Data.Text.Lazy.Encoding as LT
 import           Data.Time.Units
-import           Network.HTTP.Client       (defaultManagerSettings)
-import           Network.Wreq              (Response, post, responseBody)
-import           Network.Wreq.Session      (Session)
-import qualified Network.Wreq.Session      as Sess
-import           Prelude                   hiding (FilePath, lines)
+import           Network.HTTP.Client     (defaultManagerSettings)
+import           Network.Wreq            (Response, post, responseBody)
+import           Network.Wreq.Session    (Session)
+import qualified Network.Wreq.Session    as Sess
+import           Prelude                 hiding (FilePath, lines)
 import           Turtle
 
 import           Cluster
 import           Cluster.Types
+import           Cluster.Util            (textEncode)
 
 txRpcBody :: Geth -> Value
 txRpcBody geth = object

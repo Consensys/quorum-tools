@@ -20,9 +20,7 @@ import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
-import           Data.Aeson                 (FromJSON, ToJSON, Value, decode,
-                                             encode, object, withObject, (.:),
-                                             (.=))
+import           Data.Aeson                 (Value, withObject, (.:))
 import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bifunctor             (first, second)
@@ -35,8 +33,6 @@ import qualified Data.Set                   as Set
 import           Data.Text                  (Text, isInfixOf, pack, replace)
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
-import           Data.Text.Lazy             (fromStrict, toStrict)
-import qualified Data.Text.Lazy.Encoding    as LT
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (BufferMode (..), hClose,
@@ -45,6 +41,8 @@ import           Turtle                     hiding (view, env)
 
 import           Checkpoint
 import           Cluster.Types
+import           Cluster.Genesis (createGenesisJson)
+import           Cluster.Util (textEncode, textDecode)
 import           Control
 
 emptyClusterEnv :: ClusterEnv
@@ -58,6 +56,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterIps                = Map.empty
   , _clusterDataDirs           = Map.empty
   , _clusterConstellationConfs = Map.empty
+  , _clusterConsensus          = Raft
   }
 
 mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
@@ -111,13 +110,29 @@ gethCommand geth = format ("geth --datadir "%fp       %
                                " --rpc"               %
                                " --rpccorsdomain '*'" %
                                " --rpcaddr localhost" %
-                               " --raft"              %
+                               s%
                                " "%s)
                           (dataDirPath (gethDataDir geth))
                           (gethHttpPort geth)
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
+                          (consensusOptions $ gethConsensusPeer geth)
+  where
+    consensusOptions :: ConsensusPeer -> Text
+    consensusOptions RaftPeer = "--raft"
+    consensusOptions (QuorumChainPeer mVoterAcct mBlockMakerAcct) =
+      let voteStr = case mVoterAcct of
+            Just (AccountId acctId) -> format
+              ("--voteaccount \""%s%"\" --votepassword \"\"")
+              acctId
+            Nothing -> ""
+          makerStr = case mBlockMakerAcct of
+            Just (AccountId acctId) -> format
+              ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
+              acctId
+            Nothing -> ""
+      in format (s%" "%s) voteStr makerStr
 
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
@@ -196,7 +211,19 @@ requestEnodeId gid = do
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
 
-mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> AccountId -> m Geth
+mkConsensusPeer :: GethId -> Consensus -> ConsensusPeer
+mkConsensusPeer _   Raft = RaftPeer
+mkConsensusPeer gid (QuorumChain (bmGid, bmAid) voterAccts)
+  | gid == bmGid = QuorumChainPeer mVoterAcct (Just bmAid)
+  | otherwise    = QuorumChainPeer mVoterAcct Nothing
+  where
+    mVoterAcct = Map.lookup gid voterAccts
+
+mkGeth :: (MonadIO m, HasEnv m)
+       => GethId
+       -> EnodeId
+       -> AccountId
+       -> m Geth
 mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
   ip <- gidIp gid
@@ -210,6 +237,7 @@ mkGeth gid eid aid = do
        <*> view clusterNetworkId
        <*> view clusterVerbosity
        <*> gidDataDir gid
+       <*> fmap (mkConsensusPeer gid) (view clusterConsensus)
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
        <*> (Map.lookup gid <$> view clusterConstellationConfs)
@@ -240,14 +268,6 @@ jsEscapeSingleQuotes = replace "'" "\\'"
 
 gethIpcPath :: DataDir -> FilePath
 gethIpcPath datadir = dataDirPath datadir </> "geth.ipc"
-
--- TODO: switch to a more efficient version
-textEncode :: ToJSON a => a -> Text
-textEncode = toStrict . LT.decodeUtf8 . encode
-
--- TODO: switch to a more efficient version
-textDecode :: FromJSON a => Text -> Maybe a
-textDecode = decode . LT.encodeUtf8 . fromStrict
 
 writeStaticNodes :: MonadIO m => [Geth] -> Geth -> m ()
 writeStaticNodes sibs geth = output jsonPath contents
@@ -293,33 +313,6 @@ generateAccountKeys numAccts = do
   clusterEnv <- ask
   liftIO $ with (DataDir <$> mktempdir "/tmp" "geth") $ \tmpDataDir ->
     runReaderT (replicateM numAccts $ createAccount tmpDataDir) clusterEnv
-
-createGenesisJson :: (MonadIO m, HasEnv m) => [AccountId] -> m FilePath
-createGenesisJson acctIds = do
-    jsonPath <- view clusterGenesisJson
-    output jsonPath contents
-    return jsonPath
-
-  where
-    contents :: Shell Line
-    contents = select $ textToLines $ textEncode $ object
-      [ "alloc"      .= object
-        (fmap (\(AccountId aid) ->
-                 ("0x" <> aid) .= object [ "balance" .= t "0" ])
-              acctIds)
-      , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
-      , "config"     .= object
-        [ "homesteadBlock" .= (0 :: Int) ]
-      , "difficulty" .= t "0x0"
-      , "extraData"  .= t "0x0"
-      , "gasLimit"   .= t "0x2FEFD800"
-      , "mixhash"    .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
-      , "nonce"      .= t "0x0"
-      , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
-      , "timestamp"  .= t "0x0"
-      ]
-
-    t = id :: Text -> Text
 
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
