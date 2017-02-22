@@ -23,6 +23,7 @@ start_tunnels() {
 
     start_tunnel $gid $eip "3040${gid}" # Ethereum P2P
     start_tunnel $gid $eip "5040${gid}" # Raft HTTP
+    start_tunnel $gid $eip "900${gid}"  # Constellation
 }
 
 if [[ $cluster_type == "multi-region" ]]

@@ -117,6 +117,7 @@ resource "aws_security_group" "quorum_instance" {
   description = "Allow eth p2p from other quorum nodes and RPC traffic from designated nodes"
   vpc_id = "${aws_vpc.quorum_raft.id}"
 
+  # Geth P2P traffic
   ingress {
     from_port = 30400
     to_port = 30900
@@ -124,6 +125,7 @@ resource "aws_security_group" "quorum_instance" {
     self = true # incoming traffic comes from this same security group
   }
 
+  # Geth admin RPC traffic
   ingress {
     from_port = 40400
     to_port = 40900
@@ -131,9 +133,18 @@ resource "aws_security_group" "quorum_instance" {
     security_groups = ["${aws_security_group.rpc_sender.id}"]
   }
 
+  # Raft HTTP traffic
   ingress {
     from_port = 50400
     to_port = 50900
+    protocol = "tcp"
+    self = true # incoming traffic comes from this same security group
+  }
+
+  # Constellation traffic
+  ingress {
+    from_port = 9000
+    to_port = 9500
     protocol = "tcp"
     self = true # incoming traffic comes from this same security group
   }
