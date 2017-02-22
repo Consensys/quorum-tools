@@ -23,8 +23,8 @@ import           Turtle                   (FilePath)
 
 data ConstellationConfig = ConstellationConfig
   { ccUrl        :: Text
-  , ccDatadir    :: DataDir
-  , ccGethId     :: GethId
+  , ccDatadir    :: DataDir -- TODO: probably pull this out
+  , ccGethId     :: GethId  -- TODO: probably pull this out
   , ccOtherNodes :: [Text]
   } deriving (Eq, Show)
 
@@ -74,17 +74,26 @@ data ConsensusPeer
                     , qcBlockMakerAccount :: Maybe AccountId }
   deriving (Eq, Show)
 
+data PrivacySupport
+  = PrivacyEnabled
+  | PrivacyDisabled
+  deriving (Eq, Show)
+
 data ClusterEnv
   = ClusterEnv { _clusterPassword           :: Text
                , _clusterNetworkId          :: Int
                , _clusterBaseHttpPort       :: Port
                , _clusterBaseRpcPort        :: Port
+               --
+               -- TODO: add base constellation port
+               --
                , _clusterVerbosity          :: Verbosity
                , _clusterGenesisJson        :: FilePath
                , _clusterIps                :: Map GethId Ip
                , _clusterDataDirs           :: Map GethId DataDir
                , _clusterConstellationConfs :: Map GethId FilePath
                , _clusterConsensus          :: Consensus
+               , _clusterPrivacySupport     :: PrivacySupport
                }
   deriving (Eq, Show)
 

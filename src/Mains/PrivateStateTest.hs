@@ -1,45 +1,36 @@
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- Test private state consistency
 module Mains.PrivateStateTest where
 
-import qualified Data.Map.Strict            as Map
-import           Control.Monad.Managed      (MonadManaged)
-import           Control.Monad              (forM_)
-import           Control.Monad.Reader       (ReaderT (runReaderT))
+import           Control.Monad            (forM_)
+import           Control.Monad.Managed    (MonadManaged)
+import           Control.Monad.Reader     (ReaderT (runReaderT))
+import           Data.Maybe               (fromMaybe)
 
-import Prelude hiding (FilePath)
-import Turtle hiding (match)
-import Cluster.StateTestsShared
-import Cluster.Types
-import Cluster
-import Constellation
-import Control
-import TestOutline hiding (verify)
+import           Cluster
+import           Cluster.StateTestsShared
+import           Cluster.Types
+import           Constellation
+import           Control
+import           Prelude                  hiding (FilePath)
+import           TestOutline              hiding (verify)
+import           Turtle                   hiding (match)
 
 privateStateTestMain :: IO ()
 privateStateTestMain = sh $ do
-  geths <- runReaderT (wipeAndSetupNodes "gdata" [1..3]) startEnv
-  (confs, clusterEnv) <- constellationStartup
-  let geths' = map
-        (\(geth, conf) -> geth { gethConstellationConfig = Just conf })
-        (zip geths confs)
+  let cEnv = startEnv { _clusterPrivacySupport = PrivacyEnabled }
+      gids = [1..3]
+      forceConfig :: Maybe FilePath -> FilePath
+      forceConfig = fromMaybe $ error "missing constellation config"
 
-  clusterMain geths' clusterEnv
-
-constellationStartup :: MonadManaged io => io ([FilePath], ClusterEnv)
-constellationStartup = do
-  let clusterEnv = startEnv
-      gethIds = [1, 2, 3]
-      firmament = map (mkConstellationConfig clusterEnv gethIds) gethIds
-
-  confFiles <- mapM setupConstellationNode firmament
-  mapM_ startConstellationNode confFiles
+  geths <- runReaderT (wipeAndSetupNodes "gdata" gids) cEnv
+  forM_ geths $
+    startConstellationNode . forceConfig . gethConstellationConfig
 
   td 1 -- delay to allow constellation to set up
 
-  let confMap = Map.fromList (zip [1..] confFiles)
-  pure (confFiles, clusterEnv { _clusterConstellationConfs = confMap })
+  clusterMain geths cEnv
 
 clusterMain :: MonadManaged io => [Geth] -> ClusterEnv -> io ()
 clusterMain geths clusterEnv = flip runReaderT clusterEnv $ do
@@ -72,21 +63,3 @@ clusterMain geths clusterEnv = flip runReaderT clusterEnv $ do
     expectEq i3 (42 + no)
 
   liftIO $ putStrLn "all successful!"
-
-mkConstellationConfig :: ClusterEnv -> [GethId] -> GethId -> ConstellationConfig
-mkConstellationConfig clusterEnv peers thisGeth =
-  let gDataDir = pureGidDataDir thisGeth clusterEnv
-
-      constellationUrl :: GethId -> Text
-      constellationUrl (GethId intId) =
-        format ("http://127.0.0.1:"%d%"/") (9000 + intId)
-
-      -- Everyone connects to all the nodes spun up before them
-      priorPeers :: [GethId]
-      priorPeers = takeWhile (/= thisGeth) peers
-
-  in ConstellationConfig
-       (constellationUrl thisGeth)
-       gDataDir
-       thisGeth
-       (map constellationUrl priorPeers)
