@@ -13,3 +13,7 @@ docker push 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-raft:latest
 # Tag and push quorum-harness:
 docker tag quorum-harness:latest 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness:latest
 docker push 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness:latest
+
+# Tag and push quorum-constellation:
+docker tag quorum-constellation:latest 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-constellation:latest
+docker push 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-constellation:latest
