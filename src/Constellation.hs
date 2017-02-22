@@ -24,12 +24,17 @@ copyKeys conf = sh $ do
   mktree postdir
   cp file (postdir </> filename file)
 
-setupConstellationNode :: MonadManaged io => ConstellationConfig -> io FilePath
+-- | Writes the constellation config to its datadir
+installConfig :: MonadIO io => ConstellationConfig -> io FilePath
+installConfig conf = do
+  let confPath = dataDirPath (ccDatadir conf) </> "constellation.toml"
+  liftIO (writeTextFile confPath (confText conf))
+  return confPath
+
+setupConstellationNode :: MonadIO io => ConstellationConfig -> io FilePath
 setupConstellationNode conf = do
   copyKeys conf
-  confFile <- mktempfile "/tmp" "constellation"
-  liftIO $ writeTextFile confFile (confText conf)
-  return confFile
+  installConfig conf
 
 startConstellationNode :: MonadManaged io => FilePath -> io ()
 startConstellationNode confPath = do
