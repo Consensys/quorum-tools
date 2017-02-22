@@ -37,12 +37,14 @@ import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (BufferMode (..), hClose,
                                              hSetBuffering)
-import           Turtle                     hiding (view, env)
+import           Turtle                     hiding (env, view)
 
 import           Checkpoint
 import           Cluster.Types
 import           Cluster.Genesis (createGenesisJson)
 import           Cluster.Util (textEncode, textDecode)
+import           Constellation              (constellationConfPath,
+                                             setupConstellationNode)
 import           Control
 
 emptyClusterEnv :: ClusterEnv
@@ -57,6 +59,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterDataDirs           = Map.empty
   , _clusterConstellationConfs = Map.empty
   , _clusterConsensus          = Raft
+  , _clusterPrivacySupport     = PrivacyDisabled
   }
 
 mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
@@ -88,6 +91,9 @@ httpPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseHttpPort
 
 rpcPort :: HasEnv m => GethId -> m Port
 rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
+
+constellationPort :: HasEnv m => GethId -> m Port
+constellationPort (GethId gid) = pure $ (fromIntegral gid +) 9000 -- TODO: CONVERT THIS TO USE BASE PORT
 
 rawCommand :: DataDir -> Text -> Text
 rawCommand dir = format ("geth --datadir "%fp%" "%s) (dataDirPath dir)
@@ -184,7 +190,7 @@ fileContaining contents = do
     hClose handle
   return path
 
-gidIp :: (HasEnv m) => GethId -> m Ip
+gidIp :: HasEnv m => GethId -> m Ip
 gidIp gid = force . Map.lookup gid <$> view clusterIps
   where
     force = fromMaybe $ error $ "no IP found for " <> show gid
@@ -227,6 +233,7 @@ mkGeth :: (MonadIO m, HasEnv m)
 mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
   ip <- gidIp gid
+  datadir <- gidDataDir gid
 
   Geth <$> pure gid
        <*> pure eid
@@ -236,11 +243,14 @@ mkGeth gid eid aid = do
        <*> view clusterPassword
        <*> view clusterNetworkId
        <*> view clusterVerbosity
-       <*> gidDataDir gid
+       <*> pure datadir
        <*> fmap (mkConsensusPeer gid) (view clusterConsensus)
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
-       <*> (Map.lookup gid <$> view clusterConstellationConfs)
+       <*> fmap (\case
+                   PrivacyEnabled -> Just $ constellationConfPath datadir
+                   PrivacyDisabled -> Nothing)
+                (view clusterPrivacySupport)
 
 installAccountKey :: (MonadIO m, HasEnv m) => GethId -> AccountKey -> m ()
 installAccountKey gid acctKey = do
@@ -314,6 +324,24 @@ generateAccountKeys numAccts = do
   liftIO $ with (DataDir <$> mktempdir "/tmp" "geth") $ \tmpDataDir ->
     runReaderT (replicateM numAccts $ createAccount tmpDataDir) clusterEnv
 
+-- TODO: probably refactor this to take a Geth, not GethId?
+mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
+mkConstellationConfig thisGid = do
+    -- Everyone connects to all the nodes spun up before them
+    let priorPeers :: [GethId]
+        priorPeers = enumFromTo 1 (pred thisGid)
+
+    ConstellationConfig <$> constellationUrl thisGid
+                        <*> gidDataDir thisGid
+                        <*> pure thisGid
+                        <*> traverse constellationUrl priorPeers
+  where
+    constellationUrl :: HasEnv m => GethId -> m Text
+    constellationUrl gid = do
+      ip <- gidIp gid
+      port <- constellationPort gid
+      pure $ format ("http://"%s%":"%d%"/") (getIp ip) port
+
 setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
 setupNodes gids = do
   acctKeys <- generateAccountKeys (length gids)
@@ -324,6 +352,12 @@ setupNodes gids = do
     runReaderT (createNode genesisJsonPath gid acctKey) clusterEnv
 
   void $ liftIO $ forConcurrently geths $ writeStaticNodes geths
+
+  privacySuport <- view clusterPrivacySupport
+  when (privacySuport == PrivacyEnabled) $
+    void $ liftIO $ forConcurrently gids $ \gid -> do
+      constConf <- runReaderT (mkConstellationConfig gid) clusterEnv
+      setupConstellationNode constConf
 
   pure geths
 
@@ -344,7 +378,7 @@ gethShell geth = do
 
   case gethConstellationConfig geth of
     Just conf -> export "PRIVATE_CONFIG" (format fp conf)
-    Nothing -> pure ()
+    Nothing   -> pure ()
 
   inshellWithJoinedErr (gethCommand geth $
                                     format ("--unlock 0 --password "%fp) pwPath)

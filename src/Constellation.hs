@@ -1,18 +1,25 @@
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Constellation where
 
-import           Control.Concurrent         (threadDelay)
-import           Control.Monad.Managed      (MonadManaged)
-import           Prelude                    hiding (FilePath, lines)
-import           Data.Text (Text)
+import           Control.Concurrent    (threadDelay)
+import           Control.Monad.Managed (MonadManaged)
+import           Data.Text             (Text)
+import           Prelude               hiding (FilePath, lines)
 
-import Turtle                               hiding (f)
-import Cluster.Types
+import           Cluster.Types
+import           Turtle                hiding (f)
 
 fShow :: Show a => a -> FilePath
 fShow = fromString . show
+
+constellationConfPath :: DataDir -> FilePath
+constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
+
+--
+-- TODO: we can now change all of these to take Geth values. should simplify
+--
 
 -- | Copy the contellation's keypair to its datadir
 copyKeys :: MonadIO io => ConstellationConfig -> io ()
@@ -25,13 +32,12 @@ copyKeys conf = sh $ do
   cp file (postdir </> filename file)
 
 -- | Writes the constellation config to its datadir
-installConfig :: MonadIO io => ConstellationConfig -> io FilePath
+installConfig :: MonadIO io => ConstellationConfig -> io ()
 installConfig conf = do
-  let confPath = dataDirPath (ccDatadir conf) </> "constellation.toml"
-  liftIO (writeTextFile confPath (confText conf))
-  return confPath
+  let confPath = constellationConfPath (ccDatadir conf)
+  liftIO $ writeTextFile confPath (confText conf)
 
-setupConstellationNode :: MonadIO io => ConstellationConfig -> io FilePath
+setupConstellationNode :: MonadIO io => ConstellationConfig -> io ()
 setupConstellationNode conf = do
   copyKeys conf
   installConfig conf
@@ -69,6 +75,9 @@ confText conf =
         "privateKeyPath = "%quote fp%lf%
         "storagePath = "%quote fp%lf
 
+  --
+  -- TODO: use base constellation port
+  --
   in format contents ccUrl (9000 + gId ccGethId)
        (dir </> "constellation.ipc")
        ccOtherNodes
