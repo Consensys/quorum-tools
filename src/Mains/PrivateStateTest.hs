@@ -19,13 +19,13 @@ import TestOutline hiding (verify)
 
 privateStateTestMain :: IO ()
 privateStateTestMain = sh $ do
-    geths <- runReaderT (wipeAndSetupNodes "gdata" [1..3]) startEnv
-    (confs, clusterEnv) <- constellationStartup
-    let geths' = map
-          (\(geth, conf) -> geth { gethConstellationConfig = Just conf })
-          (zip geths confs)
+  geths <- runReaderT (wipeAndSetupNodes "gdata" [1..3]) startEnv
+  (confs, clusterEnv) <- constellationStartup
+  let geths' = map
+        (\(geth, conf) -> geth { gethConstellationConfig = Just conf })
+        (zip geths confs)
 
-    clusterMain geths' clusterEnv
+  clusterMain geths' clusterEnv
 
 constellationStartup :: MonadManaged io => io ([FilePath], ClusterEnv)
 constellationStartup = do
