@@ -6,7 +6,6 @@ module Mains.PrivateStateTest where
 import           Control.Monad            (forM_)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT))
-import           Data.Maybe               (fromMaybe)
 
 import           Cluster
 import           Cluster.StateTestsShared
@@ -21,12 +20,9 @@ privateStateTestMain :: IO ()
 privateStateTestMain = sh $ do
   let cEnv = startEnv { _clusterPrivacySupport = PrivacyEnabled }
       gids = [1..3]
-      forceConfig :: Maybe FilePath -> FilePath
-      forceConfig = fromMaybe $ error "missing constellation config"
 
   geths <- runReaderT (wipeAndSetupNodes "gdata" gids) cEnv
-  forM_ geths $
-    startConstellationNode . forceConfig . gethConstellationConfig
+  forM_ geths startConstellationNode
 
   td 1 -- delay to allow constellation to set up
 
