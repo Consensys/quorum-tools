@@ -5,6 +5,7 @@ module Constellation where
 
 import           Control.Concurrent    (threadDelay)
 import           Control.Monad.Managed (MonadManaged)
+import           Data.Maybe            (fromMaybe)
 import           Data.Text             (Text)
 import           Prelude               hiding (FilePath, lines)
 
@@ -42,14 +43,20 @@ setupConstellationNode conf = do
   copyKeys conf
   installConfig conf
 
-startConstellationNode :: MonadManaged io => FilePath -> io ()
-startConstellationNode confPath = do
+startConstellationNode :: MonadManaged io => Geth -> io ()
+startConstellationNode geth = do
+  let confPath = forceConfigPath $ gethConstellationConfig geth
+
   _ <- fork $ sh $
     inshellWithErr (format ("constellation-node "%fp) confPath) ""
 
   -- put in a small delay so this constellation can start its server before the
   -- next hits it
   liftIO $ threadDelay 50000
+
+  where
+    forceConfigPath :: Maybe FilePath -> FilePath
+    forceConfigPath = fromMaybe $ error "missing constellation config"
 
 keydir :: ConstellationConfig -> FilePath
 keydir ConstellationConfig {ccDatadir = DataDir dir} = dir </> "keys"
