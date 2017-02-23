@@ -116,7 +116,7 @@ gethCommand geth = format ("geth --datadir "%fp       %
                                " --rpc"               %
                                " --rpccorsdomain '*'" %
                                " --rpcaddr localhost" %
-                               s%
+                               " "%s%
                                " "%s)
                           (dataDirPath (gethDataDir geth))
                           (gethHttpPort geth)
