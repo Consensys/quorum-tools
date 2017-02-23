@@ -26,6 +26,9 @@ constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
 -- | Copy the contellation's keypair to its datadir
 copyKeys :: MonadIO io => ConstellationConfig -> io ()
 copyKeys conf = sh $ do
+  --
+  -- TODO: remove this hard-coded path.
+  --
   let predir = "credentials/constellation-keys" </> fShow (gId (ccGethId conf))
       postdir = dataDirPath (ccDatadir conf) </> "keys"
 
