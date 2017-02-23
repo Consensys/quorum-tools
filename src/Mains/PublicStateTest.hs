@@ -18,7 +18,7 @@ publicStateTestMain :: IO ()
 publicStateTestMain = sh $ flip runReaderT startEnv $ do
   let gids = clusterGids clusterSize
 
-  geths <- setupNodes gids
+  geths <- setupNodes Nothing gids
   instruments <- traverse (runNode clusterSize) geths
 
   timestampedMessage "awaiting a successful raft election"
@@ -35,4 +35,3 @@ publicStateTestMain = sh $ flip runReaderT startEnv $ do
     expectEq i no
 
   liftIO $ putStrLn "all successful!"
-

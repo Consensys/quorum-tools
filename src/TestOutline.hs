@@ -91,7 +91,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         let geths = [1..GethId (unNumNodes numNodes)]
         _ <- when (os == "darwin") PF.acquirePf
 
-        nodes <- wipeAndSetupNodes "gdata" geths
+        nodes <- wipeAndSetupNodes Nothing "gdata" geths
         instruments <- traverse (runNode (unNumNodes numNodes)) nodes
 
         let verifier = verify

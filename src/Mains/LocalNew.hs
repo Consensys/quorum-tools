@@ -15,7 +15,7 @@ import           Constellation
 localNewMain :: IO ()
 localNewMain = sh $ flip runReaderT cEnv $ do
     liftIO $ putStrLn "creating a new empty blockchain with privacy support"
-    geths <- wipeAndSetupNodes "gdata" (clusterGids clusterSize)
+    geths <- wipeAndSetupNodes Nothing "gdata" (clusterGids clusterSize)
 
     privacySupport <- view clusterPrivacySupport
     when (privacySupport == PrivacyEnabled) $ do

@@ -22,7 +22,7 @@ privateStateTestMain = sh $ do
   let cEnv = startEnv & clusterPrivacySupport .~ PrivacyEnabled
       gids = [1..3]
 
-  geths <- runReaderT (wipeAndSetupNodes "gdata" gids) cEnv
+  geths <- runReaderT (wipeAndSetupNodes Nothing "gdata" gids) cEnv
   startConstellationNodes geths
 
   clusterMain geths cEnv
