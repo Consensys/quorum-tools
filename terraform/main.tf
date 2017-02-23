@@ -250,6 +250,7 @@ resource "aws_instance" "quorum" {
       "scripts/prepare.sh",
       "scripts/fetch-images.sh",
       "scripts/possibly-start-tunnels.sh",
+      "scripts/start-constellation.sh",
       "scripts/start-quorum.sh"
     ]
   }
