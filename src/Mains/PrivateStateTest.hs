@@ -3,6 +3,7 @@
 -- Test private state consistency
 module Mains.PrivateStateTest where
 
+import           Control.Lens             ((.~))
 import           Control.Monad            (forM_)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT))
@@ -18,13 +19,11 @@ import           Turtle                   hiding (match)
 
 privateStateTestMain :: IO ()
 privateStateTestMain = sh $ do
-  let cEnv = startEnv { _clusterPrivacySupport = PrivacyEnabled }
+  let cEnv = startEnv & clusterPrivacySupport .~ PrivacyEnabled
       gids = [1..3]
 
   geths <- runReaderT (wipeAndSetupNodes "gdata" gids) cEnv
-  forM_ geths startConstellationNode
-
-  td 1 -- delay to allow constellation to set up
+  startConstellationNodes geths
 
   clusterMain geths cEnv
 
