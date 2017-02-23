@@ -230,8 +230,14 @@ resource "aws_instance" "quorum" {
     destination = "${var.remote_homedir}/.ssh/id_tunneler.pub"
   }
 
+  provisioner "file" {
+    source = "scripts/spam.sh"
+    destination = "${var.remote_homedir}/spam"
+  }
+
   provisioner "remote-exec" {
     inline = [
+      "chmod +x spam",
       "echo '${var.first_geth_id + count.index}' >node-id",
       "echo 'abcd' >password",
       "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type",
