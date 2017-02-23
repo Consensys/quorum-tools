@@ -32,6 +32,6 @@ publicStateTestMain = sh $ flip runReaderT startEnv $ do
   forM_ (zip [1..10] sendTo) $ \(no, geth) -> do
     incrementStorage geth contract storageAddr
     i <- getStorage geth contract storageAddr
-    expectEq i no
+    expectEq i (42 + no)
 
   liftIO $ putStrLn "all successful!"
