@@ -27,22 +27,24 @@ constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
 copyKeys :: MonadIO io => ConstellationConfig -> io ()
 copyKeys conf = sh $ do
   let predir = "credentials/constellation-keys" </> fShow (gId (ccGethId conf))
-      postdir = keydir conf
+      postdir = dataDirPath (ccDatadir conf) </> "keys"
 
   file <- ls predir
   mktree postdir
   cp file (postdir </> filename file)
 
 -- | Writes the constellation config to its datadir
-installConfig :: MonadIO io => ConstellationConfig -> io ()
-installConfig conf = do
-  let confPath = constellationConfPath (ccDatadir conf)
-  liftIO $ writeTextFile confPath (confText conf)
+installConfig :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
+installConfig mDeployDatadir conf = do
+  let localDataDir = ccDatadir conf
+      confPath = constellationConfPath localDataDir
+      deployDatadir = fromMaybe localDataDir mDeployDatadir
+  liftIO $ writeTextFile confPath (confText deployDatadir conf)
 
-setupConstellationNode :: MonadIO io => ConstellationConfig -> io ()
-setupConstellationNode conf = do
+setupConstellationNode :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
+setupConstellationNode deployDatadir conf = do
   copyKeys conf
-  installConfig conf
+  installConfig deployDatadir conf
 
 startConstellationNode :: MonadManaged io => Geth -> io ()
 startConstellationNode geth = do
@@ -64,14 +66,12 @@ startConstellationNodes geths = do
   forM_ geths startConstellationNode
   liftIO $ threadDelay 1000000
 
-keydir :: ConstellationConfig -> FilePath
-keydir ConstellationConfig {ccDatadir = DataDir dir} = dir </> "keys"
-
-confText :: ConstellationConfig -> Text
-confText conf =
-  let kdir = keydir conf
-      ConstellationConfig
-        {ccUrl, ccDatadir = DataDir dir, ccGethId, ccOtherNodes} = conf
+-- We parameterize by a DataDir here so that we can handle the case of
+-- bootstrapping a cluster for AWS -- where the datadir is located in a
+-- different place on the filesystem.
+confText :: DataDir -> ConstellationConfig -> Text
+confText (DataDir ddPath) conf =
+  let ConstellationConfig {ccUrl, ccGethId, ccOtherNodes} = conf
 
       lf :: Format r r
       lf = "\n"
@@ -92,8 +92,8 @@ confText conf =
   -- TODO: use base constellation port
   --
   in format contents ccUrl (9000 + gId ccGethId)
-       (dir </> "constellation.ipc")
+       (ddPath </> "constellation.ipc")
        ccOtherNodes
-       (kdir </> "constellation.pub")
-       (kdir </> "constellation.key")
-       (dir </> "constellation")
+       (ddPath </> "keys" </> "constellation.pub")
+       (ddPath </> "keys" </> "constellation.key")
+       (ddPath </> "constellation")

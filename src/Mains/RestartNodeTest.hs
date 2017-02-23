@@ -85,7 +85,7 @@ restartNodeTestMain = do
   let gethIds = [1..GethId numNodes]
 
   nodes <- run $ do
-    nodes <- wipeAndSetupNodes "gdata" gethIds
+    nodes <- wipeAndSetupNodes Nothing "gdata" gethIds
     pure nodes
 
   let g1:g2g3 = nodes

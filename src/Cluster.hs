@@ -342,8 +342,8 @@ mkConstellationConfig thisGid = do
       port <- constellationPort gid
       pure $ format ("http://"%s%":"%d%"/") (getIp ip) port
 
-setupNodes :: (MonadIO m, HasEnv m) => [GethId] -> m [Geth]
-setupNodes gids = do
+setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
+setupNodes deployDatadir gids = do
   acctKeys <- generateAccountKeys (length gids)
   genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
 
@@ -357,7 +357,7 @@ setupNodes gids = do
   when (privacySuport == PrivacyEnabled) $
     void $ liftIO $ forConcurrently gids $ \gid -> do
       constConf <- runReaderT (mkConstellationConfig gid) clusterEnv
-      setupConstellationNode constConf
+      setupConstellationNode deployDatadir constConf
 
   pure geths
 
@@ -367,10 +367,10 @@ wipeLocalClusterRoot rootDir = do
   when dirExists $ rmtree rootDir
   mktree rootDir
 
-wipeAndSetupNodes :: (MonadIO m, HasEnv m) => FilePath -> [GethId] -> m [Geth]
-wipeAndSetupNodes rootDir gids = do
+wipeAndSetupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> FilePath -> [GethId] -> m [Geth]
+wipeAndSetupNodes deployDatadir rootDir gids = do
   wipeLocalClusterRoot rootDir
-  setupNodes gids
+  setupNodes deployDatadir gids
 
 gethShell :: Geth -> Shell Line
 gethShell geth = do

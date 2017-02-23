@@ -4,6 +4,7 @@
 -- | Bootstraps an AWS cluster
 module Mains.AwsBootstrap where
 
+import           Control.Lens         ((.~))
 import           Control.Monad.Reader (runReaderT)
 import           Data.Bool            (bool)
 import           Prelude              hiding (FilePath)
@@ -29,9 +30,10 @@ cliParser = AwsConfig
   <*> optInt "cluster-size"   'n' "Total cluster size across all regions"
 
 mkBootstrapEnv :: AwsConfig -> [GethId] -> ClusterEnv
-mkBootstrapEnv config gids = (mkClusterEnv mkIp mkDataDir gids)
-    { _clusterGenesisJson = dataRoot </> "genesis.json"
-    }
+mkBootstrapEnv config gids = mkClusterEnv mkIp mkDataDir gids
+    & clusterGenesisJson    .~ dataRoot </> "genesis.json"
+    & clusterPrivacySupport .~ PrivacyEnabled
+
   where
     dataRoot = rootDir config
     size     = clusterSize config
@@ -52,4 +54,4 @@ awsBootstrapMain = do
   let gids = clusterGids $ clusterSize config
 
   sh $ flip runReaderT (mkBootstrapEnv config gids) $
-    wipeAndSetupNodes (rootDir config) gids
+    wipeAndSetupNodes (Just $ DataDir "datadir") (rootDir config) gids
