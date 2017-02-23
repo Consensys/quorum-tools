@@ -55,6 +55,7 @@ library
     Cluster.Client
     Cluster.Genesis
     Cluster.GenesisCode
+    Cluster.SpamArgs
     Cluster.StateTestsShared
     Cluster.Types
     Cluster.Util

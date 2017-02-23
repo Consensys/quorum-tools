@@ -10,12 +10,14 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Aws          (dockerHostIp, internalAwsIp)
-import           Cluster.Client       (BenchType(..), loadLocalNode, perSecond,
-                                       spamGeth)
+import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
+import           Cluster.SpamArgs
 import           Cluster.Types
 
 data SpamConfig = SpamConfig { rateLimit   :: RateLimit Millisecond
                              , clusterType :: AwsClusterType
+                             , contract    :: Maybe Text
+                             , privateFor  :: Maybe Text
                              }
 
 cliParser :: Parser SpamConfig
@@ -23,6 +25,8 @@ cliParser = SpamConfig
   <$> fmap perSecond (optInteger "rps"  'r' "The number of requests per second")
   <*> fmap (bool SingleRegion MultiRegion)
            (switch  "multi-region" 'g' "Whether the cluster is multi-region")
+  <*> optional contractP
+  <*> optional privateForP
 
 cEnv :: AwsClusterType -> GethId -> ClusterEnv
 cEnv cType gid = mkClusterEnv mkIp mkDataDir [gid]
@@ -45,5 +49,6 @@ awsSpamMain :: IO ()
 awsSpamMain = do
   config <- options "Spams the local node with public transactions" cliParser
   gid <- readGidFromHomedir
+  let benchTx = processContractArgs (contract config) (privateFor config)
   geth <- runReaderT (loadLocalNode gid) (cEnv (clusterType config) gid)
-  spamGeth BenchEmptyTx geth (rateLimit config)
+  spamGeth benchTx geth (rateLimit config)
