@@ -44,7 +44,7 @@ emptyTxRpcBody :: Geth -> Value
 emptyTxRpcBody geth = object
     [ "id"      .= (1 :: Int)
     , "jsonrpc" .= t "2.0"
-    , "method"  .= t "eth_sendTransactionAsync"
+    , "method"  .= t "eth_sendTransaction"
     , "params"  .=
       [ object
         [ "from" .= (accountId . gethAccountId $ geth)
