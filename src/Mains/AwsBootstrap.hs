@@ -54,4 +54,4 @@ awsBootstrapMain = do
   let gids = clusterGids $ clusterSize config
 
   sh $ flip runReaderT (mkBootstrapEnv config gids) $
-    wipeAndSetupNodes (Just $ DataDir "datadir") (rootDir config) gids
+    wipeAndSetupNodes (Just $ DataDir "/datadir") (rootDir config) gids
