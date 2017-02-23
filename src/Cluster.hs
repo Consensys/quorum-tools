@@ -40,9 +40,9 @@ import           System.IO                  (BufferMode (..), hClose,
 import           Turtle                     hiding (env, view)
 
 import           Checkpoint
+import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Types
-import           Cluster.Genesis (createGenesisJson)
-import           Cluster.Util (textEncode, textDecode)
+import           Cluster.Util               (textDecode, textEncode)
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
 import           Control

@@ -4,6 +4,7 @@
 module Constellation where
 
 import           Control.Concurrent    (threadDelay)
+import           Control.Monad         (forM_)
 import           Control.Monad.Managed (MonadManaged)
 import           Data.Maybe            (fromMaybe)
 import           Data.Text             (Text)
@@ -57,6 +58,11 @@ startConstellationNode geth = do
   where
     forceConfigPath :: Maybe FilePath -> FilePath
     forceConfigPath = fromMaybe $ error "missing constellation config"
+
+startConstellationNodes :: (Foldable f, MonadManaged io) => f Geth -> io ()
+startConstellationNodes geths = do
+  forM_ geths startConstellationNode
+  liftIO $ threadDelay 1000000
 
 keydir :: ConstellationConfig -> FilePath
 keydir ConstellationConfig {ccDatadir = DataDir dir} = dir </> "keys"
