@@ -16,10 +16,10 @@ hexLike = (optional "0x" >>)
 -- TODO: restrict more than chars1 -- figure out what characters are allowed in
 -- a signature
 contractPattern :: Pattern (Bytes20, UnencodedMethod)
-contractPattern = hexLike $ (,) <$> bytes20P <*> fmap UnencodedMethod chars1
+contractPattern = hexLike $ (,) <$> bytes20P <*> (":" >> fmap UnencodedMethod chars1)
 
 addrP :: Pattern Addr
-addrP = hexLike $ Addr . T.pack <$> count 40 hexDigit
+addrP = hexLike $ Addr . T.pack <$> many (noneOf [','])
 
 privateForPattern :: Pattern [Addr]
 privateForPattern = addrP `sepBy` ","
