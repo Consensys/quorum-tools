@@ -28,6 +28,8 @@ start_tunnels() {
 
 if [[ $cluster_type == "multi-region" ]]
 then
+    echo "creating cross-region tunnels"
+
     if [[ $my_gid != "1" ]]
     then
         start_tunnels 1 34.249.147.200
@@ -44,4 +46,6 @@ then
     fi
 
     sleep 1 # see: http://stackoverflow.com/questions/36207752/how-can-i-start-a-remote-service-using-terraform-provisioning
+else
+    echo "not starting tunnels because this is a single-region cluster."
 fi

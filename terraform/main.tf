@@ -230,8 +230,14 @@ resource "aws_instance" "quorum" {
     destination = "${var.remote_homedir}/.ssh/id_tunneler.pub"
   }
 
+  provisioner "file" {
+    source = "scripts/spam.sh"
+    destination = "${var.remote_homedir}/spam"
+  }
+
   provisioner "remote-exec" {
     inline = [
+      "chmod +x spam",
       "echo '${var.first_geth_id + count.index}' >node-id",
       "echo 'abcd' >password",
       "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type",
@@ -244,6 +250,7 @@ resource "aws_instance" "quorum" {
       "scripts/prepare.sh",
       "scripts/fetch-images.sh",
       "scripts/possibly-start-tunnels.sh",
+      "scripts/start-constellation.sh",
       "scripts/start-quorum.sh"
     ]
   }
