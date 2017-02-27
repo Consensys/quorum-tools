@@ -2,30 +2,36 @@
 
 module Cluster.SpamArgs where
 
-import qualified Data.Text            as T
-import           Turtle
+import           Turtle               hiding (char)
 
 import           Cluster.Types
-import           Cluster.Client       (BenchType(..))
-import           Cluster.Util         (Bytes20, bytes20P)
-import           SharedPartitioning   (matchOnce)
-
-hexLike :: Pattern a -> Pattern a
-hexLike = (optional "0x" >>)
+import           Cluster.Client       (SpamMode(..))
+import           Cluster.Util         (Bytes20, bytes20P, HexPrefix(..),
+                                       matchOnce)
+import           Data.Char            (isHexDigit)
+import qualified Data.Text            as T
 
 -- TODO: restrict more than chars1 -- figure out what characters are allowed in
 -- a signature
 contractPattern :: Pattern (Bytes20, UnencodedMethod)
-contractPattern = hexLike $ (,) <$> bytes20P <*> (":" >> fmap UnencodedMethod chars1)
+contractPattern = (,)
+  <$> bytes20P WithPrefix
+  <*> (":" >> fmap UnencodedMethod chars1)
 
-addrP :: Pattern Addr
-addrP = hexLike $ Addr . T.pack <$> many (noneOf [','])
+b64Digit :: Pattern Char
+b64Digit = satisfy isB64Digit
+  where isB64Digit char = isHexDigit char || char `elem` ['/', '+', '=']
 
-privateForPattern :: Pattern [Addr]
-privateForPattern = addrP `sepBy` ","
+-- A (compressed) Secp256k1 public key is 32 bytes (* 11 / 8) = 44 base-64
+-- characters (64 = 2^11).
+pubKeyP :: Pattern Secp256k1
+pubKeyP = Secp256k1 . T.pack <$> count 44 b64Digit
 
-processContractArgs :: Maybe Text -> Maybe Text -> BenchType
-processContractArgs contractT privateForT = maybe BenchEmptyTx BenchTx $ do
+privateForPattern :: Pattern [Secp256k1]
+privateForPattern = pubKeyP `sepBy` ","
+
+processContractArgs :: Maybe Text -> Maybe Text -> SpamMode
+processContractArgs contractT privateForT = maybe BenchEmptyTx SendTx $ do
   rawContract <- contractT
   rawPrivateFor <- privateForT
 
