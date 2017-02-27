@@ -27,7 +27,7 @@ createStorage voters makers = Object $ meta <> votersBlock <> makersBlock
         numMakers = length makers
 
         numToHexValue :: Int -> Value
-        numToHexValue = String . hexPrefixed . hexInt
+        numToHexValue = String . hexPrefixed . intToHexBS
 
         hexPadKey :: Int -> Text
         hexPadKey = hexPrefixed . padIndex
@@ -44,8 +44,8 @@ createStorage voters makers = Object $ meta <> votersBlock <> makersBlock
 mapAddresses :: Int -> [AccountId] -> HashMap Text Value
 mapAddresses index addresses =
   let v = V.fromList addresses
-      addrToStorage (AccountId addr) =
-        let Bytes32 key = storageKey index (Bytes20 (T.encodeUtf8 addr))
+      addrToStorage (AccountId (Addr addrBytes)) =
+        let Bytes32 key = storageKey index addrBytes
         in (T.decodeUtf8 key, "0x01")
       mapped = addrToStorage <$> v
   in HashMap.fromList (V.toList mapped)
@@ -72,7 +72,7 @@ createGenesisJson acctIds = do
 
     balances :: [Aeson.Pair]
     balances = fmap
-      (\(AccountId aid) -> ("0x" <> aid) .= object [ "balance" .= t "0" ])
+      (\aid -> accountIdToText aid .= object [ "balance" .= t "0" ])
       acctIds
 
     header = "0x0000000000000000000000000000000000000020" .= object

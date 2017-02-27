@@ -58,7 +58,7 @@ newtype Ip = Ip { getIp :: Text }
 data DataDir = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
-data AccountId = AccountId { accountId :: Text }
+data AccountId = AccountId { accountId :: Addr }
   deriving (Show, Eq)
 
 data AccountKey = AccountKey { akAccountId :: AccountId
@@ -82,26 +82,6 @@ data PrivacySupport
   = PrivacyEnabled
   | PrivacyDisabled
   deriving (Eq, Show)
-
-data ClusterEnv
-  = ClusterEnv { _clusterPassword           :: Text
-               , _clusterNetworkId          :: Int
-               , _clusterBaseHttpPort       :: Port
-               , _clusterBaseRpcPort        :: Port
-               --
-               -- TODO: add base constellation port
-               --
-               , _clusterVerbosity          :: Verbosity
-               , _clusterGenesisJson        :: FilePath
-               , _clusterIps                :: Map GethId Ip
-               , _clusterDataDirs           :: Map GethId DataDir
-               , _clusterConstellationConfs :: Map GethId FilePath
-               , _clusterConsensus          :: Consensus
-               , _clusterPrivacySupport     :: PrivacySupport
-               }
-  deriving (Eq, Show)
-
-makeLenses ''ClusterEnv
 
 type HasEnv = MonadReader ClusterEnv
 
@@ -134,22 +114,42 @@ data Geth =
 
 -- Addresses, transactions and blocks
 
-newtype Addr = Addr { unAddr :: Text }
+newtype Addr = Addr { unAddr :: Bytes20 }
   deriving (Show, Eq)
 
-data Operation = Call | SendTransaction | SendTransactionAsync
+addrToText :: Addr -> Text
+addrToText = hexPrefixed . unAddr
+
+accountIdToText :: AccountId -> Text
+accountIdToText = addrToText . accountId
+
+showGethAccountId :: Geth -> Text
+showGethAccountId = accountIdToText . gethAccountId
+
+data CallArgs = CallArgs
+  { callTo :: Bytes20
+  , callMethod :: UnencodedMethod
+  }
+
+data TxSync
+  = SendTransaction
+  | SendTransactionAsync
 
 data Tx = Tx
   -- (txFrom is implicitly eth.accounts[0])
-  { txTo :: Maybe Bytes20
-  , txMethod :: UnencodedMethod
+  { txTo      :: Maybe Bytes20
+  , txMethod  :: UnencodedMethod
   , txPrivacy :: Privacy
-  , txOperation :: Operation
+  , txSynx    :: TxSync
   }
+
+data SpamMode
+  = BenchEmptyTx
+  | SendTx Tx
 
 newtype UnencodedMethod = UnencodedMethod Text deriving IsString
 
-newtype TxId = TxId { txId :: Text }
+newtype TxId = TxId { txId :: Bytes32 }
   deriving (Show, Eq, Ord)
 
 newtype Block = Block Text
@@ -222,10 +222,13 @@ newtype Pid = Pid Int
 
 -- Contracts
 
+-- Holding a base-64 encoded public key
+newtype Secp256k1 = Secp256k1 { unSecp256k1 :: Text }
+
 -- | A contract may be visible to everyone or only to a list of public keys
 data Privacy
   = Public
-  | PrivateFor [Addr]
+  | PrivateFor [Secp256k1]
 
 -- A contract is:
 -- * its privacy
@@ -238,3 +241,26 @@ data Contract = Contract Privacy [UnencodedMethod] Text Text
 data AwsClusterType
   = SingleRegion
   | MultiRegion
+
+-- put ClusterEnv all the way at the end so its template haskell doesn't break
+-- this module into phases
+
+data ClusterEnv
+  = ClusterEnv { _clusterPassword           :: Text
+               , _clusterNetworkId          :: Int
+               , _clusterBaseHttpPort       :: Port
+               , _clusterBaseRpcPort        :: Port
+               --
+               -- TODO: add base constellation port
+               --
+               , _clusterVerbosity          :: Verbosity
+               , _clusterGenesisJson        :: FilePath
+               , _clusterIps                :: Map GethId Ip
+               , _clusterDataDirs           :: Map GethId DataDir
+               , _clusterConstellationConfs :: Map GethId FilePath
+               , _clusterConsensus          :: Consensus
+               , _clusterPrivacySupport     :: PrivacySupport
+               }
+  deriving (Eq, Show)
+
+makeLenses ''ClusterEnv

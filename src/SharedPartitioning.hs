@@ -14,6 +14,7 @@ import           Turtle
 
 import           Cluster
 import           Cluster.Types
+import           Cluster.Util (matchOnce)
 
 inshellWithNoErr :: Text -> Shell Line -> Shell Line
 inshellWithNoErr cmd inputShell = do
@@ -21,11 +22,6 @@ inshellWithNoErr cmd inputShell = do
   case line of
     Left _shellErr -> empty
     Right out -> pure out
-
-matchOnce :: Pattern a -> Text -> Maybe a
-matchOnce pat line = case match pat line of
-  [result] -> Just result
-  _        -> Nothing
 
 portPattern :: Pattern Port
 portPattern = has $ do

@@ -42,7 +42,9 @@ import           Turtle                     hiding (env, view)
 import           Checkpoint
 import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Types
-import           Cluster.Util               (textDecode, textEncode)
+import           Cluster.Util               (textDecode, textEncode,
+                                             bytes20P, matchOnce,
+                                             HexPrefix(..), printHex)
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
 import           Control
@@ -129,14 +131,14 @@ gethCommand geth = format ("geth --datadir "%fp       %
     consensusOptions RaftPeer = "--raft"
     consensusOptions (QuorumChainPeer mVoterAcct mBlockMakerAcct) =
       let voteStr = case mVoterAcct of
-            Just (AccountId acctId) -> format
+            Just acctId -> format
               ("--voteaccount \""%s%"\" --votepassword \"\"")
-              acctId
+              (accountIdToText acctId)
             Nothing -> ""
           makerStr = case mBlockMakerAcct of
-            Just (AccountId acctId) -> format
+            Just acctId -> format
               ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-              acctId
+              (accountIdToText acctId)
             Nothing -> ""
       in format (s%" "%s) voteStr makerStr
 
@@ -146,14 +148,15 @@ initNode genesisJsonPath gid = do
   void $ sh $ inshellWithErr cmd empty
 
 readAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
-readAccountKey dir acctId@(AccountId aid) = do
+readAccountKey dir acctId = do
     let keystoreDir = dataDirPath dir </> "keystore"
     paths <- fold (ls keystoreDir) Fold.list
-    let mPath = headMay $ filter (format fp
-                                    >>> match (contains $ text aid)
-                                    >>> null
-                                    >>> not)
-                                 paths
+    let acctIdText = printHex WithoutPrefix (unAddr (accountId acctId))
+    let hasAccountId = format fp
+          >>> match (contains $ text acctIdText)
+          >>> null
+          >>> not
+    let mPath = headMay $ filter hasAccountId paths
 
     fmap (AccountKey acctId) <$> sequence (strict . input <$> mPath)
 
@@ -173,12 +176,19 @@ createAccount dir = do
                                                     <> textToLines pw)
                   & grep (begins "Address: ")
                   & sed (chars *> between (char '{') (char '}') chars)
-    aid <- AccountId . lineToText . forceAcctId <$> fold acctShell Fold.head
+    let mkAccountId = forceAcctId -- force head
+          >>> lineToText
+          -- expect this line to be 20 hex bytes
+          >>> matchOnce (bytes20P WithoutPrefix) >>> forceAcctBytes
+          -- an account id is an Addr, is 20 bytes
+          >>> Addr >>> AccountId
+    aid <- mkAccountId <$> fold acctShell Fold.head
     mKey <- readAccountKey dir aid
     return $ forceKey mKey
 
   where
     forceAcctId = fromMaybe $ error "unable to extract account ID"
+    forceAcctBytes = fromMaybe $ error "unable to convert account ID to bytes"
     forceKey = fromMaybe $ error "unable to find key in keystore"
 
 fileContaining :: Shell Line -> Managed FilePath
@@ -312,7 +322,7 @@ readAccountId gid = do
   where
     aidParser :: Value -> Aeson.Parser AccountId
     aidParser = withObject "AccountId" $ \obj ->
-      fmap AccountId $ obj .: "address"
+      AccountId . Addr <$> obj .: "address"
 
     force = fromMaybe $ error "failed to load account ID from keystore"
 
@@ -419,9 +429,9 @@ observingLastBlock :: Shell (Line, a)
 observingLastBlock incoming = do
     st <- liftIO $ newMVar (mempty :: Last Block)
     (line, a) <- incoming
-    case match blockPattern (lineToText line) of
-      [latest] -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> pure latest))
-      _       -> pure ()
+    case matchOnce blockPattern (lineToText line) of
+      Just latest -> liftIO $ modifyMVar_ st (\prev -> pure (prev <> pure latest))
+      _           -> pure ()
     lastBlock <- liftIO (readMVar st)
     return (line, (lastBlock, a))
 

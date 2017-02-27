@@ -5,16 +5,14 @@ module Cluster.StateTestsShared where
 
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Text                  as T
-import qualified Data.Text.Encoding         as T
-import           Text.Read                  (readMaybe)
 
 import Prelude hiding (FilePath)
-import Turtle hiding (match)
+import Turtle
 import Checkpoint
 import Cluster
-import Cluster.Client (sendTx)
+import Cluster.Client (call, sendTxAsync)
 import Cluster.Types
-import Cluster.Util (Bytes20(..))
+import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex)
 import Control
 import TestOutline hiding (verify)
 
@@ -34,10 +32,9 @@ expectEq val expected = liftIO $
 
 createContract :: MonadIO io => Geth -> Contract -> io Addr
 createContract geth contract@(Contract privacy _ops mem _abi) =
-  let fromAddr = accountId $ gethAccountId geth
-      cmd = T.unlines
+  let cmd = T.unlines
         [ "var contractInstance = contract.new(42, {"
-        , "  from: '0x" <> fromAddr <> "',"
+        , "  from: '" <> showGethAccountId geth <> "',"
         , "  data: '" <> mem <> "',"
         , "  gas: '4700000',"
         , privacyLine privacy
@@ -62,34 +59,29 @@ privacyLine = \case
   PrivateFor addrs ->
     "privateFor: [" <> T.intercalate ", " (quote <$> addrs) <> "],"
   where
-    quote :: Addr -> Text
-    quote (Addr t) = "\"" <> t <> "\""
+    quote :: Secp256k1 -> Text
+    quote (Secp256k1 t) = "\"" <> t <> "\""
 
 sleepBlock :: MonadIO io => Geth -> io ()
 sleepBlock geth = fold (sendJs geth "admin.sleepBlocks(1);") (pure ())
 
-addrToBytes :: Addr -> Bytes20
-addrToBytes = Bytes20 . T.encodeUtf8 . unAddr
-
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
-incrementStorage geth (Contract privacy _ _ _) addr =
-  -- TODO: think about making addr a bytestring (or Bytes20) newtype
-  let addr' = addrToBytes addr
+incrementStorage geth (Contract privacy _ _ _) (Addr addrBytes) =
   -- TODO: remove "increment()" duplication
-  in sendTx geth (Tx (Just addr') "increment()" privacy SendTransaction)
+  sendTxAsync geth (Tx (Just addrBytes) "increment()" privacy SendTransaction)
 
 getStorage :: MonadIO io => Geth -> Contract -> Addr -> io (Either Text Int)
-getStorage geth contract addr =
-  let cmd = "contract.at('" <> unAddr addr <> "').get()"
-      -- just parse only line
-      step _ line = case readMaybe (T.unpack $ lineToText line) of
-        Just num -> Right num
-        Nothing -> Left (lineToText line)
-      consumer = Fold step (Left "no lines sent to getStorage") id
-  in contractCmd geth contract cmd consumer
-  -- TODO: convert to rpc form:
-  -- let addr' = addrToBytes addr
-  -- in sendTx geth (Tx (Just addr') "get()" privacy Call)
+getStorage geth _contract addr = do
+  resp <- call geth (CallArgs (unAddr addr) "get()")
+  pure $ case resp of
+    Left msg -> Left msg
+    -- we get this back when not party to a transaction. bug?
+    Right "0x" -> Right 0
+    Right resp' -> case match (bytes32P WithPrefix) resp' of
+      [b32] -> case toInt b32 of
+        Nothing -> Left ("couldn't coerce to int: " <> printHex WithPrefix b32)
+        Just result -> Right result
+      _ -> Left ("failed to find hex string: " <> resp')
 
 contractCmd :: MonadIO io => Geth -> Contract -> Text -> Fold Line a -> io a
 contractCmd geth (Contract _privacy _ops _mem abi) cmd consumer =

@@ -6,6 +6,7 @@ module Checkpoint where
 import           Turtle
 
 import           Cluster.Types
+import           Cluster.Util (bytes20P, bytes32P, HexPrefix(..))
 
 raftSentinel :: Text
 raftSentinel = "RAFT-CHECKPOINT"
@@ -34,12 +35,12 @@ mkCheckpointPattern BecameMinter = pure ()
 mkCheckpointPattern BecameVerifier = pure ()
 mkCheckpointPattern TxCreated = do
   _ <- "("
-  transactionId <- "0x" >> plus hexDigit
+  transactionId <- bytes32P WithPrefix
   _ <- ", "
-  addr <- "0x" >> plus hexDigit
+  addr <- bytes20P WithPrefix
   _ <- ")"
   return (TxId transactionId, Addr addr)
-mkCheckpointPattern TxAccepted = "0x" >> TxId <$> plus hexDigit
+mkCheckpointPattern TxAccepted = TxId <$> bytes32P WithPrefix
 
 matchCheckpoint :: Checkpoint a -> Line -> Maybe a
 matchCheckpoint cpt line =

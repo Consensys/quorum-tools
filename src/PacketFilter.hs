@@ -15,6 +15,7 @@ import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
 import Cluster.Types
+import Cluster.Util (matchOnce)
 import Control (onExit)
 import SharedPartitioning
 
