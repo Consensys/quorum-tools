@@ -235,9 +235,15 @@ resource "aws_instance" "quorum" {
     destination = "${var.remote_homedir}/spam"
   }
 
+  provisioner "file" {
+    source = "scripts/attach.sh"
+    destination = "${var.remote_homedir}/attach"
+  }
+
   provisioner "remote-exec" {
     inline = [
       "chmod +x spam",
+      "chmod +x attach",
       "echo '${var.first_geth_id + count.index}' >node-id",
       "echo 'abcd' >password",
       "echo '${var.multi_region ? "multi-region" : "single-region"}' >cluster-type",
