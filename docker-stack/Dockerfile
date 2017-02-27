@@ -19,5 +19,5 @@ COPY ./github.pub /root/.ssh/known_hosts
 RUN git config --global url."git@github.com:".insteadOf "https://github.com/" && \
     echo "    IdentityFile ~/.ssh/id_noirqs" >> /etc/ssh/ssh_config && \
     ssh-agent bash -c '\
-      stack --resolver lts-7.14 --install-ghc install text mtl async managed foldl lens lens-aeson bytestring turtle aeson wreq safe transformers containers time http-client; \
+      stack --resolver lts-8.3 --install-ghc install text mtl async managed foldl lens lens-aeson bytestring turtle aeson wreq safe transformers containers time http-client; \
     '

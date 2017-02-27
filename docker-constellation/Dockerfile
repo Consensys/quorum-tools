@@ -19,5 +19,5 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/" &&
       ssh-add $HOME/.ssh/id_noirqs; \
       git clone git@github.com:jpmorganchase/constellation.git $CONSTELLATION_DIR; \
       cd $CONSTELLATION_DIR; \
-      git reset --hard c3031121 && stack --resolver lts-7.14 build; \
+      git reset --hard 6a2ecfa && stack --resolver lts-8.3 build; \
     '
