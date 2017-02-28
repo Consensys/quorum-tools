@@ -132,8 +132,8 @@ data CallArgs = CallArgs
   }
 
 data TxSync
-  = SendTransaction
-  | SendTransactionAsync
+  = Sync
+  | Async
 
 data Tx = Tx
   -- (txFrom is implicitly eth.accounts[0])

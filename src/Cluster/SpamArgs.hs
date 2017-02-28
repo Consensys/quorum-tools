@@ -40,7 +40,7 @@ processContractArgs contractT privateForT = maybe BenchEmptyTx SendTx $ do
         Just addrs -> PrivateFor addrs
 
   (addr, method) <- matchOnce contractPattern rawContract
-  pure $ Tx (Just addr) method privacy SendTransactionAsync
+  pure $ Tx (Just addr) method privacy Async
 
 contractP :: Parser Text
 contractP = optText "contract" 'c'

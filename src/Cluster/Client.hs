@@ -5,7 +5,7 @@
 module Cluster.Client
   ( SpamMode(..)
   , spamGeth
-  , sendTxAsync
+  , sendTransaction
   , call
   , bench
   , loadLocalNode
@@ -80,8 +80,8 @@ sendBody (Tx maybeTo method privacy op) geth = object
 
         opName :: Text
         opName = case op of
-          SendTransaction      -> "eth_sendTransaction"
-          SendTransactionAsync -> "eth_sendTransactionAsync"
+          Sync  -> "eth_sendTransaction"
+          Async -> "eth_sendTransactionAsync"
 
 callBody :: CallArgs -> Geth -> Value
 callBody (CallArgs toBytes method) geth = object
@@ -111,8 +111,8 @@ call geth args
         mParsed = (r^?responseBody.key "result"._String.to Right)
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
-sendTxAsync :: MonadIO io => Geth -> Tx -> io ()
-sendTxAsync geth args
+sendTransaction :: MonadIO io => Geth -> Tx -> io ()
+sendTransaction geth args
   = liftIO $ void $ post (T.unpack (gethUrl geth)) (sendBody args geth)
 
 spamBody :: SpamMode -> Geth -> Value
