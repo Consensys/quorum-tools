@@ -10,7 +10,7 @@ import Prelude hiding (FilePath)
 import Turtle
 import Checkpoint
 import Cluster
-import Cluster.Client (call, sendTxAsync)
+import Cluster.Client (call, sendTransaction)
 import Cluster.Types
 import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex)
 import Control
@@ -68,7 +68,7 @@ sleepBlock geth = fold (sendJs geth "admin.sleepBlocks(1);") (pure ())
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
 incrementStorage geth (Contract privacy _ _ _) (Addr addrBytes) =
   -- TODO: remove "increment()" duplication
-  sendTxAsync geth (Tx (Just addrBytes) "increment()" privacy SendTransaction)
+  sendTransaction geth (Tx (Just addrBytes) "increment()" privacy Sync)
 
 getStorage :: MonadIO io => Geth -> Contract -> Addr -> io (Either Text Int)
 getStorage geth _contract addr = do
