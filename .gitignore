@@ -1,8 +1,7 @@
-raft-*-wal
-raft-*-snap
 .stack-work
 ansible
-geth*.out.*
+geth*.out
+gdata
 id_noirqs
 id_tunneler
 terraform.tfvars
