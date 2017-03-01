@@ -62,9 +62,6 @@ privacyLine = \case
     quote :: Secp256k1 -> Text
     quote (Secp256k1 t) = "\"" <> t <> "\""
 
-sleepBlock :: MonadIO io => Geth -> io ()
-sleepBlock geth = fold (sendJs geth "admin.sleepBlocks(1);") (pure ())
-
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
 incrementStorage geth (Contract privacy _ _ _) (Addr addrBytes) =
   -- TODO: remove "increment()" duplication
