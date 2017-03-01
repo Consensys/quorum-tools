@@ -75,6 +75,9 @@ getPid gDataDir =
        fold (inshell cmd' "") findPid
 
 getPortsForGeth :: MonadIO io => FilePath -> GethId -> io [Port]
-getPortsForGeth ddRoot gid = getPid gDataDir >>= getPorts
-  where
-    gDataDir = DataDir $ ddRoot </> fromText (nodeName gid)
+getPortsForGeth ddRoot gid = do
+  -- Caution:
+  -- lsof requires an absolute path (who knew) -- otherwise it returns nothing
+  base <- pwd
+  let gDataDir = DataDir $ base </> ddRoot </> fromText (nodeName gid)
+  getPid gDataDir >>= getPorts
