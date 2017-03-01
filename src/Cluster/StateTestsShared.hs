@@ -31,15 +31,24 @@ expectEq val expected = liftIO $
     exit failedTestCode
 
 createContract :: MonadIO io => Geth -> Contract -> io Addr
-createContract geth contract@(Contract privacy _ops mem _abi) =
-  let cmd = T.unlines
-        [ "var contractInstance = contract.new(42, {"
+createContract geth (Contract privacy _ops mem abi) =
+  let pw = gethPassword geth
+      cmd = T.unlines
+        [ "personal.unlockAccount(eth.accounts[0], '" <> pw <> "');"
+        , "var contract = eth.contract(" <> abi <> ");"
+        , "var contractInstance = contract.new(42, {"
         , "  from: '" <> showGethAccountId geth <> "',"
         , "  data: '" <> mem <> "',"
         , "  gas: '4700000',"
         , privacyLine privacy
         , "}, function(e, contract) {"
-        -- BIG HACK
+        -- BIG HACK:
+        -- Why do we do it this way? The (correct) checkpoint will be output to
+        -- the geth log after all...
+        --
+        -- Because it's much simpler to block on the main thread until the
+        -- `sleepBlocks` finishes than it is to coordinate threads (the main
+        -- thread and the log listener).
         , "  console.log('RAFT-CHECKPOINT TX-CREATED (0x0000000000000000000000000000000000000000000000000000000000000000, ' + contract.address + ')');"
         , "});"
         , "admin.sleepBlocks(1);"
@@ -51,7 +60,7 @@ createContract geth contract@(Contract privacy _ops mem _abi) =
       consumer :: Fold Line Addr
       consumer = snd . force <$> find' (matchCheckpoint TxCreated)
 
-  in contractCmd geth contract cmd consumer
+  in fold (sendJs geth cmd) consumer
 
 privacyLine :: Privacy -> Text
 privacyLine = \case
@@ -79,15 +88,6 @@ getStorage geth _contract addr = do
         Nothing -> Left ("couldn't coerce to int: " <> printHex WithPrefix b32)
         Just result -> Right result
       _ -> Left ("failed to find hex string: " <> resp')
-
-contractCmd :: MonadIO io => Geth -> Contract -> Text -> Fold Line a -> io a
-contractCmd geth (Contract _privacy _ops _mem abi) cmd consumer =
-  let pw = gethPassword geth
-      unlockLine = "personal.unlockAccount(eth.accounts[0], '" <> pw <> "');"
-      contractLine = "var contract = web3.eth.contract(" <> abi <> ");"
-      cmd' = T.unlines [unlockLine, contractLine, cmd]
-      outputLines = sendJs geth cmd'
-  in fold outputLines consumer
 
 sendJs :: Geth -> Text -> Shell Line
 sendJs geth js = inshellWithJoinedErr (gethCommand geth subcmd) empty
