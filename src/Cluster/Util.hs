@@ -120,11 +120,10 @@ sha3Bytes = toHex . B16.encode . BS.pack . BA.unpack . hashKeccak
 padAddress :: Bytes20 -> Bytes32
 padAddress = toHex . fromHex
 
-padIndex :: Int -> Bytes32
-padIndex = toHex . intToHexBS
-
-intToHexBS :: Int -> ByteString
-intToHexBS i = B8.pack (showHex i "")
+intToBytes32 :: Int -> Bytes32
+intToBytes32 = toHex . intToHexBS where
+  intToHexBS :: Int -> ByteString
+  intToHexBS i = B8.pack (showHex i "")
 
 toInt :: Hex a => a -> Maybe Int
 toInt h = case readHex (B8.unpack (fromHex h)) of
