@@ -27,10 +27,10 @@ createStorage voters makers = Object $ meta <> votersBlock <> makersBlock
         numMakers = length makers
 
         numToHexValue :: Int -> Value
-        numToHexValue = String . hexPrefixed . intToHexBS
+        numToHexValue = String . hexPadKey
 
         hexPadKey :: Int -> Text
-        hexPadKey = hexPrefixed . padIndex
+        hexPadKey = hexPrefixed . intToBytes32
 
         meta = HashMap.fromList
           [ (hexPadKey 1, numToHexValue threshold)
@@ -53,7 +53,7 @@ mapAddresses index addresses =
 storageKey :: Int -> Bytes20 -> Bytes32
 storageKey index address =
   let Bytes32 paddedAddress = padAddress address
-      Bytes32 paddedIndex = padIndex index
+      Bytes32 paddedIndex = intToBytes32 index
   in case B16.decode (paddedAddress <> paddedIndex) of
        (encoded, "") -> sha3Bytes encoded
        (_, invalid) -> error (show invalid)
