@@ -11,6 +11,7 @@ import           Data.Text             (Text)
 import           Prelude               hiding (FilePath, lines)
 
 import           Cluster.Types
+import           Cluster.Util          (tee, inshellWithJoinedErr)
 import           Turtle                hiding (f)
 
 fShow :: Show a => a -> FilePath
@@ -49,12 +50,17 @@ setupConstellationNode deployDatadir conf = do
   copyKeys conf
   installConfig deployDatadir conf
 
+constellationNodeName :: GethId -> Text
+constellationNodeName gid = format ("constellation"%d) (gId gid)
+
 startConstellationNode :: MonadManaged io => Geth -> io ()
 startConstellationNode geth = do
   let confPath = forceConfigPath $ gethConstellationConfig geth
+  let logPath = fromText $ constellationNodeName (gethId geth) <> ".out"
 
   _ <- fork $ sh $
-    inshellWithErr (format ("constellation-node "%fp) confPath) ""
+    inshellWithJoinedErr (format ("constellation-node "%fp) confPath) ""
+    & tee logPath
 
   -- put in a small delay so this constellation can start its server before the
   -- next hits it

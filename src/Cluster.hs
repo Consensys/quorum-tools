@@ -32,11 +32,9 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, isInfixOf, pack, replace)
 import qualified Data.Text                  as T
-import qualified Data.Text.IO               as T
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
-import           System.IO                  (BufferMode (..), hClose,
-                                             hSetBuffering)
+import           System.IO                  (hClose)
 import           Turtle                     hiding (env, view)
 
 import           Checkpoint
@@ -44,7 +42,7 @@ import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Types
 import           Cluster.Util               (textDecode, textEncode,
                                              bytes20P, matchOnce,
-                                             HexPrefix(..), printHex)
+                                             HexPrefix(..), printHex, tee, inshellWithJoinedErr)
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
 import           Control
@@ -159,13 +157,6 @@ readAccountKey dir acctId = do
     let mPath = headMay $ filter hasAccountId paths
 
     fmap (AccountKey acctId) <$> sequence (strict . input <$> mPath)
-
-inshellWithJoinedErr :: Text -> Shell Line -> Shell Line
-inshellWithJoinedErr cmd inputShell = do
-  line <- inshellWithErr cmd inputShell
-  case line of
-    Left txt  -> return txt
-    Right txt -> return txt
 
 createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
 createAccount dir = do
@@ -391,14 +382,6 @@ gethShell geth = do
   inshellWithJoinedErr (gethCommand geth $
                                     format ("--unlock 0 --password "%fp) pwPath)
                        empty
-
-tee :: FilePath -> Shell Line -> Shell Line
-tee filepath lines = do
-  handle <- using $ writeonly filepath
-  liftIO $ hSetBuffering handle LineBuffering
-  line <- lines
-  liftIO $ T.hPutStrLn handle $ lineToText line
-  return line
 
 observingTransition :: (a -> Bool) -> Shell (a, b) -> Shell (a, (Transitioned, b))
 observingTransition test lines = do
