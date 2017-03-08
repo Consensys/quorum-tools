@@ -14,9 +14,9 @@ import qualified Data.Text                  as T
 import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
+import Cluster.Control (onExit)
 import Cluster.Types
 import Cluster.Util (matchOnce)
-import Control (onExit)
 import SharedPartitioning
 
 pfctl :: Format Text r -> r

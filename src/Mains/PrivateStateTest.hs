@@ -9,10 +9,10 @@ import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT))
 
 import           Cluster
+import           Cluster.Control
 import           Cluster.StateTestsShared
 import           Cluster.Types
 import           Constellation
-import           Control
 import           Prelude                  hiding (FilePath)
 import           TestOutline              hiding (verify)
 import           Turtle                   hiding (match)

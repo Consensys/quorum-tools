@@ -20,7 +20,7 @@ import           Checkpoint
 import           Cluster.Types              hiding (lastBlock, lastRaftStatus)
 import           Cluster.Util               (matchOnce)
 
-import           Control
+import           Cluster.Control
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
