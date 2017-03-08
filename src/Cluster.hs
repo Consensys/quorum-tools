@@ -11,7 +11,7 @@ module Cluster where
 
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (isEmptyMVar, modifyMVar_,
+import           Control.Concurrent.MVar    (MVar, isEmptyMVar, modifyMVar_,
                                              newEmptyMVar, newMVar, putMVar,
                                              readMVar, swapMVar, tryTakeMVar)
 import qualified Control.Foldl              as Fold
@@ -528,38 +528,36 @@ instrumentedGethShell geth
   where
     logPath = fromText $ nodeName (gethId geth) <> ".out"
 
+eventVar :: forall m a. MonadManaged m => a -> m (Async a, IO ())
+eventVar a = do
+  mvar <- liftIO newEmptyMVar
+  triggered <- awaitMVar mvar
+  let transition = ensureMVarTransition mvar a
+  pure (triggered, transition)
+
+behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, a -> IO ())
+behaviorVar = do
+  mvar <- liftIO $ newMVar mempty
+  pure (mvar, void . swapMVar mvar)
+
 runNode :: forall m. (MonadManaged m)
         => Int
         -> Geth
         -> m NodeInstrumentation
 runNode numNodes geth = do
-  (onlineMvar, lastBlockMvar, lastRaftMvar, outstandingTxesMVar, txAddrsMVar, allConnectedMVar, assumedRoleMVar)
-    <- liftIO $ (,,,,,,)
-      <$> newEmptyMVar
-      <*> newMVar mempty
-      <*> newMVar mempty
-      <*> newMVar mempty
-      <*> newMVar mempty
-      <*> newEmptyMVar
-      <*> newEmptyMVar
+  (started, triggerStarted)                 <- eventVar NodeOnline
+  (connected, triggerConnected)             <- eventVar AllConnected
+  (assumedRole, triggerAssumedRole)         <- eventVar AssumedRole
+  (lastBlockMvar, setLastBlock)             <- behaviorVar
+  (lastRaftMVar, setLastRaftStatus)         <- behaviorVar
+  (outstandingTxesMVar, setOutstandingTxes) <- behaviorVar
+  (txAddrsMVar, setTxAddrs)                 <- behaviorVar
 
   -- TODO: take as arg:
   let instrumentedLines = instrumentedGethShell geth
 
       -- with the HTTP transport, each node actually even connects to itself
       expectedPeerCount = numNodes
-
-      started :: m (Async NodeOnline)
-      started = awaitMVar onlineMvar
-
-      terminated :: m (Async NodeTerminated)
-      terminated = fmap ($> NodeTerminated) processor
-
-      connected :: m (Async AllConnected)
-      connected = awaitMVar allConnectedMVar
-
-      assumedRole :: m (Async AssumedRole)
-      assumedRole = awaitMVar assumedRoleMVar
 
       processor :: m (Async ())
       processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
@@ -570,30 +568,28 @@ runNode numNodes geth = do
          (mOnline,
          (connSet,
          (mAssumedRole, ()))))))) -> do
-          void $ swapMVar lastBlockMvar lastBlock
-          void $ swapMVar lastRaftMvar lastRaftStatus
-          void $ swapMVar outstandingTxesMVar outstandingTxes
-          void $ swapMVar txAddrsMVar txAddrs
+          setLastBlock lastBlock
+          setLastRaftStatus lastRaftStatus
+          setOutstandingTxes outstandingTxes
+          setTxAddrs txAddrs
 
-          when (Set.size connSet == expectedPeerCount) $
-            ensureMVarTransition allConnectedMVar AllConnected
+          when (Set.size connSet == expectedPeerCount) triggerConnected
 
-          when (isJust mOnline) $ ensureMVarTransition onlineMvar NodeOnline
+          when (isJust mOnline) triggerStarted
 
           -- TODO fix a lot of duplication between the two places that produce
           -- an AssumedRole in an MVar
-          when (isJust mAssumedRole) $
-            ensureMVarTransition assumedRoleMVar AssumedRole
+          when (isJust mAssumedRole) triggerAssumedRole
 
-  NodeInstrumentation
-    <$> started
-    <*> terminated
-    <*> pure lastBlockMvar
-    <*> pure lastRaftMvar
-    <*> pure outstandingTxesMVar
-    <*> pure txAddrsMVar
-    <*> connected
-    <*> assumedRole
+  terminated <- ($> NodeTerminated) <$> processor
+
+  pure $ NodeInstrumentation started terminated
+    lastBlockMvar
+    lastRaftMVar
+    outstandingTxesMVar
+    txAddrsMVar
+    connected
+    assumedRole
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
