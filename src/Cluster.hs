@@ -10,7 +10,7 @@
 module Cluster where
 
 import           Control.Arrow              ((>>>))
-import           Control.Concurrent.Async   (Async, forConcurrently)
+import           Control.Concurrent.Async   (forConcurrently)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, view, (^.))
 import           Control.Monad              (replicateM)
@@ -20,11 +20,9 @@ import           Control.Monad.Reader.Class (MonadReader (ask))
 import           Data.Aeson                 (Value, withObject, (.:))
 import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
-import           Data.Functor               (($>))
 import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (fromMaybe, isJust)
-import           Data.Monoid                (Last, (<>))
-import           Data.Set                   (Set)
+import           Data.Maybe                 (fromMaybe)
+import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
 import           Prelude                    hiding (FilePath, lines)
@@ -378,74 +376,42 @@ gethShell geth = do
                                     format ("--unlock 0 --password "%fp) pwPath)
                        empty
 
-
-instrumentedGethShell :: Geth
-                      -> Shell (Line,
-                               ((OutstandingTxes, TxAddrs),
-                               (Last RaftStatus,
-                               (Last Block,
-                               (Maybe NodeOnline,
-                               (Set GethId,
-                               (Maybe AssumedRole,
-                               ())))))))
-instrumentedGethShell geth
-  = gethShell geth
-  & tee logPath
-  & startObserving
-  & observingRoles
-  & observingActivation
-  & observingBoot
-  & observingLastBlock
-  & observingRaftStatus
-  & observingTxes
-  where
-    logPath = fromText $ nodeName (gethId geth) <> ".out"
-
 runNode :: forall m. (MonadManaged m)
         => Int
         -> Geth
         -> m NodeInstrumentation
 runNode numNodes geth = do
-  (started, triggerStarted)                 <- eventVar NodeOnline
-  (connected, triggerConnected)             <- eventVar AllConnected
-  (assumedRole, triggerAssumedRole)         <- eventVar AssumedRole
-  (lastBlockMvar, setLastBlock)             <- behaviorVar
-  (lastRaftMVar, setLastRaftStatus)         <- behaviorVar
-  (outstandingTxesMVar, setOutstandingTxes) <- behaviorVar
-  (txAddrsMVar, setTxAddrs)                 <- behaviorVar
+  -- allocate events and behaviors
+  (started,             triggerStarted)     <- eventVar NodeOnline
+  (connected,           triggerConnected)   <- eventVar AllConnected
+  (assumedRole,         triggerAssumedRole) <- eventVar AssumedRole
+  (lastBlockMVar,       updateLastBlock)    <- behaviorVar'
+  (lastRaftMVar,        updateRaftStatus)   <- behaviorVar'
+  (outstandingTxesMVar, updateOutstanding)  <- behaviorVar'
+  (txAddrsMVar,         updateAddrs)        <- behaviorVar'
 
-  -- TODO: take as arg:
-  let instrumentedLines = instrumentedGethShell geth
-
+  (membershipMVar, updateMembership) <- behaviorVar'
+  let predicate connSet =
       -- with the HTTP transport, each node actually even connects to itself
-      expectedPeerCount = numNodes
+        if Set.size connSet == numNodes then Just () else Nothing
+  async <- behaviorToEvent membershipMVar predicate
 
-      processor :: m (Async ())
-      processor = fork $ foldIO instrumentedLines $ Fold.mapM_ $
-        \(_line,
-         ((outstandingTxes, txAddrs),
-         (lastRaftStatus,
-         (lastBlock,
-         (mOnline,
-         (connSet,
-         (mAssumedRole, ()))))))) -> do
-          setLastBlock lastBlock
-          setLastRaftStatus lastRaftStatus
-          setOutstandingTxes outstandingTxes
-          setTxAddrs txAddrs
+  let logPath = fromText $ nodeName (gethId geth) <> ".out"
+      instrumentedLines
+        = gethShell geth
+        & tee logPath
+        & observingRoles triggerAssumedRole
+        & observingActivation updateMembership
+        & observingBoot triggerStarted
+        & observingLastBlock updateLastBlock
+        & observingRaftStatus updateRaftStatus
+        & observingTxes updateOutstanding updateAddrs
 
-          when (Set.size connSet == expectedPeerCount) triggerConnected
-
-          when (isJust mOnline) triggerStarted
-
-          -- TODO fix a lot of duplication between the two places that produce
-          -- an AssumedRole in an MVar
-          when (isJust mAssumedRole) triggerAssumedRole
-
-  terminated <- ($> NodeTerminated) <$> processor
+  _ <- fork $ wait async >> triggerConnected
+  terminated <- fork $ NodeTerminated <$ sh instrumentedLines
 
   pure $ NodeInstrumentation started terminated
-    lastBlockMvar
+    lastBlockMVar
     lastRaftMVar
     outstandingTxesMVar
     txAddrsMVar
