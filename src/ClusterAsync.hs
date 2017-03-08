@@ -3,7 +3,7 @@
 
 module ClusterAsync where
 
-import Control.Concurrent.Async   (Async, async, forConcurrently)
+import Control.Concurrent.Async   (Async, async)
 import Control.Monad.Reader       (ReaderT (ReaderT, runReaderT), ask)
 import Turtle                     (MonadIO, Shell, liftIO, sh)
 
@@ -26,13 +26,3 @@ clusterAsync
 clusterAsync m = do
   clusterEnv <- ask
   liftIO $ async $ sh (runReaderT m clusterEnv)
-
--- | Map an IO-performing function with cluster environment access.
-forConcurrently'
-  :: (Traversable t, MonadIO m, HasEnv m)
-  => t a
-  -> (a -> ReaderT ClusterEnv IO b)
-  -> m (t b)
-forConcurrently' struct f = do
-  clusterEnv <- ask
-  liftIO $ forConcurrently struct $ \a -> runReaderT (f a) clusterEnv
