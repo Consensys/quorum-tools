@@ -3,7 +3,7 @@ module Cluster.Control where
 
 import           Control.Concurrent.Async   (Async)
 import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar, putMVar,
-                                             tryPutMVar, swapMVar, newMVar, newEmptyMVar)
+                                             tryPutMVar, newMVar, newEmptyMVar)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
 import           Data.Foldable              (traverse_)
@@ -60,13 +60,8 @@ eventVar a = do
   let transition = ensureMVarTransition mvar a
   pure (triggered, transition)
 
-behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, a -> IO ())
+behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, (a -> a) -> IO ())
 behaviorVar = do
-  mvar <- liftIO $ newMVar mempty
-  pure (mvar, void . swapMVar mvar)
-
-behaviorVar' :: (MonadManaged m, Monoid a) => m (MVar a, (a -> a) -> IO ())
-behaviorVar' = do
   mvar <- liftIO $ newMVar mempty
   pure (mvar, pureModifyMVar_ mvar)
 
@@ -78,5 +73,9 @@ behaviorToEvent bvar predicate = do
         case predicate val of
           Just b -> putMVar evar b
           Nothing -> helper
-  fork helper
+
+  -- Ignore the returned async -- it doesn't carry a meaningful value. We need
+  -- to continue to the next line. The forked thread will live until after the
+  -- event has been triggered.
+  _ <- fork helper
   awaitMVar evar

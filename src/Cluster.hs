@@ -386,12 +386,12 @@ runNode numNodes geth = do
   (nodeOnline,      triggerStarted)     <- eventVar NodeOnline
   (allConnected,    triggerConnected)   <- eventVar AllConnected
   (assumedRole,     triggerAssumedRole) <- eventVar AssumedRole
-  (lastBlock,       updateLastBlock)    <- behaviorVar'
-  (lastRaftStatus,  updateRaftStatus)   <- behaviorVar'
-  (outstandingTxes, updateOutstanding)  <- behaviorVar'
-  (txAddrs,         updateAddrs)        <- behaviorVar'
+  (lastBlock,       updateLastBlock)    <- behaviorVar
+  (lastRaftStatus,  updateRaftStatus)   <- behaviorVar
+  (outstandingTxes, updateOutstanding)  <- behaviorVar
+  (txAddrs,         updateAddrs)        <- behaviorVar
+  (membershipMVar,  updateMembership)   <- behaviorVar
 
-  (membershipMVar, updateMembership) <- behaviorVar'
   let predicate connSet =
       -- with the HTTP transport, each node actually even connects to itself
         if Set.size connSet == numNodes then Just () else Nothing
