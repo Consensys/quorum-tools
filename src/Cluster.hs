@@ -11,8 +11,6 @@ module Cluster where
 
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (Async, forConcurrently)
-import           Control.Concurrent.MVar    (MVar, newEmptyMVar, newMVar,
-                                             swapMVar)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, view, (^.))
 import           Control.Monad              (replicateM)
@@ -402,18 +400,6 @@ instrumentedGethShell geth
   & observingTxes
   where
     logPath = fromText $ nodeName (gethId geth) <> ".out"
-
-eventVar :: forall m a. MonadManaged m => a -> m (Async a, IO ())
-eventVar a = do
-  mvar <- liftIO newEmptyMVar
-  triggered <- awaitMVar mvar
-  let transition = ensureMVarTransition mvar a
-  pure (triggered, transition)
-
-behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, a -> IO ())
-behaviorVar = do
-  mvar <- liftIO $ newMVar mempty
-  pure (mvar, void . swapMVar mvar)
 
 runNode :: forall m. (MonadManaged m)
         => Int
