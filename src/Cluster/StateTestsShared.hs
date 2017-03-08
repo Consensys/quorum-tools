@@ -57,10 +57,10 @@ createContract geth (Contract privacy _ops mem abi) =
       -- look for TX-CREATED result addr
       force = fromMaybe (error "unable to extract addr from contract creation")
 
-      consumer :: Fold Line Addr
+      consumer :: Fold Text Addr
       consumer = snd . force <$> find' (matchCheckpoint TxCreated)
 
-  in fold (sendJs geth cmd) consumer
+  in fold (lineToText <$> sendJs geth cmd) consumer
 
 privacyLine :: Privacy -> Text
 privacyLine = \case

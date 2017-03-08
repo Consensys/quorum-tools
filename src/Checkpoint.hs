@@ -42,8 +42,8 @@ mkCheckpointPattern TxCreated = do
   return (TxId transactionId, Addr addr)
 mkCheckpointPattern TxAccepted = TxId <$> bytes32P WithPrefix
 
-matchCheckpoint :: Checkpoint a -> Line -> Maybe a
+matchCheckpoint :: Checkpoint a -> Text -> Maybe a
 matchCheckpoint cpt line =
-  case match (patternForCheckpoint cpt) (lineToText line) of
+  case match (patternForCheckpoint cpt) line of
     [result] -> Just result
     _        -> Nothing
