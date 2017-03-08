@@ -17,32 +17,29 @@ import           Cluster.Types              hiding (lastBlock, lastRaftStatus)
 import           Cluster.Util               (matchOnce)
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
-matchCheckpoint' :: Checkpoint a -> Line -> (a -> IO ()) -> Shell ()
+matchCheckpoint' :: Checkpoint a -> Text -> (a -> IO ()) -> IO ()
 matchCheckpoint' cpt line cb = case matchCheckpoint cpt line of
-  Just a  -> liftIO (cb a)
+  Just a  -> cb a
   Nothing -> pure ()
 
-observingTransition :: (a -> Bool) -> IO () -> Shell a -> Shell a
-observingTransition test trigger lines = do
+observingLines :: (Text -> IO ()) -> Shell Line -> Shell Line
+observingLines action lines = do
   line <- lines
-  when (test line) (liftIO trigger)
+  liftIO $ action (lineToText line)
   return line
 
 observingBoot :: IO () -> Shell Line -> Shell Line
-observingBoot trigger lines =
-  let ipcOpened line = "IPC endpoint opened:" `isInfixOf` lineToText line
-  in observingTransition ipcOpened trigger lines
+observingBoot trigger = observingLines $ \line ->
+  when ("IPC endpoint opened:" `isInfixOf` line) trigger
 
 observingLastBlock
   :: ((Last Block -> Last Block) -> IO ())
   -> Shell Line
   -> Shell Line
-observingLastBlock updateLastBlock incoming = do
-    line <- incoming
-    case matchOnce blockPattern (lineToText line) of
-      Just latest -> liftIO $ updateLastBlock (<> pure latest)
+observingLastBlock updateLastBlock = observingLines $ \line ->
+    case matchOnce blockPattern line of
+      Just latest -> updateLastBlock (<> pure latest)
       _           -> pure ()
-    return line
 
   where
     blockPattern :: Pattern Block
@@ -54,9 +51,7 @@ observingTxes
   -> ((TxAddrs -> TxAddrs) -> IO ())
   -> Shell Line
   -> Shell Line
-observingTxes updateOutstanding updateAddrs incoming = do
-    line <- incoming
-
+observingTxes updateOutstanding updateAddrs = observingLines $ \line -> do
     matchCheckpoint' TxCreated line $ \(tx, addr) -> do
       updateOutstanding (OutstandingTxes . Set.insert tx . unOutstandingTxes)
       updateAddrs (TxAddrs . Map.insert tx addr . unTxAddrs)
@@ -64,18 +59,14 @@ observingTxes updateOutstanding updateAddrs incoming = do
     matchCheckpoint' TxAccepted line $ \tx ->
       updateOutstanding (OutstandingTxes . Set.delete tx . unOutstandingTxes)
 
-    return line
-
 observingRaftStatus
   :: ((Last RaftStatus -> Last RaftStatus) -> IO ())
   -> Shell Line
   -> Shell Line
-observingRaftStatus updateRaftStatus incoming = do
-    line <- incoming
-    case matchOnce statusPattern (lineToText line) of
+observingRaftStatus updateRaftStatus = observingLines $ \line ->
+    case matchOnce statusPattern line of
       Just raftStatus -> liftIO $ updateRaftStatus (<> pure raftStatus)
       _               -> pure ()
-    return line
 
   where
     statusPattern :: Pattern RaftStatus
@@ -89,23 +80,17 @@ observingRaftStatus updateRaftStatus incoming = do
     toRole unknown = error $ "failed to parse unknown raft role: " ++ T.unpack unknown
 
 observingRoles :: IO () -> Shell Line -> Shell Line
-observingRoles trigger incoming = do
-  line <- incoming
-  matchCheckpoint' BecameMinter line $ \() -> trigger
+observingRoles trigger = observingLines $ \line -> do
+  matchCheckpoint' BecameMinter   line $ \() -> trigger
   matchCheckpoint' BecameVerifier line $ \() -> trigger
-  return line
 
 observingActivation
   :: ((Set GethId -> Set GethId) -> IO ())
   -> Shell Line
   -> Shell Line
-observingActivation updateConnections incoming = do
-  line <- incoming
-
+observingActivation updateConnections = observingLines $ \line -> do
   matchCheckpoint' PeerConnected line $ \(PeerJoined joined) ->
     updateConnections (Set.insert joined)
 
   matchCheckpoint' PeerDisconnected line $ \(PeerLeft left) ->
     updateConnections (Set.delete left)
-
-  return line
