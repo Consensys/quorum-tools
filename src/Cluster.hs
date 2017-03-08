@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE RecordWildCards     #-}
 
 module Cluster where
 
@@ -382,13 +383,13 @@ runNode :: forall m. (MonadManaged m)
         -> m NodeInstrumentation
 runNode numNodes geth = do
   -- allocate events and behaviors
-  (started,             triggerStarted)     <- eventVar NodeOnline
-  (connected,           triggerConnected)   <- eventVar AllConnected
-  (assumedRole,         triggerAssumedRole) <- eventVar AssumedRole
-  (lastBlockMVar,       updateLastBlock)    <- behaviorVar'
-  (lastRaftMVar,        updateRaftStatus)   <- behaviorVar'
-  (outstandingTxesMVar, updateOutstanding)  <- behaviorVar'
-  (txAddrsMVar,         updateAddrs)        <- behaviorVar'
+  (nodeOnline,      triggerStarted)     <- eventVar NodeOnline
+  (allConnected,    triggerConnected)   <- eventVar AllConnected
+  (assumedRole,     triggerAssumedRole) <- eventVar AssumedRole
+  (lastBlock,       updateLastBlock)    <- behaviorVar'
+  (lastRaftStatus,  updateRaftStatus)   <- behaviorVar'
+  (outstandingTxes, updateOutstanding)  <- behaviorVar'
+  (txAddrs,         updateAddrs)        <- behaviorVar'
 
   (membershipMVar, updateMembership) <- behaviorVar'
   let predicate connSet =
@@ -408,15 +409,9 @@ runNode numNodes geth = do
         & observingTxes updateOutstanding updateAddrs
 
   _ <- fork $ wait async >> triggerConnected
-  terminated <- fork $ NodeTerminated <$ sh instrumentedLines
+  nodeTerminated <- fork $ NodeTerminated <$ sh instrumentedLines
 
-  pure $ NodeInstrumentation started terminated
-    lastBlockMVar
-    lastRaftMVar
-    outstandingTxesMVar
-    txAddrsMVar
-    connected
-    assumedRole
+  pure $ NodeInstrumentation {..}
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
