@@ -2,7 +2,7 @@ module Control where
 
 import           Control.Concurrent.Async   (Async)
 import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar,
-                                             tryPutMVar)
+                                             tryPutMVar, swapMVar, newMVar, newEmptyMVar)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
 import           Data.Foldable              (traverse_)
@@ -51,3 +51,15 @@ find' predicate = Fold step Nothing id where
          (Just _b, _)       -> accum
          (Nothing, Just _b) -> match
          (Nothing, Nothing) -> Nothing
+
+eventVar :: forall m a. MonadManaged m => a -> m (Async a, IO ())
+eventVar a = do
+  mvar <- liftIO newEmptyMVar
+  triggered <- awaitMVar mvar
+  let transition = ensureMVarTransition mvar a
+  pure (triggered, transition)
+
+behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, a -> IO ())
+behaviorVar = do
+  mvar <- liftIO $ newMVar mempty
+  pure (mvar, void . swapMVar mvar)
