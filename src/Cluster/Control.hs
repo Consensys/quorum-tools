@@ -2,7 +2,7 @@
 module Cluster.Control where
 
 import           Control.Concurrent.Async   (Async)
-import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar,
+import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar, putMVar,
                                              tryPutMVar, swapMVar, newMVar, newEmptyMVar)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
@@ -64,3 +64,19 @@ behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, a -> IO ())
 behaviorVar = do
   mvar <- liftIO $ newMVar mempty
   pure (mvar, void . swapMVar mvar)
+
+behaviorVar' :: (MonadManaged m, Monoid a) => m (MVar a, (a -> a) -> IO ())
+behaviorVar' = do
+  mvar <- liftIO $ newMVar mempty
+  pure (mvar, pureModifyMVar_ mvar)
+
+behaviorToEvent :: MonadManaged io => MVar a -> (a -> Maybe b) -> io (Async b)
+behaviorToEvent bvar predicate = do
+  evar <- liftIO newEmptyMVar
+  let helper = do
+        val <- takeMVar bvar
+        case predicate val of
+          Just b -> putMVar evar b
+          Nothing -> helper
+  fork helper
+  awaitMVar evar
