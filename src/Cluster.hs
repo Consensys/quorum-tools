@@ -40,7 +40,7 @@ import           Cluster.Util               (textDecode, textEncode,
                                              HexPrefix(..), printHex, tee, inshellWithJoinedErr)
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
-import           Control
+import           Cluster.Control
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv

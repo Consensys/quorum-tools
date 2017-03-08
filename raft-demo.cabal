@@ -53,6 +53,7 @@ library
     Cluster
     Cluster.Aws
     Cluster.Client
+    Cluster.Control
     Cluster.Genesis
     Cluster.GenesisCode
     Cluster.Observing
@@ -66,7 +67,6 @@ library
     SharedPartitioning
     TestOutline
     Checkpoint
-    Control
   default-language: Haskell2010
 
 executable local-new

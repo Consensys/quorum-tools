@@ -1,4 +1,5 @@
-module Control where
+{-# LANGUAGE RankNTypes          #-}
+module Cluster.Control where
 
 import           Control.Concurrent.Async   (Async)
 import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar,

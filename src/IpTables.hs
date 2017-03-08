@@ -10,8 +10,8 @@ import qualified Data.Text             as T
 import           Prelude               hiding (FilePath, lines)
 import           Turtle
 
+import           Cluster.Control       (onExit)
 import           Cluster.Types
-import           Control               (onExit)
 import           SharedPartitioning
 
 iptables :: Format Text r -> r

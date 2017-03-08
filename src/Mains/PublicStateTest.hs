@@ -9,8 +9,8 @@ import           Control.Monad.Reader       (ReaderT (runReaderT))
 import Prelude hiding (FilePath)
 import Turtle hiding (match)
 import Cluster
+import Cluster.Control
 import Cluster.Types
-import Control
 import TestOutline hiding (verify)
 import Cluster.StateTestsShared
 

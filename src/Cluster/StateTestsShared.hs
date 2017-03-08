@@ -11,9 +11,9 @@ import Turtle
 import Checkpoint
 import Cluster
 import Cluster.Client (call, sendTransaction)
+import Cluster.Control
 import Cluster.Types
 import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex, inshellWithJoinedErr)
-import Control
 import TestOutline hiding (verify)
 
 
