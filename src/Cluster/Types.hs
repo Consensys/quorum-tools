@@ -140,7 +140,7 @@ data Tx = Tx
   { txTo      :: Maybe Bytes20
   , txMethod  :: UnencodedMethod
   , txPrivacy :: Privacy
-  , txSynx    :: TxSync
+  , txSync    :: TxSync
   }
 
 data SpamMode
