@@ -1,11 +1,11 @@
 module Control where
 
-import           Control.Concurrent.Async   (Async, waitAny)
+import           Control.Concurrent.Async   (Async)
 import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar,
                                              tryPutMVar)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
-import           Data.Foldable              (traverse_, toList)
+import           Data.Foldable              (traverse_)
 import           Turtle                     (MonadIO, void, fork, liftIO, wait,
                                              Fold(..))
 
@@ -32,10 +32,6 @@ awaitMVar = fork . takeMVar
 -- A "join point".
 awaitAll :: (MonadIO m, Traversable t) => t (Async a) -> m ()
 awaitAll = liftIO . traverse_ wait
-
--- | Await fulfillment of any async before continuing.
-awaitAny :: (MonadIO m, Traversable t) => t (Async a) -> m ()
-awaitAny = liftIO . void . waitAny . toList
 
 -- | Execute an action before exiting. Exception safe.
 --
