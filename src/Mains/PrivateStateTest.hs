@@ -28,7 +28,7 @@ privateStateTestMain = sh $ do
   clusterMain geths cEnv
 
 clusterMain :: MonadManaged io => [Geth] -> ClusterEnv -> io ()
-clusterMain geths clusterEnv = flip runReaderT clusterEnv $ do
+clusterMain geths cEnv = flip runReaderT cEnv $ do
   let [g1, g2, g3] = geths
 
   instruments <- traverse (runNode clusterSize) geths
