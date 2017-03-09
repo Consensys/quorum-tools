@@ -143,6 +143,12 @@ data Tx = Tx
   , txSync    :: TxSync
   }
 
+-- Contract constructor arguments
+-- * The contract to create
+-- * The initial value: could easily be generalized from 32 bytes
+-- * Synchronous or asynchronous
+data CreateArgs = CreateArgs Contract Bytes32 TxSync
+
 data SpamMode
   = BenchEmptyTx
   | SendTx Tx

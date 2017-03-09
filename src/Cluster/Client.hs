@@ -7,6 +7,7 @@ module Cluster.Client
   , spamGeth
   , sendTransaction
   , call
+  , create
   , bench
   , loadLocalNode
   , perSecond
@@ -16,6 +17,7 @@ import           Control.Lens            (to, (^.), (^?))
 import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
 import           Data.Aeson              (Value(Array, String), object, (.=))
+import           Data.Aeson.Types        (Pair)
 import           Data.Aeson.Lens         (key, _String)
 import qualified Data.ByteString.Lazy    as LSB
 import           Data.Maybe              (fromMaybe)
@@ -43,6 +45,18 @@ t = id
 encodeMethod :: UnencodedMethod -> Bytes32
 encodeMethod (UnencodedMethod signature) = sha3Bytes (T.encodeUtf8 signature)
 
+opName :: TxSync -> Text
+opName = \case
+  Sync  -> "eth_sendTransaction"
+  Async -> "eth_sendTransactionAsync"
+
+setPrivateFor :: Privacy -> [Pair] -> [Pair]
+setPrivateFor privacy params = case privacy of
+  Public -> params
+  PrivateFor addrs ->
+    let addrsVal = Array (String . unSecp256k1 <$> V.fromList addrs)
+    in params <> ["privateFor" .= addrsVal]
+
 emptyTxRpcBody :: Geth -> Value
 emptyTxRpcBody geth = object
     [ "id"      .= (1 :: Int)
@@ -57,31 +71,36 @@ emptyTxRpcBody geth = object
     ]
 
 sendBody :: Tx -> Geth -> Value
-sendBody (Tx maybeTo method privacy op) geth = object
+sendBody (Tx maybeTo method privacy sync) geth = object
     [ "id"      .= (1 :: Int)
     , "jsonrpc" .= t "2.0"
-    , "method"  .= opName
-    , "params"  .= [ object params'' ]
+    , "method"  .= opName sync
+    , "params"  .= [ object params' ]
     ] where
-        params =
+        params = setPrivateFor privacy
           [ "from" .= showGethAccountId geth
           , "data" .= hexPrefixed (encodeMethod method)
           ]
 
-        params' = case privacy of
-          Public -> params
-          PrivateFor addrs ->
-            let addrsVal = Array (String . unSecp256k1 <$> V.fromList addrs)
-            in params <> ["privateFor" .= addrsVal]
+        params' = case maybeTo of
+          Nothing -> params
+          Just toBytes -> params <> ["to" .= hexPrefixed toBytes]
 
-        params'' = case maybeTo of
-          Nothing -> params'
-          Just toBytes -> params' <> ["to" .= hexPrefixed toBytes]
-
-        opName :: Text
-        opName = case op of
-          Sync  -> "eth_sendTransaction"
-          Async -> "eth_sendTransactionAsync"
+createBody :: CreateArgs -> Geth -> Value
+createBody
+  (CreateArgs (Contract privacy _methods bytecode _abi) initVal sync)
+  geth         = object
+  [ "id"      .= (1 :: Int)
+  , "jsonrpc" .= t "2.0"
+  , "method"  .= opName sync
+  , "params"  .=
+    [ object $ setPrivateFor privacy
+      [ "from"  .= showGethAccountId geth
+      , "data"  .= (bytecode <> printHex WithoutPrefix initVal)
+      , "gas"   .= t "4700000"
+      ]
+    ]
+  ]
 
 callBody :: CallArgs -> Geth -> Value
 callBody (CallArgs toBytes method) geth = object
@@ -112,8 +131,13 @@ call geth args
               <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 sendTransaction :: MonadIO io => Geth -> Tx -> io ()
-sendTransaction geth args
-  = liftIO $ void $ post (T.unpack (gethUrl geth)) (sendBody args geth)
+sendTransaction geth args = liftIO $ void $
+  post (T.unpack (gethUrl geth)) (sendBody args geth)
+
+create :: MonadIO io => Geth -> CreateArgs -> io ()
+create geth args = liftIO $ void $
+  post (T.unpack (gethUrl geth)) (createBody args geth)
+
 
 spamBody :: SpamMode -> Geth -> Value
 spamBody = \case
