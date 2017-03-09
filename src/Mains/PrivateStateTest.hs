@@ -42,7 +42,7 @@ clusterMain geths cEnv = flip runReaderT cEnv $ do
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
   privStorageAddr
-    <- createContract (head geths) privStorage (txAddrs (head instruments))
+    <- createContract g1 privStorage (txAddrs (head instruments))
 
   -- The storage starts with a value of 42 and we increment it five times
   forM_ [1..5] $ \no -> do
