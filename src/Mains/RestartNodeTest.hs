@@ -15,6 +15,9 @@ import TestOutline
 numNodes :: Int
 numNodes = 3
 
+cEnv :: ClusterEnv
+cEnv = mkLocalEnv numNodes
+
 waitForElection :: MonadIO m => NodeInstrumentation -> m ()
 waitForElection instruments = do
   timestampedMessage "awaiting a successful raft election"
@@ -51,21 +54,21 @@ readNodeInfo = refine >=> \instruments -> (,)
 
 node1Plan :: Geth -> IO NodeInfo
 node1Plan geth = do
-  _ <- run numNodes $ do
+  _ <- run cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     td 5
 
   td 1
 
-  readNodeInfo <=< run numNodes $ do
+  readNodeInfo <=< run cEnv $ do
     instruments <- runNode numNodes geth
     td 8
     pure instruments
 
 nodes23Plan :: Geth -> IO NodeInfo
 nodes23Plan geth =
-  readNodeInfo <=< run numNodes $ do
+  readNodeInfo <=< run cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     withSpammer [geth] $ td 4
@@ -79,7 +82,7 @@ restartNodeTestMain :: IO ()
 restartNodeTestMain = do
   let gethIds = [1..GethId numNodes]
 
-  nodes <- run numNodes $ do
+  nodes <- run cEnv $ do
     nodes <- wipeAndSetupNodes Nothing "gdata" gethIds
     pure nodes
 

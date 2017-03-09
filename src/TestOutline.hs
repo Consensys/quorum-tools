@@ -8,6 +8,7 @@ module TestOutline where
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
 import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar)
+import           Control.Lens
 import           Control.Monad            (forM_)
 import           Control.Monad.Except
 import           Control.Monad.Managed    (MonadManaged)
@@ -30,6 +31,7 @@ import Cluster.Types
 import Cluster.Client
 import Cluster.Control (awaitAll)
 import ClusterAsync
+import Constellation
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -77,10 +79,11 @@ type TestM = ExceptT FailureReason (ReaderT ClusterEnv Shell)
 -- | Run this test up to @TestNum@ times or until it fails
 tester
   :: TestPredicate
+  -> PrivacySupport
   -> NumNodes
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
-tester p numNodes cb = foldr go mempty [0..] >>= \case
+tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
   DoTerminateSuccess -> exit ExitSuccess
   DoTerminateFailure -> exit failedTestCode
   DontTerminate      -> putStrLn "all successful!"
@@ -88,21 +91,26 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
   where
     go :: TestNum -> IO ShouldTerminate -> IO ShouldTerminate
     go testNum runMoreTests = do
+      let numNodes' = unNumNodes numNodes
+          gethNums = [1..GethId numNodes']
+          cEnv = mkLocalEnv numNodes'
+               & clusterPrivacySupport .~ privacySupport
+
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
-      result <- run 3 $ do
-        let geths = [1..GethId (unNumNodes numNodes)]
+      result <- run cEnv $ do
         _ <- when (os == "darwin") PF.acquirePf
 
-        nodes <- wipeAndSetupNodes Nothing "gdata" geths
-        instruments <- traverse (runNode (unNumNodes numNodes)) nodes
+        geths <- wipeAndSetupNodes Nothing "gdata" gethNums
+        instruments <- traverse (runNode numNodes') geths
+        when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
 
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
         timestampedMessage "initial election succeeded"
 
         -- perform the actual test
-        cb (zip nodes instruments)
+        cb (zip geths instruments)
 
         -- pause a second before checking last block
         td 1
@@ -129,26 +137,27 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
           term -> pure term
 
 -- Run nodes in a local cluster environment.
-run :: Int -> TestM a -> IO (Either FailureReason a)
-run numNodes action = do
+run :: ClusterEnv -> TestM a -> IO (Either FailureReason a)
+run cEnv action = do
   var <- newEmptyMVar
   sh $ do
-    result <- flip runReaderT (mkLocalEnv numNodes) (runExceptT action)
+    result <- flip runReaderT cEnv (runExceptT action)
     liftIO $ putMVar var result
   readMVar var
 
 testNTimes
   :: Int
+  -> PrivacySupport
   -> NumNodes
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
-testNTimes times numNodes =
+testNTimes times privacySupport numNodes =
   let predicate _           (Falsified _) = DoTerminateFailure
       predicate (TestNum n) _
         | n == times
         = DoTerminateSuccess
       predicate _           _             = DontTerminate
-  in tester predicate numNodes
+  in tester predicate privacySupport numNodes
 
 -- | Verify nodes show normal behavior:
 --

@@ -11,7 +11,7 @@ import TestOutline hiding (verify)
 import Cluster.StateTestsShared
 
 publicStateTestMain :: IO ()
-publicStateTestMain = testNTimes 5 (NumNodes 3) $ \iNodes -> do
+publicStateTestMain = testNTimes 5 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
       sendTo = cycle (fst <$> iNodes)
       contract = simpleStorage Public

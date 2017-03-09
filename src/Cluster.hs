@@ -346,8 +346,8 @@ setupNodes deployDatadir gids = do
 
   void $ liftIO $ forConcurrently geths $ writeStaticNodes geths
 
-  privacySuport <- view clusterPrivacySupport
-  when (privacySuport == PrivacyEnabled) $
+  privacySupport <- view clusterPrivacySupport
+  when (privacySupport == PrivacyEnabled) $
     void $ liftIO $ forConcurrently gids $ \gid -> do
       constConf <- runReaderT (mkConstellationConfig gid) clusterEnv
       setupConstellationNode deployDatadir constConf
