@@ -7,7 +7,7 @@ module TestOutline where
 
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
-import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar, takeMVar)
+import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar)
 import           Control.Monad            (forM_)
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
@@ -86,16 +86,15 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
     go :: TestNum -> IO ShouldTerminate -> IO ShouldTerminate
     go testNum runMoreTests = do
       putStrLn $ "test #" ++ show (unTestNum testNum)
-      resultVar <- liftIO newEmptyMVar
 
-      sh $ flip runReaderT (mkLocalEnv 3) $ do
+      result <- run 3 $ do
         let geths = [1..GethId (unNumNodes numNodes)]
         _ <- when (os == "darwin") PF.acquirePf
 
         nodes <- wipeAndSetupNodes Nothing "gdata" geths
         instruments <- traverse (runNode (unNumNodes numNodes)) nodes
 
-        let verifier = verify
+        let verifier = liftIO $ verify
               (lastBlock <$> instruments)
               (outstandingTxes <$> instruments)
               (nodeTerminated <$> instruments)
@@ -109,28 +108,32 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         awaitAll (assumedRole <$> instruments)
         timestampedMessage "initial election succeeded"
 
+        -- perform the actual test
         cb nodes
 
-        liftIO $ do
-          -- pause a second before checking last block
-          td 1
+        -- pause a second before checking last block
+        td 1
 
-          result1 <- verifier
+        -- wait an extra five seconds to guarantee raft has a chance to
+        -- converge
+        verifier >>= \case
+          Falsified (WrongOrder _ _) -> td 5
+          Falsified NoBlockFound     -> td 5
+          _                          -> pure ()
 
-          -- wait an extra five seconds to guarantee raft has a chance to converge
-          case result1 of
-            Falsified (WrongOrder _ _) -> td 5
-            Falsified NoBlockFound -> td 5
-            _ -> return ()
+        verifier
 
-          result2 <- verifier
-          putMVar resultVar result2
-
-      result <- takeMVar resultVar
       print result
       case p testNum result of
         DontTerminate -> runMoreTests
         term -> pure term
+
+-- Run nodes in a local cluster environment.
+run :: Int -> ReaderT ClusterEnv Shell a -> IO a
+run numNodes action = do
+  v <- newEmptyMVar
+  sh $ flip runReaderT (mkLocalEnv numNodes) $ liftIO . putMVar v =<< action
+  readMVar v
 
 testOnce :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
 testOnce numNodes =

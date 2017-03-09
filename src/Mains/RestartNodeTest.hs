@@ -4,8 +4,7 @@
 module Mains.RestartNodeTest where
 
 import Control.Concurrent.Async (Concurrently(..))
-import Control.Concurrent.MVar  (newEmptyMVar, putMVar, readMVar)
-import Control.Monad.Reader     (ReaderT (runReaderT))
+import Control.Concurrent.MVar  (readMVar)
 import Data.Monoid              (Last)
 import Turtle
 
@@ -15,14 +14,6 @@ import TestOutline
 
 numNodes :: Int
 numNodes = 3
-
-run :: ReaderT ClusterEnv Shell a -> IO a
-run action = do
-  v <- newEmptyMVar
-  sh $ flip runReaderT (mkLocalEnv numNodes) $ do
-    a <- action
-    liftIO $ putMVar v a
-  readMVar v
 
 waitForElection :: MonadIO m => NodeInstrumentation -> m ()
 waitForElection instruments = do
@@ -56,21 +47,21 @@ readNodeInfo instruments = (,)
 
 node1Plan :: Geth -> IO NodeInfo
 node1Plan geth = do
-  run $ do
+  run numNodes $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     td 5
 
   td 1
 
-  readNodeInfo <=< run $ do
+  readNodeInfo <=< run numNodes $ do
     instruments <- runNode numNodes geth
     td 8
     pure instruments
 
 nodes23Plan :: Geth -> IO NodeInfo
 nodes23Plan geth =
-  readNodeInfo <=< run $ do
+  readNodeInfo <=< run numNodes $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     withSpammer [geth] $ td 4
@@ -84,7 +75,7 @@ restartNodeTestMain :: IO ()
 restartNodeTestMain = do
   let gethIds = [1..GethId numNodes]
 
-  nodes <- run $ do
+  nodes <- run numNodes $ do
     nodes <- wipeAndSetupNodes Nothing "gdata" gethIds
     pure nodes
 
