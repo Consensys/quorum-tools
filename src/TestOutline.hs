@@ -123,7 +123,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
       print result
       case result of
-        Left reason -> pure DoTerminateFailure
+        Left reason -> print reason >> pure DoTerminateFailure
         Right result' -> case p testNum result' of
           DontTerminate -> runMoreTests
           term -> pure term
