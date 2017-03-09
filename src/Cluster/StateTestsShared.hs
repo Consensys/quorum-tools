@@ -11,19 +11,11 @@ import qualified Data.Map                   as Map
 
 import Prelude hiding (FilePath)
 import Turtle
-import Cluster
 import qualified Cluster.Client as Client
 import Cluster.Control
 import Cluster.Types
 import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex, intToBytes32)
 import TestOutline hiding (verify)
-
-
-clusterSize :: Int
-clusterSize = 3
-
-startEnv :: ClusterEnv
-startEnv = mkLocalEnv clusterSize
 
 expectEq :: MonadError FailureReason m => Either Text Int -> Int -> m ()
 expectEq val expected = when (val /= Right expected) $
