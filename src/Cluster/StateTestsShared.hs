@@ -3,17 +3,17 @@
 -- Utilities shared between the public and private state tests
 module Cluster.StateTestsShared where
 
-import           Data.Maybe                 (fromMaybe)
-import qualified Data.Text                  as T
+import           Control.Concurrent.MVar    (MVar)
+import           Control.Monad.Managed      (MonadManaged)
+import qualified Data.Map                   as Map
 
 import Prelude hiding (FilePath)
 import Turtle
-import Checkpoint
 import Cluster
-import Cluster.Client (call, sendTransaction)
+import qualified Cluster.Client as Client
 import Cluster.Control
 import Cluster.Types
-import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex, inshellWithJoinedErr)
+import Cluster.Util (bytes32P, toInt, HexPrefix(..), printHex, intToBytes32)
 import TestOutline hiding (verify)
 
 
@@ -30,55 +30,25 @@ expectEq val expected = liftIO $
       "Got wrong value: " <> show val <> " instead of " <> show expected
     exit failedTestCode
 
-createContract :: MonadIO io => Geth -> Contract -> io Addr
-createContract geth (Contract privacy _ops mem abi) =
-  let pw = gethPassword geth
-      cmd = T.unlines
-        [ "personal.unlockAccount(eth.accounts[0], '" <> pw <> "');"
-        , "var contract = eth.contract(" <> abi <> ");"
-        , "var contractInstance = contract.new(42, {"
-        , "  from: '" <> showGethAccountId geth <> "',"
-        , "  data: '" <> mem <> "',"
-        , "  gas: '4700000',"
-        , privacyLine privacy
-        , "}, function(e, contract) {"
-        -- BIG HACK:
-        -- Why do we do it this way? The (correct) checkpoint will be output to
-        -- the geth log after all...
-        --
-        -- Because it's much simpler to block on the main thread until the
-        -- `sleepBlocks` finishes than it is to coordinate threads (the main
-        -- thread and the log listener).
-        , "  console.log('RAFT-CHECKPOINT TX-CREATED (0x0000000000000000000000000000000000000000000000000000000000000000, ' + contract.address + ')');"
-        , "});"
-        , "admin.sleepBlocks(1);"
-        ]
+createContract :: MonadManaged m => Geth -> Contract -> MVar TxAddrs -> m Addr
+createContract geth contract mvar = do
+  let initVal = intToBytes32 42
+  Client.create geth (CreateArgs contract initVal Sync)
+  creationTxEvt <- behaviorToEvent mvar $ \(TxAddrs addrs) ->
+    if not (Map.null addrs)
+    then Just (head (Map.elems addrs))
+    else Nothing
 
-      -- look for TX-CREATED result addr
-      force = fromMaybe (error "unable to extract addr from contract creation")
-
-      consumer :: Fold Text Addr
-      consumer = snd . force <$> find' (matchCheckpoint TxCreated)
-
-  in fold (lineToText <$> sendJs geth cmd) consumer
-
-privacyLine :: Privacy -> Text
-privacyLine = \case
-  Public -> ""
-  PrivateFor addrs ->
-    "privateFor: [" <> T.intercalate ", " (quote <$> addrs) <> "],"
-  where
-    quote :: Secp256k1 -> Text
-    quote (Secp256k1 t) = "\"" <> t <> "\""
+  wait creationTxEvt
 
 incrementStorage :: MonadIO io => Geth -> Contract -> Addr -> io ()
 incrementStorage geth (Contract privacy _ _ _) (Addr addrBytes) =
   -- TODO: remove "increment()" duplication
-  sendTransaction geth (Tx (Just addrBytes) "increment()" privacy Sync)
+  Client.sendTransaction geth (Tx (Just addrBytes) "increment()" privacy Sync)
 
 getStorage :: MonadIO io => Geth -> Contract -> Addr -> io (Either Text Int)
 getStorage geth _contract addr = do
-  resp <- call geth (CallArgs (unAddr addr) "get()")
+  resp <- Client.call geth (CallArgs (unAddr addr) "get()")
   pure $ case resp of
     Left msg -> Left msg
     -- we get this back when not party to a transaction. bug?
@@ -88,19 +58,6 @@ getStorage geth _contract addr = do
         Nothing -> Left ("couldn't coerce to int: " <> printHex WithPrefix b32)
         Just result -> Right result
       _ -> Left ("failed to find hex string: " <> resp')
-
-sendJs :: Geth -> Text -> Shell Line
-sendJs geth js = inshellWithJoinedErr (gethCommand geth subcmd) empty
-  where
-    subcmd = sendJsSubcommand (gethDataDir geth) js
-
-sendJsSubcommand :: DataDir -> Text -> Text
-sendJsSubcommand gDataDir js = format ("--exec '"%s%"' attach "%s)
-                                      (shellEscapeSingleQuotes js)
-                                      ipcEndpoint
-  where
-    ipcEndpoint :: Text
-    ipcEndpoint = format ("ipc:"%fp) $ gethIpcPath gDataDir
 
 -- pragma solidity ^0.4.0;
 --

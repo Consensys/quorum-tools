@@ -27,7 +27,8 @@ publicStateTestMain = sh $ flip runReaderT startEnv $ do
 
   let sendTo = cycle geths
       contract = simpleStorage Public
-  storageAddr <- createContract (head geths) contract
+  storageAddr
+    <- createContract (head geths) contract (txAddrs (head instruments))
 
   forM_ (zip [1..10] sendTo) $ \(no, geth) -> do
     incrementStorage geth contract storageAddr

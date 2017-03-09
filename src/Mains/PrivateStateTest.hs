@@ -41,7 +41,8 @@ clusterMain geths clusterEnv = flip runReaderT clusterEnv $ do
     readTextFile "credentials/constellation-keys/3/constellation.pub"
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
-  privStorageAddr <- createContract (head geths) privStorage
+  privStorageAddr
+    <- createContract (head geths) privStorage (txAddrs (head instruments))
 
   -- The storage starts with a value of 42 and we increment it five times
   forM_ [1..5] $ \no -> do
