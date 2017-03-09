@@ -99,11 +99,6 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
               (outstandingTxes <$> instruments)
               (nodeTerminated <$> instruments)
 
-        -- wait for geth to launch, then start raft and run the test body
-        timestampedMessage "awaiting all ready"
-        awaitAll (nodeOnline <$> instruments)
-        timestampedMessage "got all ready"
-
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
         timestampedMessage "initial election succeeded"
