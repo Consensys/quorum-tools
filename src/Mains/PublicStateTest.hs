@@ -18,7 +18,7 @@ publicStateTestMain :: IO ()
 publicStateTestMain = sh $ flip runReaderT startEnv $ do
   let gids = clusterGids clusterSize
 
-  geths <- setupNodes Nothing gids
+  geths <- wipeAndSetupNodes Nothing "gdata" gids
   instruments <- traverse (runNode clusterSize) geths
 
   timestampedMessage "awaiting a successful raft election"

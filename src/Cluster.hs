@@ -360,7 +360,12 @@ wipeLocalClusterRoot rootDir = do
   when dirExists $ rmtree rootDir
   mktree rootDir
 
-wipeAndSetupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> FilePath -> [GethId] -> m [Geth]
+wipeAndSetupNodes
+  :: (MonadIO m, HasEnv m)
+  => Maybe DataDir
+  -> FilePath
+  -> [GethId]
+  -> m [Geth]
 wipeAndSetupNodes deployDatadir rootDir gids = do
   wipeLocalClusterRoot rootDir
   setupNodes deployDatadir gids
