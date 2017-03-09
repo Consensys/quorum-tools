@@ -12,8 +12,8 @@ exitP _           (Falsified _) = DoTerminateFailure
 exitP _           _             = DontTerminate
 
 leaderPartitionTestMain :: IO ()
-leaderPartitionTestMain = tester exitP (NumNodes 3) $ \nodes -> do
-  let dropNode:_stableNodes = nodes
+leaderPartitionTestMain = tester exitP (NumNodes 3) $ \iNodes -> do
+  let (dropNode, _):_stableNodes = iNodes
 
   timestampedMessage "starting test with a pause"
   td 2
