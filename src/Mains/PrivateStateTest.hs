@@ -3,46 +3,24 @@
 -- Test private state consistency
 module Mains.PrivateStateTest where
 
-import           Control.Lens             ((.~))
 import           Control.Monad            (forM_)
-import           Control.Monad.Managed    (MonadManaged)
-import           Control.Monad.Reader     (ReaderT (runReaderT))
 
-import           Cluster
-import           Cluster.Control
 import           Cluster.StateTestsShared
 import           Cluster.Types
-import           Constellation
 import           Prelude                  hiding (FilePath)
 import           TestOutline              hiding (verify)
 import           Turtle                   hiding (match)
 
-privateStateTestMain :: IO ()
-privateStateTestMain = sh $ do
-  let cEnv = startEnv & clusterPrivacySupport .~ PrivacyEnabled
-      gids = [1..3]
-
-  geths <- runReaderT (wipeAndSetupNodes Nothing "gdata" gids) cEnv
-  startConstellationNodes geths
-
-  clusterMain geths cEnv
-
-clusterMain :: MonadManaged io => [Geth] -> ClusterEnv -> io ()
-clusterMain geths cEnv = flip runReaderT cEnv $ do
-  let [g1, g2, g3] = geths
-
-  instruments <- traverse (runNode clusterSize) geths
-
-  timestampedMessage "awaiting a successful raft election"
-  awaitAll (assumedRole <$> instruments)
-  timestampedMessage "initial election succeeded"
+clusterMain :: IO ()
+clusterMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
+  let [g1, g2, g3] = fst <$> iNodes
+      (_, geth1Instruments) = head iNodes
 
   key3 <- liftIO $
     readTextFile "credentials/constellation-keys/3/constellation.pub"
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
-  privStorageAddr
-    <- createContract g1 privStorage (txAddrs (head instruments))
+  privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 
   -- The storage starts with a value of 42 and we increment it five times
   forM_ [1..5] $ \no -> do
@@ -57,5 +35,3 @@ clusterMain geths cEnv = flip runReaderT cEnv $ do
 
     i3 <- getStorage g3 privStorage privStorageAddr
     expectEq i3 (42 + no)
-
-  liftIO $ putStrLn "all successful!"
