@@ -9,6 +9,7 @@ import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
 import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar)
 import           Control.Monad            (forM_)
+import           Control.Monad.Except
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
 import           Data.Monoid              (Last (Last))
@@ -71,11 +72,13 @@ instance Monoid ShouldTerminate where
 
 type TestPredicate = TestNum -> Validity -> ShouldTerminate
 
+type TestM = ExceptT FailureReason (ReaderT ClusterEnv Shell)
+
 -- | Run this test up to @TestNum@ times or until it fails
 tester
   :: TestPredicate
   -> NumNodes
-  -> ([(Geth, NodeInstrumentation)] -> ReaderT ClusterEnv Shell ())
+  -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
 tester p numNodes cb = foldr go mempty [0..] >>= \case
   DoTerminateSuccess -> exit ExitSuccess
@@ -119,21 +122,25 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         verifier
 
       print result
-      case p testNum result of
-        DontTerminate -> runMoreTests
-        term -> pure term
+      case result of
+        Left reason -> pure DoTerminateFailure
+        Right result' -> case p testNum result' of
+          DontTerminate -> runMoreTests
+          term -> pure term
 
 -- Run nodes in a local cluster environment.
-run :: Int -> ReaderT ClusterEnv Shell a -> IO a
+run :: Int -> TestM a -> IO (Either FailureReason a)
 run numNodes action = do
-  v <- newEmptyMVar
-  sh $ flip runReaderT (mkLocalEnv numNodes) $ liftIO . putMVar v =<< action
-  readMVar v
+  var <- newEmptyMVar
+  sh $ do
+    result <- flip runReaderT (mkLocalEnv numNodes) (runExceptT action)
+    liftIO $ putMVar var result
+  readMVar var
 
 testNTimes
   :: Int
   -> NumNodes
-  -> ([(Geth, NodeInstrumentation)] -> ReaderT ClusterEnv Shell ())
+  -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
 testNTimes times numNodes =
   let predicate _           (Falsified _) = DoTerminateFailure

@@ -23,8 +23,12 @@ waitForElection instruments = do
 
 type NodeInfo = (Last Block, OutstandingTxes)
 
-readNodeInfo :: NodeInstrumentation -> IO NodeInfo
-readNodeInfo instruments = (,)
+refine :: Either FailureReason a -> IO a
+refine (Left failure) = print failure >> exit failedTestCode
+refine (Right a) = pure a
+
+readNodeInfo :: Either FailureReason NodeInstrumentation -> IO NodeInfo
+readNodeInfo = refine >=> \instruments -> (,)
   <$> readMVar (lastBlock instruments)
   <*> readMVar (outstandingTxes instruments)
 
@@ -47,7 +51,7 @@ readNodeInfo instruments = (,)
 
 node1Plan :: Geth -> IO NodeInfo
 node1Plan geth = do
-  run numNodes $ do
+  _ <- run numNodes $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     td 5
@@ -79,7 +83,7 @@ restartNodeTestMain = do
     nodes <- wipeAndSetupNodes Nothing "gdata" gethIds
     pure nodes
 
-  let g1:g2g3 = nodes
+  g1:g2g3 <- refine nodes
 
   instruments <- runConcurrently $ sequenceA $ map Concurrently $
     node1Plan g1 : map nodes23Plan g2g3
