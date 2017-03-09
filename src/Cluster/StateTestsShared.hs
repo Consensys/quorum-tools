@@ -1,9 +1,11 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts  #-}
 -- Utilities shared between the public and private state tests
 module Cluster.StateTestsShared where
 
 import           Control.Concurrent.MVar    (MVar)
+import           Control.Monad.Except       (MonadError(..))
 import           Control.Monad.Managed      (MonadManaged)
 import qualified Data.Map                   as Map
 
@@ -23,12 +25,9 @@ clusterSize = 3
 startEnv :: ClusterEnv
 startEnv = mkLocalEnv clusterSize
 
-expectEq :: MonadIO io => Either Text Int -> Int -> io ()
-expectEq val expected = liftIO $
-  when (val /= Right expected) $ do
-    putStrLn $
-      "Got wrong value: " <> show val <> " instead of " <> show expected
-    exit failedTestCode
+expectEq :: MonadError FailureReason m => Either Text Int -> Int -> m ()
+expectEq val expected = when (val /= Right expected) $
+  throwError $ WrongValue expected val
 
 createContract :: MonadManaged m => Geth -> Contract -> MVar TxAddrs -> m Addr
 createContract geth contract mvar = do

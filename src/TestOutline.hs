@@ -41,6 +41,8 @@ data FailureReason
   | NoBlockFound
   | DidPanic
   | LostTxes (Set TxId)
+  -- Expected @Int@, received @Either Text Int@
+  | WrongValue Int (Either Text Int)
   deriving Show
 
 data Validity
