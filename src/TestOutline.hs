@@ -75,7 +75,7 @@ type TestPredicate = TestNum -> Validity -> ShouldTerminate
 tester
   :: TestPredicate
   -> NumNodes
-  -> ([Geth] -> ReaderT ClusterEnv Shell ())
+  -> ([(Geth, NodeInstrumentation)] -> ReaderT ClusterEnv Shell ())
   -> IO ()
 tester p numNodes cb = foldr go mempty [0..] >>= \case
   DoTerminateSuccess -> exit ExitSuccess
@@ -104,7 +104,7 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         timestampedMessage "initial election succeeded"
 
         -- perform the actual test
-        cb nodes
+        cb (zip nodes instruments)
 
         -- pause a second before checking last block
         td 1
@@ -130,10 +130,17 @@ run numNodes action = do
   sh $ flip runReaderT (mkLocalEnv numNodes) $ liftIO . putMVar v =<< action
   readMVar v
 
-testOnce :: NumNodes -> ([Geth] -> ReaderT ClusterEnv Shell ()) -> IO ()
-testOnce numNodes =
-  let predicate _ Verified = DoTerminateSuccess
-      predicate _ _        = DoTerminateFailure
+testNTimes
+  :: Int
+  -> NumNodes
+  -> ([(Geth, NodeInstrumentation)] -> ReaderT ClusterEnv Shell ())
+  -> IO ()
+testNTimes times numNodes =
+  let predicate _           (Falsified _) = DoTerminateFailure
+      predicate (TestNum n) _
+        | n == times
+        = DoTerminateSuccess
+      predicate _           _             = DontTerminate
   in tester predicate numNodes
 
 -- | Verify nodes show normal behavior:
