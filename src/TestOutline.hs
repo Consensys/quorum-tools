@@ -97,11 +97,6 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
         nodes <- wipeAndSetupNodes Nothing "gdata" geths
         instruments <- traverse (runNode (unNumNodes numNodes)) nodes
 
-        let verifier = liftIO $ verify
-              (lastBlock <$> instruments)
-              (outstandingTxes <$> instruments)
-              (nodeTerminated <$> instruments)
-
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
         timestampedMessage "initial election succeeded"
@@ -111,6 +106,11 @@ tester p numNodes cb = foldr go mempty [0..] >>= \case
 
         -- pause a second before checking last block
         td 1
+
+        let verifier = liftIO $ verify
+              (lastBlock <$> instruments)
+              (outstandingTxes <$> instruments)
+              (nodeTerminated <$> instruments)
 
         -- wait an extra five seconds to guarantee raft has a chance to
         -- converge
