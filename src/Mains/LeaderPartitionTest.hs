@@ -6,13 +6,8 @@ module Mains.LeaderPartitionTest where
 import Cluster.Types
 import TestOutline
 
-exitP :: TestPredicate
-exitP (TestNum 9) _             = DoTerminateSuccess
-exitP _           (Falsified _) = DoTerminateFailure
-exitP _           _             = DontTerminate
-
 leaderPartitionTestMain :: IO ()
-leaderPartitionTestMain = tester exitP (NumNodes 3) $ \iNodes -> do
+leaderPartitionTestMain = testNTimes 10 (NumNodes 3) $ \iNodes -> do
   let (dropNode, _):_stableNodes = iNodes
 
   timestampedMessage "starting test with a pause"
