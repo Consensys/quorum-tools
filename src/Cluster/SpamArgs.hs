@@ -5,7 +5,6 @@ module Cluster.SpamArgs where
 import           Turtle               hiding (char)
 
 import           Cluster.Types
-import           Cluster.Client       (SpamMode(..))
 import           Cluster.Util         (Bytes20, bytes20P, HexPrefix(..),
                                        matchOnce)
 import           Data.Char            (isHexDigit)
