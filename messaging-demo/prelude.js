@@ -11,6 +11,11 @@ var from = eth.accounts[0];
 var gas = '4700000';
 
 function createInbox(privateFor) {
+  if (!Array.isArray(privateFor)) {
+    console.error("privateFor must be an array");
+    return;
+  }
+
   var messageBox = contract.new({
     from: from,
     data: data,
