@@ -80,7 +80,8 @@ instance Show Bytes20 where
   show = T.unpack . hexPrefixed
 
 textToBytes20 :: Text -> Maybe Bytes20
-textToBytes20 = matchOnce (bytes20P WithPrefix)
+textToBytes20 t = matchOnce (bytes20P WithPrefix) t
+              <|> matchOnce (bytes20P WithoutPrefix) t
 
 instance FromJSON Bytes20 where
   parseJSON jsonVal
@@ -93,7 +94,8 @@ instance Show Bytes32 where
   show = T.unpack . hexPrefixed
 
 textToBytes32 :: Text -> Maybe Bytes32
-textToBytes32 = matchOnce (bytes32P WithPrefix)
+textToBytes32 t = matchOnce (bytes32P WithPrefix) t
+              <|> matchOnce (bytes32P WithoutPrefix) t
 
 instance FromJSON Bytes32 where
   parseJSON jsonVal
