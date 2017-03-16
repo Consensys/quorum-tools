@@ -65,7 +65,7 @@ emptyTxRpcBody geth = object
     , "params"  .=
       [ object
         [ "from" .= showGethAccountId geth
-        , "to"   .= hexPrefixed (intToBytes32 0)
+        , "to"   .= hexPrefixed (intToBytes20 0)
         ]
       ]
     ]

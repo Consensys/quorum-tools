@@ -144,6 +144,11 @@ intToBytes32 = toHex . intToHexBS where
   intToHexBS :: Int -> ByteString
   intToHexBS i = B8.pack (showHex i "")
 
+intToBytes20 :: Int -> Bytes20
+intToBytes20 = toHex . intToHexBS where
+  intToHexBS :: Int -> ByteString
+  intToHexBS i = B8.pack (showHex i "")
+
 toInt :: Hex a => a -> Maybe Int
 toInt h = case readHex (B8.unpack (fromHex h)) of
   [(i, "")] -> Just i
