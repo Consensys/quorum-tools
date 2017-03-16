@@ -36,7 +36,9 @@ import           Cluster.Observing
 import           Cluster.Types
 import           Cluster.Util               (textDecode, textEncode,
                                              bytes20P, matchOnce,
-                                             HexPrefix(..), printHex, tee, inshellWithJoinedErr)
+                                             HexPrefix(..), printHex, tee,
+                                             inshellWithJoinedErr)
+
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
 import           Cluster.Control
