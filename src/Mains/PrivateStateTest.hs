@@ -11,8 +11,8 @@ import           Prelude                  hiding (FilePath)
 import           TestOutline              hiding (verify)
 import           Turtle                   hiding (match)
 
-clusterMain :: IO ()
-clusterMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
+privateStateTestMain :: IO ()
+privateStateTestMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let [g1, g2, g3] = fst <$> iNodes
       (_, geth1Instruments) = head iNodes
 
