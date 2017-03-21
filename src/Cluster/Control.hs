@@ -3,7 +3,8 @@ module Cluster.Control where
 
 import           Control.Concurrent.Async   (Async)
 import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar, putMVar,
-                                             tryPutMVar, newMVar, newEmptyMVar)
+                                             tryPutMVar, newMVar, newEmptyMVar,
+                                             readMVar)
 import           Control.Exception          (bracket)
 import           Control.Monad.Managed      (MonadManaged)
 import           Data.Foldable              (traverse_)
@@ -69,7 +70,7 @@ behaviorToEvent :: MonadManaged io => MVar a -> (a -> Maybe b) -> io (Async b)
 behaviorToEvent bvar predicate = do
   evar <- liftIO newEmptyMVar
   let helper = do
-        val <- takeMVar bvar
+        val <- readMVar bvar
         case predicate val of
           Just b -> putMVar evar b
           Nothing -> helper
