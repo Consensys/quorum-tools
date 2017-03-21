@@ -156,7 +156,7 @@ testNTimes
 testNTimes times privacySupport numNodes =
   let predicate _           (Falsified _) = DoTerminateFailure
       predicate (TestNum n) _
-        | n == times
+        | n == times - 1
         = DoTerminateSuccess
       predicate _           _             = DontTerminate
   in tester predicate privacySupport numNodes
