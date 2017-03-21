@@ -104,8 +104,8 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
         _ <- when (os == "darwin") PF.acquirePf
 
         geths <- wipeAndSetupNodes Nothing "gdata" gethNums
-        instruments <- traverse (runNode numNodes') geths
         when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
+        instruments <- traverse (runNode numNodes') geths
 
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)
