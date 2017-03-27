@@ -15,5 +15,5 @@ RUN git config --global url."git@github.com:".insteadOf "https://github.com/" &&
       ssh-add $HOME/.ssh/id_noirqs; \
       git clone git@github.com:noirqs/quorum-tools.git $QUORUM_TOOLS_DIR; \
       cd $QUORUM_TOOLS_DIR; \
-      git reset --hard 7796ba2 && cd raft-demo && stack --resolver lts-8.3 build; \
+      git reset --hard eba3f86 && stack --resolver lts-8.3 build; \
     '
