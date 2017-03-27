@@ -1,4 +1,4 @@
-name: raft-demo
+name: quorum-tools
 version: 0.0.1
 synopsis: Orchestration, testing, and demonstration of JPM Raft-Ethereum
 license: Apache
@@ -73,35 +73,35 @@ executable local-new
   main-is          : LocalNew.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 executable local-start
   main-is          : LocalStart.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 executable local-spam
   main-is          : LocalSpam.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 executable aws-bootstrap
   main-is          : AwsBootstrap.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 executable aws-spam
   main-is          : AwsSpam.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite partition
@@ -109,7 +109,7 @@ test-suite partition
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite test2
@@ -117,7 +117,7 @@ test-suite test2
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite leader-partition
@@ -125,7 +125,7 @@ test-suite leader-partition
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite public-state
@@ -133,7 +133,7 @@ test-suite public-state
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite private-state
@@ -141,7 +141,7 @@ test-suite private-state
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010
 
 test-suite restart-node
@@ -149,5 +149,5 @@ test-suite restart-node
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, raft-demo
+  build-depends    : base, quorum-tools
   default-language : Haskell2010

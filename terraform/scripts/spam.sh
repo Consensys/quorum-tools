@@ -24,4 +24,4 @@ else
     multi_region_opt=""
 fi
 
-sudo docker run -it -v /home/ubuntu/datadir:/datadir -v /home/ubuntu/node-id:/home/ubuntu/node-id 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness /bin/sh -c "cd /root/gemini-examples/raft-demo && stack exec -- aws-spam -r ${rps} ${multi_region_opt}"
+sudo docker run -it -v /home/ubuntu/datadir:/datadir -v /home/ubuntu/node-id:/home/ubuntu/node-id 128367567151.dkr.ecr.us-east-1.amazonaws.com/quorum-harness /bin/sh -c "cd /root/quorumt-tools && stack exec -- aws-spam -r ${rps} ${multi_region_opt}"

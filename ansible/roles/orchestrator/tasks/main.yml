@@ -19,9 +19,9 @@
   become: yes
   register: stack_install
 
-- name: Check out gemini-examples
-  git: repo=ssh://git@github.com/noirqs/gemini-examples.git
-       dest='{{ home_dir }}/gemini-examples'
+- name: Check out quorum-tools
+  git: repo=ssh://git@github.com/noirqs/quorum-tools.git
+       dest='{{ home_dir }}/quorum-tools'
   register: checkout
 
 - name: Setup stack project

@@ -1,7 +1,7 @@
 # Set up stack without actually building the project
 FROM quorum-raft
 
-ENV GEMINI_EXAMPLES_DIR=/root/gemini-examples
+ENV QUORUM_TOOLS_DIR=/root/quorum-tools
 
 RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 575159689BEFB442 && \
     echo 'deb http://download.fpcomplete.com/ubuntu xenial main' | tee /etc/apt/sources.list.d/fpco.list && \

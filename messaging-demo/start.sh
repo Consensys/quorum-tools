@@ -1,7 +1,7 @@
 #! /bin/sh
 
 tmux new-window
-tmux send-keys 'cd ..; ./dist-newstyle/build/raft-demo-0.0.1/build/local-new/local-new' C-m
+tmux send-keys 'cd ..; ./dist-newstyle/build/quorum-tools-0.0.1/build/local-new/local-new' C-m
 sleep 10
 
 tmux new-window
