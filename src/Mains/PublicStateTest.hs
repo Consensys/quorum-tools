@@ -3,20 +3,20 @@
 -- Test public state consistency
 module Mains.PublicStateTest where
 
-import           Control.Monad              (forM_)
+import           Control.Monad            (forM_)
+import           Prelude                  hiding (FilePath)
 
-import Prelude hiding (FilePath)
-import Cluster.Types
-import TestOutline hiding (verify)
-import Cluster.StateTestsShared
+import           Cluster.StateTestsShared
+import           Cluster.Types
+import           TestOutline              hiding (verify)
 
 publicStateTestMain :: IO ()
 publicStateTestMain = testNTimes 5 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
       sendTo = cycle (fst <$> iNodes)
       contract = simpleStorage Public
-  storageAddr
-    <- createContract geth1 contract (txAddrs geth1Instruments)
+
+  storageAddr <- createContract geth1 contract (txAddrs geth1Instruments)
 
   forM_ (zip [1..10] sendTo) $ \(no, geth) -> do
     incrementStorage geth contract storageAddr

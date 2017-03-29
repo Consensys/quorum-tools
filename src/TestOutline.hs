@@ -7,7 +7,7 @@ module TestOutline where
 
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async (Async, cancel, poll)
-import           Control.Concurrent.MVar  (MVar, readMVar, newEmptyMVar, putMVar)
+import           Control.Concurrent.MVar  (readMVar, newEmptyMVar, putMVar)
 import           Control.Lens
 import           Control.Monad            (forM_)
 import           Control.Monad.Except
@@ -29,7 +29,7 @@ import           Turtle
 import Cluster
 import Cluster.Types
 import Cluster.Client
-import Cluster.Control (awaitAll)
+import Cluster.Control (awaitAll, observe)
 import ClusterAsync
 import Constellation
 
@@ -143,7 +143,7 @@ run :: ClusterEnv -> TestM a -> IO (Either FailureReason a)
 run cEnv action = do
   var <- newEmptyMVar
   sh $ do
-    result <- flip runReaderT cEnv (runExceptT action)
+    result <- runReaderT (runExceptT action) cEnv
     liftIO $ putMVar var result
   readMVar var
 
@@ -167,13 +167,13 @@ testNTimes times privacySupport numNodes =
 -- * There are no lost transactions
 -- * The nodes all have the same last block
 verify
-  :: [MVar (Last Block)]
-  -> [MVar OutstandingTxes]
+  :: [Behavior (Last Block)]
+  -> [Behavior OutstandingTxes]
   -> [Async NodeTerminated]
   -> IO Validity
-verify lastBlockMs outstandingTxesMs terminatedAsyncs = do
-  lastBlocks <- traverse readMVar lastBlockMs
-  outstandingTxes_ <- traverse readMVar outstandingTxesMs
+verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
+  lastBlocks <- traverse observe lastBlockBs
+  outstandingTxes_ <- traverse observe outstandingTxesBs
   earlyTerminations <- traverse poll terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) ->

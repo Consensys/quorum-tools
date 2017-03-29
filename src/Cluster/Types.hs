@@ -6,6 +6,7 @@
 module Cluster.Types where
 
 import           Control.Concurrent.Async (Async)
+import           Control.Concurrent.Chan  (Chan)
 import           Control.Concurrent.MVar  (MVar)
 import           Control.Lens             (makeLenses)
 import           Control.Monad.Reader     (MonadReader)
@@ -192,14 +193,16 @@ data NodeTerminated = NodeTerminated deriving Eq
 -- All http connections for this node are established
 data AllConnected = AllConnected
 
+-- TODO: ideally this type would be abstract:
+data Behavior a = Behavior (Chan a) (MVar a)
 
 data NodeInstrumentation = NodeInstrumentation
   { nodeOnline      :: Async NodeOnline
   , nodeTerminated  :: Async NodeTerminated
-  , lastBlock       :: MVar (Last Block)
-  , lastRaftStatus  :: MVar (Last RaftStatus)
-  , outstandingTxes :: MVar OutstandingTxes
-  , txAddrs         :: MVar TxAddrs
+  , lastBlock       :: Behavior (Last Block)
+  , lastRaftStatus  :: Behavior (Last RaftStatus)
+  , outstandingTxes :: Behavior OutstandingTxes
+  , txAddrs         :: Behavior TxAddrs
   , allConnected    :: Async AllConnected
   , assumedRole     :: Async AssumedRole
   }
