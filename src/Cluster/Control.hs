@@ -11,13 +11,6 @@ import           Data.Foldable              (traverse_)
 import           Turtle                     (MonadIO, void, fork, liftIO, wait,
                                              Fold(..))
 
--- | Non-blocking MVar put.
---
--- This is idempotent, intended to be used for transitions that happen exactly
--- once.
-ensureMVarTransition :: MVar a -> a -> IO ()
-ensureMVarTransition var a = void $ tryPutMVar var a
-
 pureModifyMVar :: MVar a -> (a -> a) -> IO a
 pureModifyMVar var f = modifyMVar var f' where
   f' a = let result = f a in pure (result, result)
@@ -58,7 +51,7 @@ eventVar :: forall m a. MonadManaged m => a -> m (Async a, IO ())
 eventVar a = do
   mvar <- liftIO newEmptyMVar
   triggered <- awaitMVar mvar
-  let transition = ensureMVarTransition mvar a
+  let transition = void $ tryPutMVar mvar a
   pure (triggered, transition)
 
 behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, (a -> a) -> IO ())
