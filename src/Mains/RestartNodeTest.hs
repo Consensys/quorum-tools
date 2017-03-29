@@ -4,11 +4,11 @@
 module Mains.RestartNodeTest where
 
 import Control.Concurrent.Async (Concurrently(..))
-import Control.Concurrent.MVar  (readMVar)
 import Data.Monoid              (Last)
 import Turtle
 
 import Cluster
+import Cluster.Control
 import Cluster.Types
 import TestOutline
 
@@ -32,8 +32,8 @@ refine (Right a) = pure a
 
 readNodeInfo :: Either FailureReason NodeInstrumentation -> IO NodeInfo
 readNodeInfo = refine >=> \instruments -> (,)
-  <$> readMVar (lastBlock instruments)
-  <*> readMVar (outstandingTxes instruments)
+  <$> observe (lastBlock instruments)
+  <*> observe (outstandingTxes instruments)
 
 --   seconds  |   spammer    |    node 1    |    nodes 2 / 3
 -- ---------------------------------------------------------
@@ -97,7 +97,7 @@ restartNodeTestMain = do
 
   case result of
     Falsified reason -> do
-      putStrLn $ "falsified"
+      putStrLn "falsified"
       print reason
       exit failedTestCode
-    _           -> putStrLn "all successful!"
+    _  -> putStrLn "all successful!"

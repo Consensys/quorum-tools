@@ -4,9 +4,9 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE RecordWildCards     #-}
 
 module Cluster where
 
@@ -34,14 +34,14 @@ import           Turtle                     hiding (env, view)
 import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Observing
 import           Cluster.Types
-import           Cluster.Util               (textDecode, textEncode,
-                                             bytes20P, matchOnce,
-                                             HexPrefix(..), printHex, tee,
-                                             inshellWithJoinedErr)
+import           Cluster.Util               (HexPrefix (..), bytes20P,
+                                             inshellWithJoinedErr, matchOnce,
+                                             printHex, tee, textDecode,
+                                             textEncode)
 
+import           Cluster.Control
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)
-import           Cluster.Control
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
@@ -390,35 +390,34 @@ runNode :: forall m. (MonadManaged m)
         -> m NodeInstrumentation
 runNode numNodes geth = do
   -- allocate events and behaviors
-  (nodeOnline,      triggerStarted)     <- eventVar NodeOnline
-  (allConnected,    triggerConnected)   <- eventVar AllConnected
-  (assumedRole,     triggerAssumedRole) <- eventVar AssumedRole
-  (lastBlock,       updateLastBlock)    <- behaviorVar
-  (lastRaftStatus,  updateRaftStatus)   <- behaviorVar
-  (outstandingTxes, updateOutstanding)  <- behaviorVar
-  (txAddrs,         updateAddrs)        <- behaviorVar
-  (membershipMVar,  updateMembership)   <- behaviorVar
+  (nodeOnline,   triggerStarted)     <- event NodeOnline
+  (allConnected, triggerConnected)   <- event AllConnected
+  (assumedRole,  triggerAssumedRole) <- event AssumedRole
+  lastBlock                          <- behavior
+  lastRaftStatus                     <- behavior
+  outstandingTxes                    <- behavior
+  txAddrs                            <- behavior
+  membershipChanges                  <- behavior
 
-  let predicate connSet =
-      -- with the HTTP transport, each node actually even connects to itself
-        if Set.size connSet == numNodes then Just () else Nothing
-  async <- behaviorToEvent membershipMVar predicate
+  clusterIsFull <- watch membershipChanges $ \peers ->
+    -- with the HTTP transport, each node actually even connects to itself
+    if Set.size peers == numNodes then Just () else Nothing
 
   let logPath = fromText $ nodeName (gethId geth) <> ".out"
       instrumentedLines
         = gethShell geth
         & tee logPath
-        & observingRoles triggerAssumedRole
-        & observingActivation updateMembership
-        & observingBoot triggerStarted
-        & observingLastBlock updateLastBlock
-        & observingRaftStatus updateRaftStatus
-        & observingTxes updateOutstanding updateAddrs
+        & observingRoles      triggerAssumedRole
+        & observingActivation (transition membershipChanges)
+        & observingBoot       triggerStarted
+        & observingLastBlock  (transition lastBlock)
+        & observingRaftStatus (transition lastRaftStatus)
+        & observingTxes       (transition outstandingTxes) (transition txAddrs)
 
-  _ <- fork $ wait async >> triggerConnected
+  _ <- fork $ wait clusterIsFull >> triggerConnected
   nodeTerminated <- fork $ NodeTerminated <$ sh instrumentedLines
 
-  pure $ NodeInstrumentation {..}
+  pure NodeInstrumentation {..}
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do

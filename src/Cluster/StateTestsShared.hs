@@ -4,7 +4,6 @@
 -- Utilities shared between the public and private state tests
 module Cluster.StateTestsShared where
 
-import           Control.Concurrent.MVar    (MVar)
 import           Control.Monad.Except       (MonadError(..))
 import           Control.Monad.Managed      (MonadManaged)
 import qualified Data.Map                   as Map
@@ -21,14 +20,14 @@ expectEq :: MonadError FailureReason m => Either Text Int -> Int -> m ()
 expectEq val expected = when (val /= Right expected) $
   throwError $ WrongValue expected val
 
-createContract :: MonadManaged m => Geth -> Contract -> MVar TxAddrs -> m Addr
-createContract geth contract mvar = do
+createContract :: MonadManaged m => Geth -> Contract -> Behavior TxAddrs -> m Addr
+createContract geth contract addrs = do
   let initVal = intToBytes32 42
-  Client.create geth (CreateArgs contract initVal Sync)
-  creationTxEvt <- behaviorToEvent mvar $ \(TxAddrs addrs) ->
-    if not (Map.null addrs)
-    then Just (head (Map.elems addrs))
+  creationTxEvt <- watch addrs $ \(TxAddrs addrMap) ->
+    if not (Map.null addrMap)
+    then Just (head (Map.elems addrMap))
     else Nothing
+  Client.create geth (CreateArgs contract initVal Sync)
 
   wait creationTxEvt
 

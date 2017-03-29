@@ -1,22 +1,24 @@
-{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RankNTypes #-}
 module Cluster.Control where
 
-import           Control.Concurrent.Async   (Async)
-import           Control.Concurrent.MVar    (MVar, takeMVar, modifyMVar, putMVar,
-                                             tryPutMVar, newMVar, newEmptyMVar,
-                                             readMVar)
-import           Control.Exception          (bracket)
-import           Control.Monad.Managed      (MonadManaged)
-import           Data.Foldable              (traverse_)
-import           Turtle                     (MonadIO, void, fork, liftIO, wait,
-                                             Fold(..))
+import           Control.Concurrent.Async (Async)
+import           Control.Concurrent.Chan  (Chan, dupChan, newChan, readChan,
+                                           writeChan)
+import           Control.Concurrent.MVar  (MVar, modifyMVar, newEmptyMVar,
+                                           newMVar, readMVar, takeMVar,
+                                           tryPutMVar)
+import           Control.Exception        (bracket)
+import           Control.Monad.Loops      (untilJust)
+import           Control.Monad.Managed    (MonadManaged)
+import           Data.Foldable            (traverse_)
+import           Turtle                   (Fold (..), MonadIO, fork, liftIO,
+                                           void, wait)
+
+import           Cluster.Types
 
 pureModifyMVar :: MVar a -> (a -> a) -> IO a
 pureModifyMVar var f = modifyMVar var f' where
   f' a = let result = f a in pure (result, result)
-
-pureModifyMVar_ :: MVar a -> (a -> a) -> IO ()
-pureModifyMVar_ var = void . pureModifyMVar var
 
 -- | Fulfil the returned async as soon as the MVar is filled.
 awaitMVar :: MonadManaged m => MVar a -> m (Async a)
@@ -47,29 +49,38 @@ find' predicate = Fold step Nothing id where
          (Nothing, Just _b) -> match
          (Nothing, Nothing) -> Nothing
 
-eventVar :: forall m a. MonadManaged m => a -> m (Async a, IO ())
-eventVar a = do
+event :: forall m e. MonadManaged m => e -> m (Async e, IO ())
+event e = do
   mvar <- liftIO newEmptyMVar
-  triggered <- awaitMVar mvar
-  let transition = void $ tryPutMVar mvar a
-  pure (triggered, transition)
+  occurred <- awaitMVar mvar
+  let fire = void $ tryPutMVar mvar e
+  pure (occurred, fire)
 
-behaviorVar :: (MonadManaged m, Monoid a) => m (MVar a, (a -> a) -> IO ())
-behaviorVar = do
-  mvar <- liftIO $ newMVar mempty
-  pure (mvar, pureModifyMVar_ mvar)
+-- | Creates a stream of values for a single publisher to update, and many
+-- consumers to subscribe (to value changes) or observe the current value.
+--
+-- NOTE: if we used STM+TChan+TMVar, we could remove the single-producer
+-- restriction by modifying the chan and mvar concurrently.
+--
+behavior :: (MonadIO m, Monoid a) => m (Behavior a)
+behavior = Behavior <$> liftIO newChan <*> liftIO (newMVar mempty)
 
-behaviorToEvent :: MonadManaged io => MVar a -> (a -> Maybe b) -> io (Async b)
-behaviorToEvent bvar predicate = do
-  evar <- liftIO newEmptyMVar
-  let helper = do
-        val <- readMVar bvar
-        case predicate val of
-          Just b -> putMVar evar b
-          Nothing -> helper
+transition :: MonadIO m => Behavior a -> (a -> a) -> m ()
+transition (Behavior chan mvar) update = liftIO $ do
+  nextValue <- pureModifyMVar mvar update
+  writeChan chan nextValue
 
-  -- Ignore the returned async -- it doesn't carry a meaningful value. We need
-  -- to continue to the next line. The forked thread will live until after the
-  -- event has been triggered.
-  _ <- fork helper
-  awaitMVar evar
+subscribe :: MonadIO m => Behavior a -> m (Chan a)
+subscribe (Behavior chan _) = liftIO $ dupChan chan
+
+observe :: MonadIO m => Behavior a -> m a
+observe (Behavior _ mvar) = liftIO $ readMVar mvar
+
+--
+-- TODO: this won't leak memory via the duplicated channel after our event
+-- occurs, right?
+--
+watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
+watch b check = do
+  chan <- subscribe b
+  fork $ liftIO $ untilJust $ check <$> readChan chan
