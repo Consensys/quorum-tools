@@ -23,7 +23,8 @@ publicStateTestMain = testNTimes 5 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
 
   forM_ (take increments sendTo) $ \geth ->
     incrementStorage geth contract storageAddr
-  td 1
+
+  td 2
 
   let expectedValue = 42 + increments
 
