@@ -3,8 +3,6 @@
 -- Test private state consistency
 module Mains.PrivateStateTest where
 
-import           Control.Monad            (forM_)
-
 import           Cluster.StateTestsShared
 import           Cluster.Types
 import           Prelude                  hiding (FilePath)
@@ -23,15 +21,19 @@ privateStateTestMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 
   -- The storage starts with a value of 42 and we increment it five times
-  forM_ [1..5] $ \no -> do
-    incrementStorage g1 privStorage privStorageAddr
+  let increments = 5
+  replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
 
-    i1 <- getStorage g1 privStorage privStorageAddr
-    expectEq i1 (42 + no)
+  td 2
 
-    i2 <- getStorage g2 privStorage privStorageAddr
-    expectEq i2 0
-    -- TODO confirm geth2 also gets transaction
+  let expectedPrivateValue = 42 + increments
 
-    i3 <- getStorage g3 privStorage privStorageAddr
-    expectEq i3 (42 + no)
+  i1 <- getStorage g1 privStorage privStorageAddr
+  expectEq i1 expectedPrivateValue
+
+  i2 <- getStorage g2 privStorage privStorageAddr
+  expectEq i2 0
+  -- TODO confirm geth2 also gets transaction
+
+  i3 <- getStorage g3 privStorage privStorageAddr
+  expectEq i3 expectedPrivateValue
