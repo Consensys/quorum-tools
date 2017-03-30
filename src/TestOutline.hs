@@ -176,8 +176,9 @@ verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
   outstandingTxes_ <- traverse observe outstandingTxesBs
   earlyTerminations <- traverse poll terminatedAsyncs
 
-  forM_ outstandingTxes_ $ \(OutstandingTxes txes) ->
-    putStrLn $ "Outstanding txes: " ++ show (Set.size txes)
+  forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
+    let num = Set.size txes
+    when (num > 0) $ putStrLn $ "Outstanding txes: " ++ show num
 
   let noEarlyTerminations = mconcat $ flip map earlyTerminations $ \case
         Just _  -> Falsified DidPanic -- assume termination is unexpected
