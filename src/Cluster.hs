@@ -339,6 +339,8 @@ mkConstellationConfig thisGid = do
 
 setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
 setupNodes deployDatadir gids = do
+  unset "PRIVATE_CONFIG" -- clear privacy env var, if it was set earlier
+
   acctKeys <- generateAccountKeys (length gids)
   genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
 
