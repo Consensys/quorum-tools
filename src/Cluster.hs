@@ -159,8 +159,7 @@ createAccount dir = do
     let cmd = rawCommand dir "account new"
     pw <- view clusterPassword
     -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let acctShell = inshellWithJoinedErr cmd (select $ textToLines pw
-                                                    <> textToLines pw)
+    let acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
                   & grep (begins "Address: ")
                   & sed (chars *> between (char '{') (char '}') chars)
     let mkAccountId = forceAcctId -- force head
