@@ -29,3 +29,5 @@ flags: {}
 
 # Extra package databases containing global packages
 extra-package-dbs: []
+
+concurrent-tests: false
