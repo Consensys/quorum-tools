@@ -7,7 +7,7 @@ import Cluster.Types
 import TestOutline
 
 partitionTestMain :: IO ()
-partitionTestMain = testNTimes 100 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
+partitionTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let dropNode:stableNodes = fst <$> iNodes
 
   timestampedMessage "starting test with a pause"

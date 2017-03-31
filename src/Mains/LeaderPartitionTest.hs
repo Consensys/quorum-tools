@@ -7,7 +7,7 @@ import Cluster.Types
 import TestOutline
 
 leaderPartitionTestMain :: IO ()
-leaderPartitionTestMain = testNTimes 10 PrivacyDisabled (NumNodes 3) $
+leaderPartitionTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $
   \iNodes -> do
     let (dropNode, _):_stableNodes = iNodes
 
