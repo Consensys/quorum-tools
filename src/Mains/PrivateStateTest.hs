@@ -10,7 +10,7 @@ import           TestOutline              hiding (verify)
 import           Turtle                   hiding (match)
 
 privateStateTestMain :: IO ()
-privateStateTestMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
+privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let [g1, g2, g3] = fst <$> iNodes
       (_, geth1Instruments) = head iNodes
 

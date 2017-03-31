@@ -11,7 +11,7 @@ import           Cluster.Types
 import           TestOutline              hiding (verify)
 
 publicStateTestMain :: IO ()
-publicStateTestMain = testNTimes 5 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
+publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
       geths = fst <$> iNodes
       sendTo = cycle geths
