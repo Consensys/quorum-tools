@@ -3,6 +3,26 @@
 This repo contains the tools we use for both testing Quorum-Raft and deploying
 it to AWS.
 
+## Building the binaries
+
+```
+$ stack setup
+$ stack build
+```
+
+At this point, you can run any of the built binaries using `stack exec`:
+
+```
+$ stack exec -- local-new
+```
+
+Or you can use `stack install` to install them on your machine (make sure `~/.local/bin` is on your `$PATH`):
+
+```
+$ stack install
+$ local-new
+```
+
 ## Deployment
 
 We use [docker](https://www.docker.com/) to build images for AWS and [Terraform](https://www.terraform.io/) to deploy them. Using Terraform, it should be possible to deploy to any host with docker support, but this hasn't been tested.
