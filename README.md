@@ -5,8 +5,15 @@ it to AWS.
 
 ## Building the binaries
 
+If you haven't built this project yet, make sure that you have the GHC compiler:
+
 ```
 $ stack setup
+```
+
+Now you can build the project:
+
+```
 $ stack build
 ```
 
