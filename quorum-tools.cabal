@@ -38,6 +38,7 @@ library
     memory                == 0.14.*,
     monad-loops           == 0.4.*
   exposed-modules:
+    QuorumTools
     Mains.AwsBootstrap
     Mains.AwsSpam
     Mains.LeaderPartitionTest

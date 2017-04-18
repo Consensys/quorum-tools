@@ -49,9 +49,12 @@ mkBootstrapEnv config gids = mkClusterEnv mkIp mkDataDir gids
       MultiRegion  -> const dockerHostIp
 
 awsBootstrapMain :: IO ()
-awsBootstrapMain = do
-  config <- options "Bootstraps an AWS cluster" cliParser
+awsBootstrapMain =
+  awsBootstrap =<< options "Bootstraps an AWS cluster" cliParser
+
+awsBootstrap :: AwsConfig -> IO ()
+awsBootstrap config =
   let gids = clusterGids $ clusterSize config
 
-  sh $ flip runReaderT (mkBootstrapEnv config gids) $
-    wipeAndSetupNodes (Just $ DataDir "/datadir") (rootDir config) gids
+  in sh $ flip runReaderT (mkBootstrapEnv config gids) $
+       wipeAndSetupNodes (Just $ DataDir "/datadir") (rootDir config) gids

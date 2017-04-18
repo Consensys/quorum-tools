@@ -17,11 +17,8 @@ localStartMain = sh $ flip runReaderT cEnv $ do
     geths <- traverse loadLocalNode $ clusterGids clusterSize
 
     privacySupport <- view clusterPrivacySupport
-    when (privacySupport == PrivacyEnabled) $ do
-      liftIO $ putStrLn "starting constellation nodes"
-      startConstellationNodes geths
+    when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
 
-    liftIO $ putStrLn "starting geth nodes"
     runNodesIndefinitely geths
 
   where
