@@ -13,8 +13,15 @@ import           Cluster.Client       (loadLocalNode, spamGeth,
                                        perSecond)
 import           Cluster.SpamArgs
 
-cliParser :: Parser (GethId, RateLimit Millisecond, Maybe Text, Maybe Text)
-cliParser = (,,,)
+data LocalSpamConfig = LocalSpamConfig
+  { gethId :: GethId
+  , rateLimit :: RateLimit Millisecond
+  , contractAddr :: Maybe Text
+  , privateFor :: Maybe Text
+  }
+
+cliParser :: Parser LocalSpamConfig
+cliParser = LocalSpamConfig
   <$> gethIdP
   <*> rateLimitP
   <*> optional contractP
@@ -25,15 +32,15 @@ cliParser = (,,,)
     rateLimitP = perSecond <$>
       optInteger "rps"  'r' "The number of requests per second"
 
-localSpamMain :: IO ()
-localSpamMain = do
-    (gid, rateLimit, contractM, privateForM) <-
-      options "Local geth spammer" cliParser
+localSpam :: LocalSpamConfig -> IO ()
+localSpam (LocalSpamConfig gid rateLimit' contractM privateForM) = do
     let benchTx = processContractArgs contractM privateForM
-    geth <- runReaderT (loadLocalNode gid) (mkLocalEnv maxClusterSize)
-    spamGeth benchTx geth rateLimit
-
-  where
     -- We don't need the exact cluster size here; just something higher than the
     -- geth ID we want to spam.
-    maxClusterSize = 10
+        maxClusterSize = 10
+
+    geth <- runReaderT (loadLocalNode gid) (mkLocalEnv maxClusterSize)
+    spamGeth benchTx geth rateLimit'
+
+localSpamMain :: IO ()
+localSpamMain = localSpam =<< options "Local geth spammer" cliParser

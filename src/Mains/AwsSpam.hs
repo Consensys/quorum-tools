@@ -47,7 +47,10 @@ readGidFromHomedir = GethId . read <$> readFile "/home/ubuntu/node-id"
 
 awsSpamMain :: IO ()
 awsSpamMain = do
-  config <- options "Spams the local node with public transactions" cliParser
+  awsSpam =<< options "Spams the local node with public transactions" cliParser
+
+awsSpam :: SpamConfig -> IO ()
+awsSpam config = do
   gid <- readGidFromHomedir
   let benchTx = processContractArgs (contract config) (privateFor config)
   geth <- runReaderT (loadLocalNode gid) (cEnv (clusterType config) gid)
