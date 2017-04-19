@@ -18,7 +18,7 @@ patternForCheckpoint cpt = suffix $
   >> space
   >> text (sentinelForCheckpoint cpt)
   >> space
-  >> mkCheckpointPattern cpt
+  >> bracketed (mkCheckpointPattern cpt)
 
 sentinelForCheckpoint :: Checkpoint a -> Text
 sentinelForCheckpoint PeerConnected    = "PEER-CONNECTED"
@@ -34,13 +34,14 @@ mkCheckpointPattern PeerDisconnected = PeerLeft . GethId <$> decimal
 mkCheckpointPattern BecameMinter = pure ()
 mkCheckpointPattern BecameVerifier = pure ()
 mkCheckpointPattern TxCreated = do
-  _ <- "("
   transactionId <- bytes32P WithPrefix
-  _ <- ", "
+  _ <- " "
   addr <- bytes20P WithPrefix
-  _ <- ")"
   return (TxId transactionId, Addr addr)
 mkCheckpointPattern TxAccepted = TxId <$> bytes32P WithPrefix
+
+bracketed :: Pattern a -> Pattern a
+bracketed pat = "[" *> pat <* "]"
 
 matchCheckpoint :: Checkpoint a -> Text -> Maybe a
 matchCheckpoint cpt line =
