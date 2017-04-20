@@ -373,23 +373,30 @@ wipeAndSetupNodes deployDatadir rootDir gids = do
   wipeLocalClusterRoot rootDir
   setupNodes deployDatadir gids
 
-gethShell :: Geth -> Shell Line
-gethShell geth = do
+data JoinMode = JoinExisting Int | JoinNewCluster
+
+gethShell :: Geth -> JoinMode -> Shell Line
+gethShell geth joinMode = do
   pwPath <- using $ fileContaining $ select $ textToLines $ gethPassword geth
 
   case gethConstellationConfig geth of
     Just conf -> export "PRIVATE_CONFIG" (format fp conf)
     Nothing   -> pure ()
 
+  let joinStr = case joinMode of
+        JoinExisting num -> format (" --raftjoinexisting"%d) num
+        JoinNewCluster -> ""
+
   inshellWithJoinedErr (gethCommand geth $
-                                    format ("--unlock 0 --password "%fp) pwPath)
+                                    format ("--unlock 0 --password "%fp%" "%s) pwPath joinStr)
                        empty
 
 runNode :: forall m. (MonadManaged m)
         => Int
+        -> JoinMode
         -> Geth
         -> m NodeInstrumentation
-runNode numNodes geth = do
+runNode numNodes joinMode geth = do
   -- allocate events and behaviors
   (nodeOnline,   triggerStarted)     <- event NodeOnline
   (allConnected, triggerConnected)   <- event AllConnected
@@ -406,7 +413,7 @@ runNode numNodes geth = do
 
   let logPath = fromText $ nodeName (gethId geth) <> ".out"
       instrumentedLines
-        = gethShell geth
+        = gethShell geth joinMode
         & tee logPath
         & observingRoles      triggerAssumedRole
         & observingActivation (transition membershipChanges)
@@ -425,7 +432,7 @@ runNodesIndefinitely geths = do
   let numNodes = length geths
       extractInstruments NodeInstrumentation {nodeOnline, nodeTerminated} =
         (nodeOnline, nodeTerminated)
-  instruments <- traverse (runNode numNodes) geths
+  instruments <- traverse (runNode numNodes JoinNewCluster) geths
   let (_, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
 
   awaitAll terminatedAsyncs

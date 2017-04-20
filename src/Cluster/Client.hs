@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Cluster.Client
@@ -8,6 +9,8 @@ module Cluster.Client
   , sendTransaction
   , call
   , create
+  , membershipChange
+  , sendEmptyTx
   , bench
   , loadLocalNode
   , perSecond
@@ -16,7 +19,8 @@ module Cluster.Client
 import           Control.Lens            (to, (^.), (^?))
 import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
-import           Data.Aeson              (Value(Array, String), object, (.=))
+import           Data.Aeson              (Value(Array, String), object, (.=),
+                                          toJSON)
 import           Data.Aeson.Types        (Pair)
 import           Data.Aeson.Lens         (key, _String)
 import qualified Data.ByteString.Lazy    as LSB
@@ -117,6 +121,22 @@ callBody (CallArgs toBytes method) geth = object
     ]
   ]
 
+addPeerBody :: GethId -> EnodeId -> Value
+addPeerBody (GethId gid) (EnodeId eid) = object
+  [ "id"      .= (1 :: Int)
+  , "jsonrpc" .= t "2.0"
+  , "method"  .= t "eth_addPeer"
+  , "params"  .= [ toJSON gid, String eid ]
+  ]
+
+removePeerBody :: GethId -> Value
+removePeerBody (GethId gid) = object
+  [ "id"      .= (1 :: Int)
+  , "jsonrpc" .= t "2.0"
+  , "method"  .= t "eth_removePeer"
+  , "params"  .= [ toJSON gid ]
+  ]
+
 call :: MonadIO io => Geth -> CallArgs -> io (Either Text Text)
 call geth args
   = liftIO $ parse <$> post (T.unpack (gethUrl geth)) (callBody args geth)
@@ -138,6 +158,16 @@ create :: MonadIO io => Geth -> CreateArgs -> io ()
 create geth args = liftIO $ void $
   post (T.unpack (gethUrl geth)) (createBody args geth)
 
+membershipChange :: MonadIO io => Geth -> MembershipChange -> io ()
+membershipChange stable op =
+  let body = case op of
+        AddNode (Geth {gethId, gethEnodeId}) -> addPeerBody gethId gethEnodeId
+        RemoveNode (Geth {gethId}) -> removePeerBody gethId
+  in liftIO $ void $ post (T.unpack (gethUrl stable)) body
+
+sendEmptyTx :: MonadIO io => Geth -> io ()
+sendEmptyTx geth = liftIO $ void $
+  post (T.unpack (gethUrl geth)) (emptyTxRpcBody geth)
 
 spamBody :: SpamMode -> Geth -> Value
 spamBody = \case
