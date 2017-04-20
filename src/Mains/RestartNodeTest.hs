@@ -55,21 +55,21 @@ readNodeInfo = refine >=> \instruments -> (,)
 node1Plan :: Geth -> IO NodeInfo
 node1Plan geth = do
   _ <- run cEnv $ do
-    instruments <- runNode numNodes geth
+    instruments <- runNode numNodes JoinNewCluster geth
     waitForElection instruments
     td 5
 
   td 1
 
   readNodeInfo <=< run cEnv $ do
-    instruments <- runNode numNodes geth
+    instruments <- runNode numNodes JoinNewCluster geth
     td 8
     pure instruments
 
 nodes23Plan :: Geth -> IO NodeInfo
 nodes23Plan geth =
   readNodeInfo <=< run cEnv $ do
-    instruments <- runNode numNodes geth
+    instruments <- runNode numNodes JoinNewCluster geth
     waitForElection instruments
     withSpammer [geth] $ td 4
     td 3
