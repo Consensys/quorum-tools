@@ -125,7 +125,7 @@ addPeerBody :: GethId -> EnodeId -> Value
 addPeerBody (GethId gid) (EnodeId eid) = object
   [ "id"      .= (1 :: Int)
   , "jsonrpc" .= t "2.0"
-  , "method"  .= t "eth_addPeer"
+  , "method"  .= t "raft_addPeer"
   , "params"  .= [ toJSON gid, String eid ]
   ]
 
@@ -133,7 +133,7 @@ removePeerBody :: GethId -> Value
 removePeerBody (GethId gid) = object
   [ "id"      .= (1 :: Int)
   , "jsonrpc" .= t "2.0"
-  , "method"  .= t "eth_removePeer"
+  , "method"  .= t "raft_removePeer"
   , "params"  .= [ toJSON gid ]
   ]
 
