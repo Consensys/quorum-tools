@@ -84,6 +84,11 @@ data PrivacySupport
   | PrivacyDisabled
   deriving (Eq, Show)
 
+data JoinMode
+  = JoinExisting
+  | JoinNewCluster
+  deriving (Eq, Show)
+
 type HasEnv = MonadReader ClusterEnv
 
 data EnodeId = EnodeId Text
@@ -107,6 +112,7 @@ data Geth =
        , gethVerbosity           :: Verbosity
        , gethDataDir             :: DataDir
        , gethConsensusPeer       :: ConsensusPeer
+       , gethJoinMode            :: JoinMode
        , gethIp                  :: Ip
        , gethUrl                 :: Text
        , gethConstellationConfig :: Maybe FilePath
@@ -157,6 +163,7 @@ data SpamMode
 data MembershipChange
   = AddNode Geth
   | RemoveNode Geth
+  deriving (Show)
 
 newtype UnencodedMethod = UnencodedMethod Text deriving IsString
 
@@ -271,6 +278,7 @@ data ClusterEnv
                , _clusterIps                :: Map GethId Ip
                , _clusterDataDirs           :: Map GethId DataDir
                , _clusterConstellationConfs :: Map GethId FilePath
+               , _clusterInitialMembers     :: Set GethId
                , _clusterConsensus          :: Consensus
                , _clusterPrivacySupport     :: PrivacySupport
                }

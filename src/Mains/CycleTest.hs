@@ -6,55 +6,72 @@
 module Mains.CycleTest where
 
 import           Control.Lens
-import Turtle.Shell
+import           Data.Monoid     ((<>))
+import           Data.Set        as Set
+import qualified Data.Text       as T
+import           Turtle          (MonadIO, liftIO)
 
-import Cluster
-import Cluster.Client
-import Cluster.Control
-import Cluster.Types
-import TestOutline
+import           Cluster
+import           Cluster.Client
+import           Cluster.Control
+import           Cluster.Types
+import           TestOutline
+
+proposes :: MonadIO m => Geth -> MembershipChange -> m ()
+geth `proposes` change = do
+  let message = T.pack $ case change of
+        AddNode target -> "adding node " <> show (gId (gethId target))
+        RemoveNode target -> "removing node " <> show (gId (gethId target))
+
+  timestampedMessage $ "waiting before " <> message
+  td 2
+  timestampedMessage message
+  membershipChange geth change
 
 cycleTestMain :: IO ()
 cycleTestMain = do
-  let gethNums = [1..6]
+  let gids = [1..6] :: [GethId]
       cEnv = mkLocalEnv 6
            & clusterPrivacySupport .~ PrivacyDisabled
+           & clusterInitialMembers .~ Set.fromList (take 3 gids)
 
   result <- run cEnv $ do
-    [g1, g2, g3, g4, g5, g6] <- wipeAndSetupNodes Nothing "gdata" gethNums
+    [g1, g2, g3, g4, g5, g6] <- wipeAndSetupNodes Nothing "gdata" gids
 
-    startInstrs <- traverse (runNode 6 JoinNewCluster) [g1, g2, g3]
-    endInstrs <- traverse (uncurry (runNode 6))
-      [ (JoinExisting 4, g4)
-      , (JoinExisting 5, g5)
-      , (JoinExisting 6, g6)
-      ]
+    startInstrs <- traverse (runNode 3) [g1, g2, g3]
+    endInstrs <- traverse (runNode 3) [g4, g5, g6]
+
+    timestampedMessage "waiting for initial nodes to assume raft roles"
 
     awaitAll (assumedRole <$> startInstrs)
 
     timestampedMessage "starting test with a pause"
-    td 2
 
+    td 2
     sendEmptyTx g1
 
-    -- remove g1, add g4
-    membershipChange g2 (RemoveNode g1)
-    membershipChange g3 (AddNode g4)
+    g2 `proposes` AddNode g4
 
+    g3 `proposes` RemoveNode g1
+
+    td 2
     sendEmptyTx g2
 
-    -- TODO: maybe wait for checkpoints before proceeding?
-    membershipChange g3 (RemoveNode g2)
-    membershipChange g4 (AddNode g5)
+    g3 `proposes` AddNode g5
 
+    g4 `proposes` RemoveNode g2
+
+    td 2
     sendEmptyTx g3
 
-    membershipChange g4 (RemoveNode g3)
-    membershipChange g5 (AddNode g6)
+    g4 `proposes` AddNode g6
 
-    -- send txes for few seconds
-    withSpammer [g3, g4, g5] $ td 2
+    g5 `proposes` RemoveNode g3
 
+    td 2
+    withSpammer [g4, g5, g6] $ td 2
+
+    td 2
     liftIO $ verify
       (lastBlock <$> endInstrs)
       (outstandingTxes <$> endInstrs)

@@ -21,7 +21,7 @@ leaveJoinTestMain = do
   result <- run cEnv $ do
     [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gethNums
 
-    instruments <- traverse (runNode 3 JoinNewCluster) [g1, g2, g3]
+    instruments <- traverse (runNode 3) [g1, g2, g3]
 
     awaitAll (assumedRole <$> instruments)
 
@@ -38,6 +38,7 @@ leaveJoinTestMain = do
     membershipChange g3 (AddNode g1)
 
     withSpammer [g1, g2, g3] $ td 1
+    td 1
 
     liftIO $ verify
       (lastBlock <$> instruments)
