@@ -105,7 +105,7 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
         geths <- wipeAndSetupNodes Nothing "gdata" gethNums
         when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
-        instruments <- traverse (runNode numNodes' JoinNewCluster) geths
+        instruments <- traverse (runNode numNodes') geths
 
         timestampedMessage "awaiting a successful raft election"
         awaitAll (assumedRole <$> instruments)

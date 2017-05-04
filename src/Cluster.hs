@@ -13,7 +13,7 @@ module Cluster where
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (forConcurrently)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, view, (^.))
+import           Control.Lens               (at, view, (^.), ix, has)
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -21,6 +21,7 @@ import           Control.Monad.Reader.Class (MonadReader (ask))
 import           Data.Aeson                 (Value, withObject, (.:))
 import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
+import           Data.Bool                  (bool)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                ((<>))
@@ -29,7 +30,7 @@ import           Data.Text                  (Text, replace)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (hClose)
-import           Turtle                     hiding (env, view)
+import           Turtle                     hiding (env, view, has)
 
 import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Observing
@@ -54,14 +55,16 @@ emptyClusterEnv = ClusterEnv
   , _clusterIps                = Map.empty
   , _clusterDataDirs           = Map.empty
   , _clusterConstellationConfs = Map.empty
+  , _clusterInitialMembers     = Set.empty
   , _clusterConsensus          = Raft
   , _clusterPrivacySupport     = PrivacyDisabled
   }
 
 mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
 mkClusterEnv mkIp mkDataDir gids = emptyClusterEnv
-    { _clusterIps      = Map.fromList [(gid, mkIp gid)      | gid <- gids]
-    , _clusterDataDirs = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
+    { _clusterIps            = Map.fromList [(gid, mkIp gid)      | gid <- gids]
+    , _clusterDataDirs       = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
+    , _clusterInitialMembers = Set.fromList gids
     }
 
 mkLocalEnv :: Int -> ClusterEnv
@@ -103,15 +106,16 @@ setupCommand gid = format ("geth --datadir "%fp%
                       <*> httpPort gid
 
 gethCommand :: Geth -> Text -> Text
-gethCommand geth = format ("geth --datadir "%fp       %
-                               " --port "%d           %
-                               " --rpcport "%d        %
-                               " --networkid "%d      %
-                               " --verbosity "%d      %
-                               " --nodiscover"        %
-                               " --rpc"               %
-                               " --rpccorsdomain '*'" %
-                               " --rpcaddr localhost" %
+gethCommand geth = format ("geth --datadir "%fp                    %
+                               " --port "%d                        %
+                               " --rpcport "%d                     %
+                               " --networkid "%d                   %
+                               " --verbosity "%d                   %
+                               " --nodiscover"                     %
+                               " --rpc"                            %
+                               " --rpccorsdomain '*'"              %
+                               " --rpcaddr localhost"              %
+                               " --rpcapi eth,net,web3,raft,admin" %
                                " "%s%
                                " "%s)
                           (dataDirPath (gethDataDir geth))
@@ -193,6 +197,10 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
 
 -- | We need to use the RPC interface to get the EnodeId if we haven't yet
 -- started up geth.
+--
+-- TODO: see if we can do this through HTTP instead, now that we've whitelisted
+--       access to the admin API via RPC.
+--
 requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 requestEnodeId gid = do
   mkCmd <- setupCommand gid
@@ -228,6 +236,7 @@ mkGeth gid eid aid = do
   rpcPort' <- rpcPort gid
   ip <- gidIp gid
   datadir <- gidDataDir gid
+  isInitialMember <- has (clusterInitialMembers . ix gid) <$> ask
 
   Geth <$> pure gid
        <*> pure eid
@@ -239,6 +248,7 @@ mkGeth gid eid aid = do
        <*> view clusterVerbosity
        <*> pure datadir
        <*> fmap (mkConsensusPeer gid) (view clusterConsensus)
+       <*> pure (bool JoinExisting JoinNewCluster isInitialMember)
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
        <*> fmap (\case
@@ -312,11 +322,11 @@ readAccountId gid = do
 
     force = fromMaybe $ error "failed to load account ID from keystore"
 
-generateAccountKeys :: (MonadIO m, HasEnv m) => Int -> m [AccountKey]
-generateAccountKeys numAccts = do
+generateAccountKey :: (MonadIO m, HasEnv m) => m AccountKey
+generateAccountKey = do
   clusterEnv <- ask
   liftIO $ with (DataDir <$> mktempdir "/tmp" "geth") $ \tmpDataDir ->
-    runReaderT (replicateM numAccts $ createAccount tmpDataDir) clusterEnv
+    runReaderT (createAccount tmpDataDir) clusterEnv
 
 -- TODO: probably refactor this to take a Geth, not GethId?
 mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
@@ -340,14 +350,16 @@ setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
 setupNodes deployDatadir gids = do
   unset "PRIVATE_CONFIG" -- clear privacy env var, if it was set earlier
 
-  acctKeys <- generateAccountKeys (length gids)
+  acctKeys <- replicateM (length gids) generateAccountKey
   genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
 
   clusterEnv <- ask
   geths <- liftIO $ forConcurrently (zip gids acctKeys) $ \(gid, acctKey) ->
     runReaderT (createNode genesisJsonPath gid acctKey) clusterEnv
 
-  void $ liftIO $ forConcurrently geths $ writeStaticNodes geths
+  let initialGeths = filter ((JoinNewCluster ==) . gethJoinMode) geths
+
+  void $ liftIO $ forConcurrently geths $ writeStaticNodes initialGeths
 
   privacySupport <- view clusterPrivacySupport
   when (privacySupport == PrivacyEnabled) $
@@ -373,18 +385,16 @@ wipeAndSetupNodes deployDatadir rootDir gids = do
   wipeLocalClusterRoot rootDir
   setupNodes deployDatadir gids
 
-data JoinMode = JoinExisting Int | JoinNewCluster
-
-gethShell :: Geth -> JoinMode -> Shell Line
-gethShell geth joinMode = do
+gethShell :: Geth -> Shell Line
+gethShell geth = do
   pwPath <- using $ fileContaining $ select $ textToLines $ gethPassword geth
 
   case gethConstellationConfig geth of
     Just conf -> export "PRIVATE_CONFIG" (format fp conf)
     Nothing   -> pure ()
 
-  let joinStr = case joinMode of
-        JoinExisting num -> format (" --raftjoinexisting"%d) num
+  let joinStr = case gethJoinMode geth of
+        JoinExisting   -> format (" --raftjoinexisting "%d) (gId $ gethId geth)
         JoinNewCluster -> ""
 
   inshellWithJoinedErr (gethCommand geth $
@@ -393,10 +403,9 @@ gethShell geth joinMode = do
 
 runNode :: forall m. (MonadManaged m)
         => Int
-        -> JoinMode
         -> Geth
         -> m NodeInstrumentation
-runNode numNodes joinMode geth = do
+runNode numInitialNodes geth = do
   -- allocate events and behaviors
   (nodeOnline,   triggerStarted)     <- event NodeOnline
   (allConnected, triggerConnected)   <- event AllConnected
@@ -409,11 +418,11 @@ runNode numNodes joinMode geth = do
 
   clusterIsFull <- watch membershipChanges $ \peers ->
     -- with the HTTP transport, each node actually even connects to itself
-    if Set.size peers == numNodes then Just () else Nothing
+    if Set.size peers == numInitialNodes then Just () else Nothing
 
   let logPath = fromText $ nodeName (gethId geth) <> ".out"
       instrumentedLines
-        = gethShell geth joinMode
+        = gethShell geth
         & tee logPath
         & observingRoles      triggerAssumedRole
         & observingActivation (transition membershipChanges)
@@ -429,10 +438,10 @@ runNode numNodes joinMode geth = do
 
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
-  let numNodes = length geths
+  let numInitialNodes = length geths
       extractInstruments NodeInstrumentation {nodeOnline, nodeTerminated} =
         (nodeOnline, nodeTerminated)
-  instruments <- traverse (runNode numNodes JoinNewCluster) geths
+  instruments <- traverse (runNode numInitialNodes) geths
   let (_, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
 
   awaitAll terminatedAsyncs
