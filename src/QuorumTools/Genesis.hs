@@ -53,7 +53,7 @@ mapAddresses index addresses =
   let v = V.fromList addresses
       addrToStorage (AccountId (Addr addrBytes)) =
         let Bytes32 key = storageKey index addrBytes
-        in (T.decodeUtf8 key, "0x01")
+        in ("0x" <> T.decodeUtf8 key, "0x0000000000000000000000000000000000000000000000000000000000000001")
       mapped = addrToStorage <$> v
   in HashMap.fromList (V.toList mapped)
 
@@ -83,10 +83,14 @@ createGenesisJson acctIds = do
       (\aid -> accountIdToText aid .= object [ "balance" .= t "0" ])
       acctIds
 
+    i :: Int -> Int
+    i = id
+
     header = "0x0000000000000000000000000000000000000020" .= object
       [ "code"    .= qcContractCode
       , "storage" .= createStorage voters [maker]
       , "storage" .= createStorage acctIds [maker]
+      , "balance" .= t "0"
       ]
 
     contents :: Shell Line
@@ -94,9 +98,13 @@ createGenesisJson acctIds = do
       [ "alloc"      .= object (header:balances)
       , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
       , "config"     .= object
-        [ "homesteadBlock" .= (0 :: Int) ]
+        [ "homesteadBlock" .= i 0
+        , "chainId"        .= i 12345
+        , "eip155Block"    .= i 0
+        , "eip158Block"    .= i 0
+        ]
       , "difficulty" .= t "0x0"
-      , "extraData"  .= t "0x0"
+      , "extraData"  .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
       , "gasLimit"   .= t "0xE0000000"
       , "mixhash"    .= t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
       , "nonce"      .= t "0x0"

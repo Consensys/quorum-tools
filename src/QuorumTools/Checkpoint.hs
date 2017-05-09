@@ -14,12 +14,15 @@ quorumSentinel = "QUORUM-CHECKPOINT"
 
 -- Note we use @suffix@ because the content is preceded by a timestamp.
 patternForCheckpoint :: Checkpoint a -> Pattern a
-patternForCheckpoint cpt = suffix $
-     text quorumSentinel
-  >> space
+patternForCheckpoint cpt =
+     "INFO "
+  >> bracketed (count 14 dot) -- timestamp
+  >> spaces
+  >> text quorumSentinel
+  >> spaces1
+  >> "name="
   >> text (sentinelForCheckpoint cpt)
-  >> space
-  >> bracketed (mkCheckpointPattern cpt)
+  >> mkCheckpointPattern cpt
 
 sentinelForCheckpoint :: Checkpoint a -> Text
 sentinelForCheckpoint PeerConnected      = "PEER-CONNECTED"
@@ -32,21 +35,29 @@ sentinelForCheckpoint TxAccepted         = "TX-ACCEPTED"
 sentinelForCheckpoint BlockCreated       = "BLOCK-CREATED"
 
 mkCheckpointPattern :: Checkpoint a -> Pattern a
-mkCheckpointPattern PeerConnected      = PeerJoined . GethId <$> decimal
-mkCheckpointPattern PeerDisconnected   = PeerLeft   . GethId <$> decimal
+mkCheckpointPattern PeerConnected
+  = spaces >> "peer=" >> PeerJoined . GethId <$> decimal
+mkCheckpointPattern PeerDisconnected
+  = spaces >> "peer=" >> PeerLeft . GethId <$> decimal
 mkCheckpointPattern BecameMinter       = pure ()
 mkCheckpointPattern BecameVerifier     = pure ()
 mkCheckpointPattern BlockVotingStarted = pure ()
-mkCheckpointPattern TxCreated          = do
-  transactionId <- bytes32P WithPrefix
-  _ <- " "
-  addr <- bytes20P WithPrefix
+mkCheckpointPattern TxCreated = do
+  _ <- spaces
+  transactionId <- "tx=" >> bytes32P WithPrefix
+  _ <- spaces
+  addr <- "to=" >> bytes20P WithPrefix
   return (TxId transactionId, Addr addr)
-mkCheckpointPattern TxAccepted         = TxId <$> bytes32P WithPrefix
-mkCheckpointPattern BlockCreated       = Block . pack <$> count 64 hexDigit
+mkCheckpointPattern TxAccepted
+  = spaces >> "tx=" >> TxId <$> bytes32P WithPrefix
+mkCheckpointPattern BlockCreated
+  = spaces >> "block=" >> Block . pack <$> count 64 hexDigit
 
 bracketed :: Pattern a -> Pattern a
 bracketed pat = "[" *> pat <* "]"
+
+quoted :: Pattern a -> Pattern a
+quoted pat = "\"" *> pat <* "\""
 
 matchCheckpoint :: Checkpoint a -> Text -> Maybe a
 matchCheckpoint cpt line =

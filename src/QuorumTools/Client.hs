@@ -101,8 +101,8 @@ createBody
   , "params"  .=
     [ object $ setPrivateFor privacy
       [ "from"  .= showGethAccountId geth
-      , "data"  .= (bytecode <> printHex WithoutPrefix initVal)
-      , "gas"   .= t "4700000"
+      , "data"  .= ("0x" <> bytecode <> printHex WithoutPrefix initVal)
+      , "gas"   .= t "0x47B760"
       ]
     ]
   ]

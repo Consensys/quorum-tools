@@ -129,14 +129,14 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
       keys <- generateClusterKeys gids password
 
-      let blockMaker:voters = gids
+      let -- blockMaker:voters = gids
           cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
                & clusterPassword       .~ password
-               & clusterConsensus      .~ QuorumChain
-                 bootnodeEnode
-                 blockMaker
-                 (Set.fromList voters)
+               -- & clusterConsensus      .~ QuorumChain
+               --   bootnodeEnode
+               --   blockMaker
+               --   (Set.fromList voters)
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
