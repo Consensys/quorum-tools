@@ -82,9 +82,7 @@ restartNodeTestMain :: IO ()
 restartNodeTestMain = do
   let gethIds = [1..GethId numNodes]
 
-  nodes <- run cEnv $ do
-    nodes <- wipeAndSetupNodes Nothing "gdata" gethIds
-    pure nodes
+  nodes <- run cEnv $ wipeAndSetupNodes Nothing "gdata" gethIds
 
   g1:g2g3 <- refine nodes
 
