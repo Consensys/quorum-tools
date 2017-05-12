@@ -101,13 +101,20 @@ instance FromJSON EnodeId where
   parseJSON str@(String _) = EnodeId <$> parseJSON str
   parseJSON invalid        = typeMismatch "EnodeId" invalid
 
+newtype Password
+  = CleartextPassword { pwCleartext :: Text }
+  deriving (Eq)
+
+instance Show Password where
+  show _ = "Password \"[REDACTED]\""
+
 data Geth =
   Geth { gethId                  :: GethId
        , gethEnodeId             :: EnodeId
        , gethHttpPort            :: Port
        , gethRpcPort             :: Port
        , gethAccountId           :: AccountId
-       , gethPassword            :: Text
+       , gethPassword            :: Password
        , gethNetworkId           :: Int
        , gethVerbosity           :: Verbosity
        , gethDataDir             :: DataDir
@@ -266,7 +273,7 @@ data AwsClusterType
 -- this module into phases
 
 data ClusterEnv
-  = ClusterEnv { _clusterPassword           :: Text
+  = ClusterEnv { _clusterPassword           :: Password
                , _clusterNetworkId          :: Int
                , _clusterBaseHttpPort       :: Port
                , _clusterBaseRpcPort        :: Port

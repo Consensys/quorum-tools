@@ -46,7 +46,7 @@ import           Constellation              (constellationConfPath,
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
-  { _clusterPassword           = "abcd"
+  { _clusterPassword           = CleartextPassword "abcd"
   , _clusterNetworkId          = 1418
   , _clusterBaseHttpPort       = 30400
   , _clusterBaseRpcPort        = 40400
@@ -161,9 +161,10 @@ readAccountKey dir acctId = do
 createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
 createAccount dir = do
     let cmd = rawCommand dir "account new"
-    pw <- view clusterPassword
+    password <- view clusterPassword
     -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
+    let pw = pwCleartext password
+        acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
                   & grep (begins "Address: ")
                   & sed (chars *> between (char '{') (char '}') chars)
     let mkAccountId = forceAcctId -- force head
@@ -387,7 +388,8 @@ wipeAndSetupNodes deployDatadir rootDir gids = do
 
 gethShell :: Geth -> Shell Line
 gethShell geth = do
-  pwPath <- using $ fileContaining $ select $ textToLines $ gethPassword geth
+  pwPath <- using $ fileContaining $ select $ textToLines $
+    pwCleartext $ gethPassword geth
 
   case gethConstellationConfig geth of
     Just conf -> export "PRIVATE_CONFIG" (format fp conf)
