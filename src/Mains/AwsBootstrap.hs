@@ -7,6 +7,8 @@ module Mains.AwsBootstrap where
 import           Control.Lens         ((.~))
 import           Control.Monad.Reader (runReaderT)
 import           Data.Bool            (bool)
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
 import           Prelude              hiding (FilePath)
 import           Turtle
 
@@ -29,10 +31,11 @@ cliParser = AwsConfig
            (switch  "multi-region" 'm' "Whether the cluster is multi-region")
   <*> optInt "cluster-size"   'n' "Total cluster size across all regions"
 
-mkBootstrapEnv :: AwsConfig -> [GethId] -> ClusterEnv
-mkBootstrapEnv config gids = mkClusterEnv mkIp mkDataDir gids
+mkBootstrapEnv :: AwsConfig -> Password -> Map GethId AccountKey -> ClusterEnv
+mkBootstrapEnv config password keys = mkClusterEnv mkIp mkDataDir keys
     & clusterGenesisJson    .~ dataRoot </> "genesis.json"
     & clusterPrivacySupport .~ PrivacyEnabled
+    & clusterPassword       .~ password
 
   where
     dataRoot = rootDir config
@@ -49,12 +52,18 @@ mkBootstrapEnv config gids = mkClusterEnv mkIp mkDataDir gids
       MultiRegion  -> const dockerHostIp
 
 awsBootstrapMain :: IO ()
-awsBootstrapMain =
-  awsBootstrap =<< options "Bootstraps an AWS cluster" cliParser
+awsBootstrapMain = awsBootstrap =<< parseConfig
+  where
+    parseConfig = options "Bootstraps an AWS cluster" cliParser
 
 awsBootstrap :: AwsConfig -> IO ()
-awsBootstrap config =
-  let gids = clusterGids $ clusterSize config
+awsBootstrap config = do
+    keys <- generateClusterKeys (clusterSize config) password
+    let gids = Map.keys keys
 
-  in sh $ flip runReaderT (mkBootstrapEnv config gids) $
-       wipeAndSetupNodes (Just $ DataDir "/datadir") (rootDir config) gids
+    sh $ flip runReaderT (mkBootstrapEnv config password keys) $
+      wipeAndSetupNodes (Just remoteDataDir) (rootDir config) gids
+
+  where
+    remoteDataDir = DataDir "/datadir"
+    password      = CleartextPassword "abcd"

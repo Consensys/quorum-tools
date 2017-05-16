@@ -31,9 +31,14 @@ geth `proposes` change = do
 cycleTestMain :: IO ()
 cycleTestMain = do
   let gids = [1..6] :: [GethId]
-      cEnv = mkLocalEnv 6
+      password = CleartextPassword "abcd"
+
+  keys <- generateClusterKeys (length gids) password
+
+  let cEnv = mkLocalEnv keys
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterInitialMembers .~ Set.fromList (take 3 gids)
+           & clusterPassword       .~ password
 
   result <- run cEnv $ do
     [g1, g2, g3, g4, g5, g6] <- wipeAndSetupNodes Nothing "gdata" gids

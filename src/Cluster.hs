@@ -13,7 +13,7 @@ module Cluster where
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (forConcurrently)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, view, (^.), ix, has)
+import           Control.Lens               (at, has, ix, view, (^.), (^?))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
@@ -22,6 +22,7 @@ import           Data.Aeson                 (Value, withObject, (.:))
 import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bool                  (bool)
+import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                ((<>))
@@ -30,7 +31,7 @@ import           Data.Text                  (Text, replace)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (hClose)
-import           Turtle                     hiding (env, view, has)
+import           Turtle                     hiding (env, has, view)
 
 import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Observing
@@ -55,24 +56,30 @@ emptyClusterEnv = ClusterEnv
   , _clusterIps                = Map.empty
   , _clusterDataDirs           = Map.empty
   , _clusterConstellationConfs = Map.empty
+  , _clusterAccountKeys        = Map.empty
   , _clusterInitialMembers     = Set.empty
   , _clusterConsensus          = Raft
   , _clusterPrivacySupport     = PrivacyDisabled
   }
 
-mkClusterEnv :: (GethId -> Ip) -> (GethId -> DataDir) -> [GethId] -> ClusterEnv
-mkClusterEnv mkIp mkDataDir gids = emptyClusterEnv
+mkClusterEnv :: (GethId -> Ip)
+             -> (GethId -> DataDir)
+             -> Map GethId AccountKey
+             -> ClusterEnv
+mkClusterEnv mkIp mkDataDir keys = emptyClusterEnv
     { _clusterIps            = Map.fromList [(gid, mkIp gid)      | gid <- gids]
     , _clusterDataDirs       = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
+    , _clusterAccountKeys    = keys
     , _clusterInitialMembers = Set.fromList gids
     }
+  where
+    gids = Map.keys keys
 
-mkLocalEnv :: Int -> ClusterEnv
-mkLocalEnv size = mkClusterEnv mkIp mkDataDir gids
+mkLocalEnv :: Map GethId AccountKey -> ClusterEnv
+mkLocalEnv = mkClusterEnv mkIp mkDataDir
   where
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
-    gids = clusterGids size
 
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
@@ -145,26 +152,45 @@ initNode genesisJsonPath gid = do
   cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
   void $ sh $ inshellWithErr cmd empty
 
-readAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
-readAccountKey dir acctId = do
+generateClusterKeys :: MonadIO m => Int -> Password -> m (Map GethId AccountKey)
+generateClusterKeys size pw = Map.fromList . zip gids
+                          <$> replicateM size (generateAccountKey pw)
+  where
+    gids = clusterGids size
+
+findAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
+findAccountKey dir acctId = do
     let keystoreDir = dataDirPath dir </> "keystore"
     paths <- fold (ls keystoreDir) Fold.list
     let acctIdText = printHex WithoutPrefix (unAddr (accountId acctId))
-    let hasAccountId = format fp
+        hasAccountId = format fp
           >>> match (contains $ text acctIdText)
           >>> null
           >>> not
-    let mPath = headMay $ filter hasAccountId paths
+        mPath = headMay $ filter hasAccountId paths
 
     fmap (AccountKey acctId) <$> sequence (strict . input <$> mPath)
 
-createAccount :: (MonadIO m, HasEnv m) => DataDir -> m AccountKey
-createAccount dir = do
+readAccountKey :: MonadIO m => DataDir -> GethId -> m AccountKey
+readAccountKey (DataDir ddPath) gid = do
+    keyContents <- strict $ input keyPath
+    let acctId = forceAcctId $ parseMaybe aidParser =<< textDecode keyContents
+    pure $ AccountKey acctId keyContents
+
+  where
+    keyPath = ddPath </> "keystore" </> fromText (nodeName gid)
+
+    aidParser :: Value -> Aeson.Parser AccountId
+    aidParser = withObject "AccountId" $ \obj ->
+      AccountId . Addr <$> obj .: "address"
+
+    forceAcctId = fromMaybe $ error "failed to load account ID from keystore"
+
+createAccount :: MonadIO m => Password -> DataDir -> m AccountKey
+createAccount (CleartextPassword pw) dir = do
     let cmd = rawCommand dir "account new"
-    password <- view clusterPassword
     -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let pw = pwCleartext password
-        acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
+    let acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
                   & grep (begins "Address: ")
                   & sed (chars *> between (char '{') (char '}') chars)
     let mkAccountId = forceAcctId -- force head
@@ -174,13 +200,13 @@ createAccount dir = do
           -- an account id is an Addr, is 20 bytes
           >>> Addr >>> AccountId
     aid <- mkAccountId <$> fold acctShell Fold.head
-    mKey <- readAccountKey dir aid
+    mKey <- findAccountKey dir aid
     return $ forceKey mKey
 
   where
-    forceAcctId = fromMaybe $ error "unable to extract account ID"
+    forceAcctId    = fromMaybe $ error "unable to extract account ID"
     forceAcctBytes = fromMaybe $ error "unable to convert account ID to bytes"
-    forceKey = fromMaybe $ error "unable to find key in keystore"
+    forceKey       = fromMaybe $ error "unable to find key in keystore"
 
 fileContaining :: Shell Line -> Managed FilePath
 fileContaining contents = do
@@ -230,14 +256,16 @@ mkConsensusPeer gid (QuorumChain (bmGid, bmAid) voterAccts)
   where
     mVoterAcct = Map.lookup gid voterAccts
 
-mkGeth
-  :: (MonadIO m, HasEnv m)
-  => GethId -> EnodeId -> AccountId -> m Geth
-mkGeth gid eid aid = do
+mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
+mkGeth gid eid = do
   rpcPort' <- rpcPort gid
   ip <- gidIp gid
   datadir <- gidDataDir gid
-  isInitialMember <- has (clusterInitialMembers . ix gid) <$> ask
+  cEnv <- ask
+
+  let isInitialMember = has (clusterInitialMembers . ix gid) cEnv
+      aid = fromMaybe (error $ "missing key in env for " <> show gid)
+                      (cEnv ^? clusterAccountKeys . ix gid . akAccountId)
 
   Geth <$> pure gid
        <*> pure eid
@@ -262,18 +290,23 @@ installAccountKey gid acctKey = do
   dir <- gidDataDir gid
   let keystoreDir = dataDirPath dir </> "keystore"
       jsonPath = keystoreDir </> fromText (nodeName gid)
-  output jsonPath (select $ textToLines $ akKey acctKey)
+  output jsonPath (select $ textToLines $ _akKey acctKey)
 
 createNode :: (MonadIO m, HasEnv m)
            => FilePath
            -> GethId
-           -> AccountKey
            -> m Geth
-createNode genesisJsonPath gid acctKey = do
-  initNode genesisJsonPath gid
-  installAccountKey gid acctKey
-  eid <- requestEnodeId gid
-  mkGeth gid eid (akAccountId acctKey)
+createNode genesisJsonPath gid = do
+    initNode genesisJsonPath gid
+    cEnv <- ask
+    let acctKey = forceAcctKey $ cEnv ^? clusterAccountKeys . ix gid
+    installAccountKey gid acctKey
+    eid <- requestEnodeId gid
+    mkGeth gid eid
+
+  where
+    forceAcctKey :: Maybe AccountKey -> AccountKey
+    forceAcctKey = fromMaybe $ error $ "key missing in env for " <> show gid
 
 shellEscapeSingleQuotes :: Text -> Text
 shellEscapeSingleQuotes = replace "'" "'\"'\"'" -- see http://bit.ly/2eKRS6W
@@ -309,25 +342,9 @@ readEnodeId gid = do
     forceEnodeId = fromMaybe $ error $
       "enode ID not found in list for " <> show gid
 
-readAccountId :: (HasEnv m, MonadIO m) => GethId -> m AccountId
-readAccountId gid = do
-    (DataDir ddPath) <- gidDataDir gid
-    let keyPath = ddPath </> "keystore" </> fromText (nodeName gid)
-    keyContents <- strict $ input keyPath
-    pure $ force $ parseMaybe aidParser =<< textDecode keyContents
-
-  where
-    aidParser :: Value -> Aeson.Parser AccountId
-    aidParser = withObject "AccountId" $ \obj ->
-      AccountId . Addr <$> obj .: "address"
-
-    force = fromMaybe $ error "failed to load account ID from keystore"
-
-generateAccountKey :: (MonadIO m, HasEnv m) => m AccountKey
-generateAccountKey = do
-  clusterEnv <- ask
-  liftIO $ with (DataDir <$> mktempdir "/tmp" "geth") $ \tmpDataDir ->
-    runReaderT (createAccount tmpDataDir) clusterEnv
+generateAccountKey :: MonadIO m => Password -> m AccountKey
+generateAccountKey password = liftIO $
+  with (DataDir <$> mktempdir "/tmp" "geth") $ createAccount password
 
 -- TODO: probably refactor this to take a Geth, not GethId?
 mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
@@ -351,12 +368,13 @@ setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
 setupNodes deployDatadir gids = do
   unset "PRIVATE_CONFIG" -- clear privacy env var, if it was set earlier
 
-  acctKeys <- replicateM (length gids) generateAccountKey
-  genesisJsonPath <- createGenesisJson $ akAccountId <$> acctKeys
+  acctKeys <- view clusterAccountKeys
+
+  genesisJsonPath <- createGenesisJson $ _akAccountId <$> Map.elems acctKeys
 
   clusterEnv <- ask
-  geths <- liftIO $ forConcurrently (zip gids acctKeys) $ \(gid, acctKey) ->
-    runReaderT (createNode genesisJsonPath gid acctKey) clusterEnv
+  geths <- liftIO $ forConcurrently gids $ \gid ->
+    runReaderT (createNode genesisJsonPath gid) clusterEnv
 
   let initialGeths = filter ((JoinNewCluster ==) . gethJoinMode) geths
 
