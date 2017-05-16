@@ -69,14 +69,18 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
 
 data Consensus
   = Raft
-  | QuorumChain { qcBlockMaker    :: (GethId, AccountId)
-                , qcVoterAccounts :: Map GethId AccountId }
+  | QuorumChain { qcBlockMaker    :: GethId
+                , qcVoterAccounts :: Set GethId }
+  deriving (Eq, Show)
+
+data QuorumChainRole
+  = BlockMaker
+  | Voter
   deriving (Eq, Show)
 
 data ConsensusPeer
   = RaftPeer
-  | QuorumChainPeer { qcVoterAccount      :: Maybe AccountId
-                    , qcBlockMakerAccount :: Maybe AccountId }
+  | QuorumChainPeer AccountId (Maybe QuorumChainRole)
   deriving (Eq, Show)
 
 data PrivacySupport

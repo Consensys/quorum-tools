@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -26,6 +27,7 @@ import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                ((<>))
+import           Data.Set                   (member)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
 import           Prelude                    hiding (FilePath, lines)
@@ -134,18 +136,13 @@ gethCommand geth = format ("geth --datadir "%fp                    %
   where
     consensusOptions :: ConsensusPeer -> Text
     consensusOptions RaftPeer = "--raft"
-    consensusOptions (QuorumChainPeer mVoterAcct mBlockMakerAcct) =
-      let voteStr = case mVoterAcct of
-            Just acctId -> format
-              ("--voteaccount \""%s%"\" --votepassword \"\"")
-              (accountIdToText acctId)
-            Nothing -> ""
-          makerStr = case mBlockMakerAcct of
-            Just acctId -> format
-              ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-              (accountIdToText acctId)
-            Nothing -> ""
-      in format (s%" "%s) voteStr makerStr
+    consensusOptions (QuorumChainPeer acctId mRole) = case mRole of
+      Nothing -> ""
+      Just BlockMaker ->
+        format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
+               (accountIdToText acctId)
+      Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
+                           (accountIdToText acctId)
 
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
@@ -248,13 +245,12 @@ requestEnodeId gid = do
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
 
-mkConsensusPeer :: GethId -> Consensus -> ConsensusPeer
-mkConsensusPeer _   Raft = RaftPeer
-mkConsensusPeer gid (QuorumChain (bmGid, bmAid) voterAccts)
-  | gid == bmGid = QuorumChainPeer mVoterAcct (Just bmAid)
-  | otherwise    = QuorumChainPeer mVoterAcct Nothing
-  where
-    mVoterAcct = Map.lookup gid voterAccts
+mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
+mkConsensusPeer _   _   Raft = RaftPeer
+mkConsensusPeer gid aid (QuorumChain bmGid voterGids) =
+  QuorumChainPeer aid $ if | gid == bmGid ->           Just BlockMaker
+                           | gid `member` voterGids -> Just Voter
+                           | otherwise ->              Nothing
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do
@@ -276,7 +272,7 @@ mkGeth gid eid = do
        <*> view clusterNetworkId
        <*> view clusterVerbosity
        <*> pure datadir
-       <*> fmap (mkConsensusPeer gid) (view clusterConsensus)
+       <*> fmap (mkConsensusPeer gid aid) (view clusterConsensus)
        <*> pure (bool JoinExisting JoinNewCluster isInitialMember)
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
