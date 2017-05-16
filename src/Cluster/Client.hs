@@ -12,7 +12,7 @@ module Cluster.Client
   , membershipChange
   , sendEmptyTx
   , bench
-  , loadLocalNode
+  , loadNode
   , perSecond
   ) where
 
@@ -191,15 +191,8 @@ bench spamMode geth (Seconds seconds) = view benchShell
                        (gethUrl geth)
       inshell cmd empty
 
---
--- NOTE: this only works for the *local* node. the account ID is obtained from
---       the local data dir.
---
-loadLocalNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
-loadLocalNode gid = do
-  eid <- readEnodeId gid
-  aid <- readAccountId gid
-  mkGeth gid eid aid
+loadNode :: (MonadIO m, HasEnv m) => GethId -> m Geth
+loadNode gid = mkGeth gid =<< readEnodeId gid
 
 every :: TimeUnit a => a -> RateLimit a
 every = PerExecution

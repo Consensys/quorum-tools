@@ -5,12 +5,13 @@ module Mains.AwsSpam where
 import           Control.Monad.Reader (runReaderT)
 import           Control.RateLimit    (RateLimit)
 import           Data.Bool            (bool)
+import qualified Data.Map.Strict      as Map
 import           Data.Time.Units      (Millisecond)
 import           Turtle
 
 import           Cluster
 import           Cluster.Aws          (dockerHostIp, internalAwsIp)
-import           Cluster.Client       (loadLocalNode, perSecond, spamGeth)
+import           Cluster.Client       (loadNode, perSecond, spamGeth)
 import           Cluster.SpamArgs
 import           Cluster.Types
 
@@ -28,15 +29,18 @@ cliParser = SpamConfig
   <*> optional contractP
   <*> optional privateForP
 
-cEnv :: AwsClusterType -> GethId -> ClusterEnv
-cEnv cType gid = mkClusterEnv mkIp mkDataDir [gid]
+mkSingletonEnv :: MonadIO m => AwsClusterType -> GethId -> m ClusterEnv
+mkSingletonEnv cType gid = do
+    key <- readAccountKey dataDir gid
+    return $ mkClusterEnv mkIp (const dataDir) (Map.singleton gid key)
+
   where
     --
     -- TODO: fix/improve this
     --
     maxClusterSize = 10
     numSubnets     = 3
-    mkDataDir = const $ DataDir "/datadir"
+    dataDir = DataDir "/datadir"
 
     mkIp = case cType of
       SingleRegion -> internalAwsIp maxClusterSize numSubnets
@@ -46,12 +50,15 @@ readGidFromHomedir :: IO GethId
 readGidFromHomedir = GethId . read <$> readFile "/home/ubuntu/node-id"
 
 awsSpamMain :: IO ()
-awsSpamMain = do
-  awsSpam =<< options "Spams the local node with public transactions" cliParser
+awsSpamMain = awsSpam =<< parseConfig
+  where
+    parseConfig = options "Spams the local node with public transactions"
+                          cliParser
 
 awsSpam :: SpamConfig -> IO ()
 awsSpam config = do
   gid <- readGidFromHomedir
   let benchTx = processContractArgs (contract config) (privateFor config)
-  geth <- runReaderT (loadLocalNode gid) (cEnv (clusterType config) gid)
+  cEnv <- mkSingletonEnv (clusterType config) gid
+  geth <- runReaderT (loadNode gid) cEnv
   spamGeth benchTx geth (rateLimit config)

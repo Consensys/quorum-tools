@@ -94,16 +94,21 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
     go :: TestNum -> IO ShouldTerminate -> IO ShouldTerminate
     go testNum runMoreTests = do
       let numNodes' = unNumNodes numNodes
-          gethNums = [1..GethId numNodes']
-          cEnv = mkLocalEnv numNodes'
+          password = CleartextPassword "abcd"
+          gids = [1..GethId numNodes']
+
+      keys <- generateClusterKeys (length gids) password
+
+      let cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
+               & clusterPassword       .~ password
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
       result <- run cEnv $ do
         _ <- when (os == "darwin") PF.acquirePf
 
-        geths <- wipeAndSetupNodes Nothing "gdata" gethNums
+        geths <- wipeAndSetupNodes Nothing "gdata" gids
         when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
         instruments <- traverse (runNode numNodes') geths
 

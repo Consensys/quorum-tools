@@ -5,16 +5,25 @@ module Mains.LocalStart where
 
 import           Control.Lens         (view, (.~))
 import           Control.Monad.Reader (runReaderT)
+import           Data.Map.Strict      (traverseWithKey)
+import qualified Data.Map.Strict      as Map
 import           Turtle               hiding (view)
 
-import           Cluster              (mkLocalEnv, runNodesIndefinitely)
-import           Cluster.Client       (loadLocalNode)
+import           Cluster              (mkLocalEnv, nodeName, readAccountKey,
+                                       runNodesIndefinitely)
+import           Cluster.Client       (loadNode)
 import           Cluster.Types
 import           Constellation
 
 localStartMain :: IO ()
-localStartMain = sh $ flip runReaderT cEnv $ do
-    geths <- traverse loadLocalNode $ clusterGids clusterSize
+localStartMain = do
+  keys <- traverseWithKey (flip readAccountKey) dataDirs
+  let cEnv = mkLocalEnv keys
+           & clusterPrivacySupport .~ PrivacyEnabled
+           & clusterPassword       .~ password
+
+  sh $ flip runReaderT cEnv $ do
+    geths <- traverse loadNode gids
 
     privacySupport <- view clusterPrivacySupport
     when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
@@ -22,5 +31,8 @@ localStartMain = sh $ flip runReaderT cEnv $ do
     runNodesIndefinitely geths
 
   where
-    clusterSize = 3
-    cEnv = mkLocalEnv clusterSize & clusterPrivacySupport .~ PrivacyEnabled
+    password     = CleartextPassword "abcd"
+    clusterSize  = 3
+    gids         = clusterGids clusterSize
+    mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
+    dataDirs      = Map.fromList $ zip gids (mkDataDir <$> gids)

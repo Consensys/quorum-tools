@@ -14,12 +14,16 @@ import TestOutline
 
 leaveJoinTestMain :: IO ()
 leaveJoinTestMain = do
-  let gethNums = [1..3]
-      cEnv = mkLocalEnv 3
+  let gids = [1..3]
+      password = CleartextPassword "abcd"
+
+  keys <- generateClusterKeys (length gids) password
+  let cEnv = mkLocalEnv keys
            & clusterPrivacySupport .~ PrivacyDisabled
+           & clusterPassword       .~ password
 
   result <- run cEnv $ do
-    [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gethNums
+    [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gids
 
     instruments <- traverse (runNode 3) [g1, g2, g3]
 

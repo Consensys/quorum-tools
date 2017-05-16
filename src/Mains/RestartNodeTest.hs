@@ -3,20 +3,18 @@
 -- Run a cluster, stop and restart one node
 module Mains.RestartNodeTest where
 
-import Control.Concurrent.Async (Concurrently(..))
-import Data.Monoid              (Last)
-import Turtle
+import           Control.Concurrent.Async (Concurrently (..))
+import           Control.Lens             ((.~))
+import           Data.Monoid              (Last)
+import           Turtle
 
-import Cluster
-import Cluster.Control
-import Cluster.Types
-import TestOutline
+import           Cluster
+import           Cluster.Control
+import           Cluster.Types
+import           TestOutline
 
 numNodes :: Int
 numNodes = 3
-
-cEnv :: ClusterEnv
-cEnv = mkLocalEnv numNodes
 
 waitForElection :: MonadIO m => NodeInstrumentation -> m ()
 waitForElection instruments = do
@@ -28,7 +26,7 @@ type NodeInfo = (Last Block, OutstandingTxes)
 
 refine :: Either FailureReason a -> IO a
 refine (Left failure) = print failure >> exit failedTestCode
-refine (Right a) = pure a
+refine (Right a)      = pure a
 
 readNodeInfo :: Either FailureReason NodeInstrumentation -> IO NodeInfo
 readNodeInfo = refine >=> \instruments -> (,)
@@ -52,8 +50,8 @@ readNodeInfo = refine >=> \instruments -> (,)
 --      13    |              |       |      |         |
 --      14    |              |       v      |         v
 
-node1Plan :: Geth -> IO NodeInfo
-node1Plan geth = do
+node1Plan :: ClusterEnv -> Geth -> IO NodeInfo
+node1Plan cEnv geth = do
   _ <- run cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
@@ -66,8 +64,8 @@ node1Plan geth = do
     td 8
     pure instruments
 
-nodes23Plan :: Geth -> IO NodeInfo
-nodes23Plan geth =
+nodes23Plan :: ClusterEnv -> Geth -> IO NodeInfo
+nodes23Plan cEnv geth =
   readNodeInfo <=< run cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
@@ -80,14 +78,20 @@ nodes23Plan geth =
 
 restartNodeTestMain :: IO ()
 restartNodeTestMain = do
-  let gethIds = [1..GethId numNodes]
+  let gids = [1..GethId numNodes]
+      password = CleartextPassword "abcd"
 
-  nodes <- run cEnv $ wipeAndSetupNodes Nothing "gdata" gethIds
+  keys <- generateClusterKeys numNodes password
+
+  let cEnv = mkLocalEnv keys
+           & clusterPassword .~ password
+
+  nodes <- run cEnv $ wipeAndSetupNodes Nothing "gdata" gids
 
   g1:g2g3 <- refine nodes
 
   instruments <- runConcurrently $ sequenceA $ map Concurrently $
-    node1Plan g1 : map nodes23Plan g2g3
+    node1Plan cEnv g1 : map (nodes23Plan cEnv) g2g3
 
   let (lastBlocks, outstandingTxes_) = unzip instruments
       result =

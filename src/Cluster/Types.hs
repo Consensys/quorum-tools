@@ -62,8 +62,8 @@ data DataDir = DataDir { dataDirPath :: FilePath }
 data AccountId = AccountId { accountId :: Addr }
   deriving (Show, Eq)
 
-data AccountKey = AccountKey { akAccountId :: AccountId
-                             , akKey       :: Text
+data AccountKey = AccountKey { _akAccountId :: AccountId
+                             , _akKey       :: Text
                              }
   deriving (Show, Eq)
 
@@ -186,7 +186,7 @@ newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
 newtype TxAddrs = TxAddrs { unTxAddrs :: Map TxId Addr }
   deriving (Monoid, Eq)
 
--- Raft. TODO: see whether we need this anymore.
+-- Raft
 
 data RaftRole
   = Leader
@@ -284,7 +284,8 @@ data ClusterEnv
                , _clusterGenesisJson        :: FilePath
                , _clusterIps                :: Map GethId Ip
                , _clusterDataDirs           :: Map GethId DataDir
-               , _clusterConstellationConfs :: Map GethId FilePath
+               , _clusterConstellationConfs :: Map GethId FilePath -- TODO: remove this? seems to be unused
+               , _clusterAccountKeys        :: Map GethId AccountKey
                , _clusterInitialMembers     :: Set GethId
                , _clusterConsensus          :: Consensus
                , _clusterPrivacySupport     :: PrivacySupport
@@ -292,3 +293,4 @@ data ClusterEnv
   deriving (Eq, Show)
 
 makeLenses ''ClusterEnv
+makeLenses ''AccountKey
