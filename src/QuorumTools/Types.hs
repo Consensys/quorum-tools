@@ -68,7 +68,8 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
 
 data Consensus
   = Raft
-  | QuorumChain { qcBlockMaker    :: GethId
+  | QuorumChain { qcBootEnode     :: EnodeId
+                , qcBlockMaker    :: GethId
                 , qcVoterAccounts :: Set GethId }
   deriving (Eq, Show)
 
@@ -79,7 +80,7 @@ data QuorumChainRole
 
 data ConsensusPeer
   = RaftPeer
-  | QuorumChainPeer AccountId (Maybe QuorumChainRole)
+  | QuorumChainPeer EnodeId AccountId (Maybe QuorumChainRole)
   deriving (Eq, Show)
 
 data PrivacySupport
@@ -234,14 +235,17 @@ newtype PeerLeft = PeerLeft GethId deriving Show
 
 -- | Some checkpoint in the execution of the program.
 data Checkpoint result where
-  PeerConnected    :: Checkpoint PeerJoined
-  PeerDisconnected :: Checkpoint PeerLeft
+  PeerConnected      :: Checkpoint PeerJoined
+  PeerDisconnected   :: Checkpoint PeerLeft
 
-  BecameMinter     :: Checkpoint ()
-  BecameVerifier   :: Checkpoint ()
+  BecameMinter       :: Checkpoint ()
+  BecameVerifier     :: Checkpoint ()
+  BlockVotingStarted :: Checkpoint ()
 
-  TxCreated        :: Checkpoint (TxId, Addr)
-  TxAccepted       :: Checkpoint TxId
+  TxCreated          :: Checkpoint (TxId, Addr)
+  TxAccepted         :: Checkpoint TxId
+
+  BlockCreated       :: Checkpoint Block
 
 -- Packet filtering
 

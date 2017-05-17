@@ -115,6 +115,13 @@ setupCommand gid = format ("geth --datadir "%fp%
                       <$> fmap dataDirPath (gidDataDir gid)
                       <*> httpPort gid
 
+bootnodeCommand :: Text
+bootnodeCommand = "bootnode --nodekeyhex 77bd02ffa26e3fb8f324bda24ae588066f1873d95680104de5bc2db9e7b2e510 --addr='127.0.0.1:33445'"
+
+
+bootnodeEnode :: EnodeId
+bootnodeEnode = EnodeId "enode://61077a284f5ba7607ab04f33cfde2750d659ad9af962516e159cf6ce708646066cd927a900944ce393b98b95c914e4d6c54b099f568342647a1cd4a262cc0423@[127.0.0.1]:33445"
+
 gethCommand :: Geth -> Text -> Text
 gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --port "%d                        %
@@ -126,6 +133,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpccorsdomain '*'"              %
                                        " --rpcaddr localhost"              %
                                        " --rpcapi eth,net,web3,raft,admin" %
+                                       " --emitcheckpoints"                %
                                        " --unlock 0"                       %
                                        " "%s%
                                        " "%s)
@@ -135,7 +143,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
-                          consensusOptions
+                          (consensusOptions (gethConsensusPeer geth))
                           more
   where
     envVar :: Text
@@ -143,18 +151,24 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
       Just conf -> "PRIVATE_CONFIG=" <> format fp conf
       Nothing   -> ""
 
-    consensusOptions :: Text
-    consensusOptions = case gethConsensusPeer geth of
-      RaftPeer -> case gethJoinMode geth of
+    consensusOptions :: ConsensusPeer -> Text
+    consensusOptions RaftPeer = case gethJoinMode geth of
         JoinExisting   -> format ("--raft --raftjoinexisting "%d) (gId $ gethId geth)
         JoinNewCluster -> "--raft"
-      QuorumChainPeer acctId mRole -> case mRole of
-        Nothing -> ""
-        Just BlockMaker ->
-          format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-                 (accountIdToText acctId)
-        Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
-                             (accountIdToText acctId)
+    consensusOptions (QuorumChainPeer (EnodeId bootnode) acctId mRole) =
+      let roleSpecificText = case mRole of
+            Nothing -> ""
+            Just BlockMaker -> format
+              ("--blockmakeraccount '"%s%"' --blockmakerpassword ''"
+              %" --voteaccount '"%s%"' --votepassword ''"
+              )
+              (accountIdToText acctId)
+              (accountIdToText acctId)
+            Just Voter -> format
+              ("--voteaccount '"%s%"' --votepassword ''")
+              (accountIdToText acctId)
+
+      in format ("--bootnodes '"%s%"' --networkid 84234 "%s) bootnode roleSpecificText
 
 initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
          => FilePath
@@ -221,7 +235,7 @@ createAccount (CleartextPassword pw) dir = do
     return $ forceKey mKey
 
   where
-    forceAcctId    = fromMaybe $ error "unable to extract account ID"
+    forceAcctId    = fromMaybe $ error "unable to extract account ID (createAccount)"
     forceAcctBytes = fromMaybe $ error "unable to convert account ID to bytes"
     forceKey       = fromMaybe $ error "unable to find key in keystore"
 
@@ -244,7 +258,7 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
 requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 requestEnodeId gid = do
   mkCmd <- setupCommand gid
-  (Ip ip) <- gidIp gid
+  Ip ip <- gidIp gid
 
   let enodeIdShell = do
                        jsPath <- using $ fileContaining jsPayload
@@ -259,14 +273,14 @@ requestEnodeId gid = do
 
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
-    forceNodeId = fromMaybe $ error "unable to extract enode ID"
+    forceNodeId = fromMaybe $ error "unable to extract enode ID (requestEnodeId)"
 
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
 mkConsensusPeer _   _   Raft = RaftPeer
-mkConsensusPeer gid aid (QuorumChain bmGid voterGids) =
-  QuorumChainPeer aid $ if | gid == bmGid ->           Just BlockMaker
-                           | gid `member` voterGids -> Just Voter
-                           | otherwise ->              Nothing
+mkConsensusPeer gid aid (QuorumChain bootnode bmGid voterGids) =
+  QuorumChainPeer bootnode aid $ if | gid == bmGid ->           Just BlockMaker
+                                    | gid `member` voterGids -> Just Voter
+                                    | otherwise ->              Nothing
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do

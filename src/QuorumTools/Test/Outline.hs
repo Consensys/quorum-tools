@@ -35,6 +35,7 @@ import QuorumTools.Cluster
 import QuorumTools.Constellation
 import QuorumTools.Control (awaitAll, observe)
 import QuorumTools.Types
+import QuorumTools.Util (inshellWithJoinedErr)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -128,14 +129,20 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
       keys <- generateClusterKeys gids password
 
-      let cEnv = mkLocalEnv keys
+      let blockMaker:voters = gids
+          cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
                & clusterPassword       .~ password
+               & clusterConsensus      .~ QuorumChain
+                 bootnodeEnode
+                 blockMaker
+                 (Set.fromList voters)
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
       result <- runTestM cEnv $ do
         _ <- when (os == "darwin") PF.acquirePf
+        _ <- fork $ sh $ inshellWithJoinedErr bootnodeCommand empty
 
         geths <- wipeAndSetupNodes Nothing "gdata" gids
         when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
