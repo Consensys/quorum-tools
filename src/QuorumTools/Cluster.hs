@@ -113,6 +113,13 @@ setupCommand gid = format ("geth --datadir "%fp%
                       <$> fmap dataDirPath (gidDataDir gid)
                       <*> httpPort gid
 
+bootnodeCommand :: Text
+bootnodeCommand = "bootnode --nodekeyhex 77bd02ffa26e3fb8f324bda24ae588066f1873d95680104de5bc2db9e7b2e510 --addr='127.0.0.1:33445'"
+
+
+bootnodeEnode :: EnodeId
+bootnodeEnode = EnodeId "enode://61077a284f5ba7607ab04f33cfde2750d659ad9af962516e159cf6ce708646066cd927a900944ce393b98b95c914e4d6c54b099f568342647a1cd4a262cc0423@[127.0.0.1]:33445"
+
 gethCommand :: Geth -> Text -> Text
 gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --port "%d                        %
@@ -124,6 +131,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpccorsdomain '*'"              %
                                        " --rpcaddr localhost"              %
                                        " --rpcapi eth,net,web3,raft,admin" %
+                                       " --emitcheckpoints"                %
                                        " --unlock 0"                       %
                                        " "%s%
                                        " "%s)
@@ -146,13 +154,20 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
       RaftPeer -> case gethJoinMode geth of
         JoinExisting   -> format ("--raft --raftjoinexisting "%d) (gId $ gethId geth)
         JoinNewCluster -> "--raft"
-      QuorumChainPeer acctId mRole -> case mRole of
-        Nothing -> ""
-        Just BlockMaker ->
-          format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-                 (accountIdToText acctId)
-        Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
-                             (accountIdToText acctId)
+      QuorumChainPeer (EnodeId bootnode) acctId mRole ->
+        let roleSpecificText = case mRole of
+              Nothing -> ""
+              Just BlockMaker -> format
+                ("--blockmakeraccount '"%s%"' --blockmakerpassword 'abcd'"
+                %" --voteaccount '"%s%"' --votepassword 'abcd'"
+                )
+                (accountIdToText acctId)
+                (accountIdToText acctId)
+              Just Voter -> format
+                ("--voteaccount '"%s%"' --votepassword 'abcd'")
+                (accountIdToText acctId)
+
+        in format ("--bootnodes '"%s%"' --networkid 84234 "%s) bootnode roleSpecificText
 
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
@@ -259,10 +274,10 @@ requestEnodeId gid = do
 
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
 mkConsensusPeer _   _   Raft = RaftPeer
-mkConsensusPeer gid aid (QuorumChain bmGid voterGids) =
-  QuorumChainPeer aid $ if | gid == bmGid ->           Just BlockMaker
-                           | gid `member` voterGids -> Just Voter
-                           | otherwise ->              Nothing
+mkConsensusPeer gid aid (QuorumChain bootnode bmGid voterGids) =
+  QuorumChainPeer bootnode aid $ if | gid == bmGid ->           Just BlockMaker
+                                    | gid `member` voterGids -> Just Voter
+                                    | otherwise ->              Nothing
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do

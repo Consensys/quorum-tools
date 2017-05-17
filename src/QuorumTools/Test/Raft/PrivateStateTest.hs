@@ -6,13 +6,14 @@ module QuorumTools.Test.Raft.PrivateStateTest where
 import           Prelude                  hiding (FilePath)
 import           Turtle                   hiding (match)
 
+import           QuorumTools.Control          (awaitAll, watch)
 import           QuorumTools.Test.Outline hiding (verify)
 import           QuorumTools.Test.State
 import           QuorumTools.Types
 
 privateStateTestMain :: IO ()
 privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
-  let geths = fst <$> iNodes
+  let (geths, instruments) = unzip iNodes
       (g1, geth1Instruments) = head iNodes
 
   -- geth1 and geth3 are both party to this tx, but geth2 is not
@@ -25,12 +26,15 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let increments = 5
   replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
 
-  td 2
+  lastBlockWatches <- traverse
+    (\instrumentation -> watch (lastBlock instrumentation) Just)
+    instruments
+  awaitAll lastBlockWatches
+
+  [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 
   let expectedPrivateValue = 42 + increments
       [id1, id2, id3] = gethId <$> geths
-
-  [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 
   expectEq
     [ (id1, expectedPrivateValue, i1)

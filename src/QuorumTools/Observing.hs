@@ -8,7 +8,7 @@ import qualified Data.Map.Strict            as Map
 import           Data.Monoid                (Last, (<>))
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
-import           Data.Text                  (Text, isInfixOf, pack)
+import           Data.Text                  (Text, isInfixOf)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (FilePath, lines)
 import           Turtle                     hiding (env, view)
@@ -38,14 +38,8 @@ observingLastBlock
   -> Shell Line
   -> Shell Line
 observingLastBlock updateLastBlock = observingLines $ \line ->
-    case matchOnce blockPattern line of
-      Just latest -> updateLastBlock (<> pure latest)
-      _           -> pure ()
-
-  where
-    blockPattern :: Pattern Block
-    blockPattern = has $
-      Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
+  matchCheckpoint' BlockCreated line $ \block ->
+    updateLastBlock (<> pure block)
 
 observingTxes
   :: ((OutstandingTxes -> OutstandingTxes) -> IO ())
@@ -82,8 +76,9 @@ observingRaftStatus updateRaftStatus = observingLines $ \line ->
 
 observingRoles :: IO () -> Shell Line -> Shell Line
 observingRoles trigger = observingLines $ \line -> do
-  matchCheckpoint' BecameMinter   line $ \() -> trigger
-  matchCheckpoint' BecameVerifier line $ \() -> trigger
+  matchCheckpoint' BecameMinter       line $ \() -> trigger
+  matchCheckpoint' BecameVerifier     line $ \() -> trigger
+  matchCheckpoint' BlockVotingStarted line $ \() -> trigger
 
 observingActivation
   :: ((Set GethId -> Set GethId) -> IO ())
