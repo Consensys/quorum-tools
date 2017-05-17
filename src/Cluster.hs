@@ -26,14 +26,14 @@ import           Data.Bool                  (bool)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
-import           Data.Monoid                ((<>))
+import           Data.Semigroup             ((<>))
 import           Data.Set                   (member)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (hClose)
-import           Turtle                     hiding (env, has, view)
+import           Turtle                     hiding (env, has, view, (<>))
 
 import           Cluster.Genesis            (createGenesisJson)
 import           Cluster.Observing

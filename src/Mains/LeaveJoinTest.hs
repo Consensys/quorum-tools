@@ -14,7 +14,7 @@ import TestOutline
 
 leaveJoinTestMain :: IO ()
 leaveJoinTestMain = do
-  let gids = [1..3]
+  let gids = [1..3] :: [GethId]
       password = CleartextPassword "abcd"
 
   keys <- generateClusterKeys (length gids) password
