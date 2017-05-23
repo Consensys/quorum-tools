@@ -17,13 +17,14 @@ import           Data.Monoid              (Last (Last))
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
 import qualified Data.Set                 as Set
-import           Data.Text                (Text, pack)
+import           Data.Text                (Text, pack, unpack)
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as T
 import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
 import qualified QuorumTools.IpTables     as IPT
 import qualified QuorumTools.PacketFilter as PF
 import           Prelude                  hiding (FilePath)
+import           System.Console.ANSI
 import           System.Info
 import           Turtle
 
@@ -43,16 +44,41 @@ data FailureReason
   | NoBlockFound
   | TerminatedUnexpectedly
   | LostTxes (Set TxId)
-  -- Expected @Int@, received @Either Text Int@
-  | WrongValue Int (Either Text Int)
   | AddNodeFailure
   | RemoveNodeFailure
+
+  -- For each @GethId@, Expected @Int@, received @Either Text Int@
+  | WrongValue [(GethId, Int, Either Text Int)]
   deriving Show
 
 data Validity
   = Verified
   | Falsified FailureReason
   deriving Show
+
+withColor :: Color -> IO () -> IO ()
+withColor color action = do
+  setSGR [SetColor Foreground Vivid color]
+  action
+  setSGR []
+
+printFailureReason :: FailureReason -> IO ()
+printFailureReason reason = withColor Red $ case reason of
+  WrongValue vals -> do
+    putStrLn "Received at least one wrong value:"
+    forM_ vals $ \(GethId n, expected, actual) -> do
+      let actual' = case actual of
+            Left msg -> "error \"" ++ unpack msg ++ "\""
+            Right val -> show val
+      putStrLn $ "Geth " ++ show n ++ ": received " ++ actual' ++ ", expected "
+        ++ show expected
+  NoBlockFound -> putStrLn "No block produced on any node"
+  WrongOrder (Last b1) (Last b2) -> putStrLn $
+    "Two blocks were found in the wrong order: " ++ show b1 ++ ", " ++ show b2
+  TerminatedUnexpectedly -> putStrLn "A node panicked"
+  LostTxes txes -> putStrLn $ "Some transactions were lost: " ++ show txes
+  AddNodeFailure -> putStrLn "Failed to add node"
+  RemoveNodeFailure -> putStrLn "Failed to remove node"
 
 instance Monoid Validity where
   mempty = Verified
@@ -139,9 +165,8 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
         verifier
 
-      print result
       case result of
-        Left reason -> print reason >> pure DoTerminateFailure
+        Left reason -> printFailureReason reason >> pure DoTerminateFailure
         Right ()    -> case p testNum of
           DontTerminate -> runMoreTests
           term          -> pure term
@@ -199,9 +224,9 @@ verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
 
 verifyLastBlocks :: [Last Block] -> Validity
 verifyLastBlocks blocks = case allSame blocks of
-  NotSame a b -> Falsified $ WrongOrder a b
+  NotSame a b         -> Falsified $ WrongOrder a b
   Same (Last Nothing) -> Falsified NoBlockFound
-  _ -> Verified
+  _                   -> Verified
 
 verifyOutstandingTxes :: [OutstandingTxes] -> Validity
 verifyOutstandingTxes txes =
