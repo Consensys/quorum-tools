@@ -38,6 +38,7 @@ library
     memory                == 0.14.*,
     monad-loops           == 0.4.*,
     optional-args         == 1.0.*,
+    ansi-terminal         == 0.6.*,
     constellation         == 0.1.*
   exposed-modules:
     QuorumTools

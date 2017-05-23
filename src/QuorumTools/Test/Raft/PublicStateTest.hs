@@ -27,7 +27,12 @@ publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   td 2
 
   let expectedValue = 42 + increments
+      [id1, id2, id3] = gethId <$> geths
 
-  forM_ geths $ \geth -> do
-    i <- getStorage geth contract storageAddr
-    expectEq i expectedValue
+  [i1, i2, i3] <- traverse (getStorage contract storageAddr) geths
+
+  expectEq
+    [ (id1, expectedValue, i1)
+    , (id2, expectedValue, i2)
+    , (id3, expectedValue, i3)
+    ]

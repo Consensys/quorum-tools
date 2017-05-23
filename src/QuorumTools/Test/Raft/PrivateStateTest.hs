@@ -12,8 +12,8 @@ import           QuorumTools.Types
 
 privateStateTestMain :: IO ()
 privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
-  let [g1, g2, g3] = fst <$> iNodes
-      (_, geth1Instruments) = head iNodes
+  let geths = fst <$> iNodes
+      (g1, geth1Instruments) = head iNodes
 
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   key3 <- liftIO $ readTextFile "gdata/geth3/keys/constellation.pub"
@@ -28,13 +28,12 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   td 2
 
   let expectedPrivateValue = 42 + increments
+      [id1, id2, id3] = gethId <$> geths
 
-  i1 <- getStorage g1 privStorage privStorageAddr
-  expectEq i1 expectedPrivateValue
+  [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 
-  i2 <- getStorage g2 privStorage privStorageAddr
-  expectEq i2 0
-  -- TODO confirm geth2 also gets transaction
-
-  i3 <- getStorage g3 privStorage privStorageAddr
-  expectEq i3 expectedPrivateValue
+  expectEq
+    [ (id1, expectedPrivateValue, i1)
+    , (id2,                    0, i2)
+    , (id3, expectedPrivateValue, i3)
+    ]

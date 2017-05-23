@@ -17,9 +17,14 @@ import QuorumTools.Types
 import QuorumTools.Test.Outline hiding (verify)
 import QuorumTools.Util (bytes32P, toInt, HexPrefix(..), printHex, intToBytes32)
 
-expectEq :: MonadError FailureReason m => Either Text Int -> Int -> m ()
-expectEq val expected = when (val /= Right expected) $
-  throwError $ WrongValue expected val
+expectEq
+  :: MonadError FailureReason m
+  => [(GethId, Int, Either Text Int)]
+  -> m ()
+expectEq vals =
+  let passes (_, val, Right expected) = val == expected
+      passes (_,   _,         Left _) = False
+  in when (not $ all passes vals) (throwError (WrongValue vals))
 
 -- TODO: ideally this would wait for the tx that definitively corresponds to the
 -- contract creation.
@@ -39,8 +44,8 @@ incrementStorage geth (Contract privacy _ _ _) (Addr addrBytes) =
   -- TODO: remove "increment()" duplication
   Client.sendTransaction geth (Tx (Just addrBytes) "increment()" privacy Sync)
 
-getStorage :: MonadIO io => Geth -> Contract -> Addr -> io (Either Text Int)
-getStorage geth _contract addr = do
+getStorage :: MonadIO io => Contract -> Addr -> Geth -> io (Either Text Int)
+getStorage _contract addr geth = do
   resp <- Client.call geth (CallArgs (unAddr addr) "get()")
   pure $ case resp of
     Left msg -> Left msg
