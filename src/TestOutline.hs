@@ -40,7 +40,7 @@ newtype NumNodes = NumNodes { unNumNodes :: Int }
 data FailureReason
   = WrongOrder (Last Block) (Last Block)
   | NoBlockFound
-  | DidPanic
+  | TerminatedUnexpectedly
   | LostTxes (Set TxId)
   -- Expected @Int@, received @Either Text Int@
   | WrongValue Int (Either Text Int)
@@ -189,7 +189,7 @@ verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
     when (num > 0) $ putStrLn $ "Outstanding txes: " ++ show num
 
   let noEarlyTerminations = mconcat $ flip map earlyTerminations $ \case
-        Just _  -> Falsified DidPanic -- assume termination is unexpected
+        Just _  -> Falsified TerminatedUnexpectedly
         Nothing -> Verified
 
   pure $ mconcat
