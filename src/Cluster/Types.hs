@@ -171,11 +171,6 @@ data SpamMode
   = BenchEmptyTx
   | SendTx Tx
 
-data MembershipChange
-  = AddNode Geth
-  | RemoveNode Geth
-  deriving (Show)
-
 newtype UnencodedMethod = UnencodedMethod Text deriving IsString
 
 newtype TxId = TxId { txId :: Bytes32 }

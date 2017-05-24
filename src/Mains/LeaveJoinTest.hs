@@ -1,13 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- Test removing a node from the cluster and adding it back.
+--
+-- NOTE: this test is no longer valid -- raft does not allow a geth to re-join
+-- the cluster after it's been removed. the node would have to re-join with a
+-- new ID.
+--
 module Mains.LeaveJoinTest where
 
 import           Control.Lens
 import Turtle.Shell
 
 import Cluster
-import Cluster.Client
 import Cluster.Control
 import Cluster.Types
 import TestOutline
@@ -35,11 +39,15 @@ leaveJoinTestMain = do
     withSpammer [g1, g2, g3] $ td 1
 
     -- remove g1, pause, add it back
-    membershipChange g2 (RemoveNode g1)
+    g2 `removesNode` g1
 
     withSpammer [g2, g3] $ td 1
 
-    membershipChange g3 (AddNode g1)
+    -- TODO: update g1's GethId to be 4.
+
+    g3 `addsNode` g1
+
+    -- TODO: start geth 4
 
     withSpammer [g1, g2, g3] $ td 1
     td 1
