@@ -6,27 +6,14 @@
 module Mains.CycleTest where
 
 import           Control.Lens
-import           Data.Monoid     ((<>))
-import           Data.Set        as Set
-import qualified Data.Text       as T
-import           Turtle          (MonadIO, liftIO)
+import           Data.Set             as Set
+import           Turtle               (liftIO)
 
 import           Cluster
 import           Cluster.Client
 import           Cluster.Control
 import           Cluster.Types
 import           TestOutline
-
-proposes :: MonadIO m => Geth -> MembershipChange -> m ()
-geth `proposes` change = do
-  let message = T.pack $ case change of
-        AddNode target -> "adding node " <> show (gId (gethId target))
-        RemoveNode target -> "removing node " <> show (gId (gethId target))
-
-  timestampedMessage $ "waiting before " <> message
-  td 2
-  timestampedMessage message
-  membershipChange geth change
 
 cycleTestMain :: IO ()
 cycleTestMain = do
@@ -55,23 +42,23 @@ cycleTestMain = do
     td 2
     sendEmptyTx g1
 
-    g2 `proposes` AddNode g4
+    g2 `addsNode` g4
 
-    g3 `proposes` RemoveNode g1
+    g3 `removesNode` g1
 
     td 2
     sendEmptyTx g2
 
-    g3 `proposes` AddNode g5
+    g3 `addsNode` g5
 
-    g4 `proposes` RemoveNode g2
+    g4 `removesNode` g2
 
     td 2
     sendEmptyTx g3
 
-    g4 `proposes` AddNode g6
+    g4 `addsNode` g6
 
-    g5 `proposes` RemoveNode g3
+    g5 `removesNode` g3
 
     td 2
     withSpammer [g4, g5, g6] $ td 2

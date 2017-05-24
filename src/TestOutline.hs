@@ -18,6 +18,7 @@ import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
 import qualified Data.Set                 as Set
 import           Data.Text                (Text, pack)
+import qualified Data.Text                as T
 import qualified Data.Text.IO             as T
 import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
 import qualified IpTables                 as IPT
@@ -43,6 +44,8 @@ data FailureReason
   | LostTxes (Set TxId)
   -- Expected @Int@, received @Either Text Int@
   | WrongValue Int (Either Text Int)
+  | AddNodeFailure
+  | RemoveNodeFailure
   deriving Show
 
 data Validity
@@ -233,3 +236,25 @@ timestampedMessage msg = liftIO $ do
   let locale = defaultTimeLocale
       formattedTime = pack $ formatTime locale "%I:%M:%S.%q" zonedTime
   T.putStrLn $ formattedTime <> ": " <> msg
+
+addsNode :: Geth -> Geth -> TestM ()
+existingMember `addsNode` newcomer = do
+  let message = "adding node " <> T.pack (show (gId (gethId newcomer)))
+  timestampedMessage $ "waiting before " <> message
+  td 2
+  timestampedMessage message
+  result <- addNode existingMember (gethEnodeId newcomer)
+  case result of
+    Left _err -> throwError AddNodeFailure
+    Right _raftId -> return ()
+
+removesNode :: Geth -> Geth -> TestM ()
+existingMember `removesNode` newcomer = do
+  let message = "removing node " <> T.pack (show (gId (gethId newcomer)))
+  timestampedMessage $ "waiting before " <> message
+  td 2
+  timestampedMessage message
+  result <- removeNode existingMember (gethId newcomer)
+  case result of
+    Left _err -> throwError RemoveNodeFailure
+    Right () -> return ()

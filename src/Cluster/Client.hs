@@ -9,11 +9,12 @@ module Cluster.Client
   , sendTransaction
   , call
   , create
-  , membershipChange
   , sendEmptyTx
   , bench
   , loadNode
   , perSecond
+  , addNode
+  , removeNode
   ) where
 
 import           Control.Lens            (to, (^.), (^?))
@@ -22,7 +23,7 @@ import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
 import           Data.Aeson              (Value(Array, String), object, (.=),
                                           toJSON)
 import           Data.Aeson.Types        (Pair)
-import           Data.Aeson.Lens         (key, _String)
+import           Data.Aeson.Lens         (key, _String, _Integral)
 import qualified Data.ByteString.Lazy    as LSB
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid             ((<>))
@@ -121,22 +122,7 @@ callBody (CallArgs toBytes method) geth = object
     ]
   ]
 
-addPeerBody :: GethId -> EnodeId -> Value
-addPeerBody (GethId gid) (EnodeId eid) = object
-  [ "id"      .= (1 :: Int)
-  , "jsonrpc" .= t "2.0"
-  , "method"  .= t "raft_addPeer"
-  , "params"  .= [ toJSON gid, String eid ]
-  ]
-
-removePeerBody :: GethId -> Value
-removePeerBody (GethId gid) = object
-  [ "id"      .= (1 :: Int)
-  , "jsonrpc" .= t "2.0"
-  , "method"  .= t "raft_removePeer"
-  , "params"  .= [ toJSON gid ]
-  ]
-
+-- Calls javascript
 call :: MonadIO io => Geth -> CallArgs -> io (Either Text Text)
 call geth args
   = liftIO $ parse <$> post (T.unpack (gethUrl geth)) (callBody args geth)
@@ -158,12 +144,49 @@ create :: MonadIO io => Geth -> CreateArgs -> io ()
 create geth args = liftIO $ void $
   post (T.unpack (gethUrl geth)) (createBody args geth)
 
-membershipChange :: MonadIO io => Geth -> MembershipChange -> io ()
-membershipChange stable op =
-  let body = case op of
-        AddNode (Geth {gethId, gethEnodeId}) -> addPeerBody gethId gethEnodeId
-        RemoveNode (Geth {gethId}) -> removePeerBody gethId
-  in liftIO $ void $ post (T.unpack (gethUrl stable)) body
+addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)
+addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
+  where
+    url = T.unpack (gethUrl geth)
+
+    body :: Value
+    body = object
+      [ "id"      .= (1 :: Int)
+      , "jsonrpc" .= t "2.0"
+      , "method"  .= t "raft_addPeer"
+      , "params"  .= [String eid]
+      ]
+
+    parse :: Response LSB.ByteString -> Either Text GethId
+    parse r = fromMaybe parseFailure mParsed
+      where
+        parseFailure = Left $ toStrict $
+          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+        mParsed :: Maybe (Either Text GethId)
+        mParsed = (r^?responseBody.key "result"._Integral.to (Right . GethId))
+              <|> (r^?responseBody.key "error".key "message"._String.to Left)
+
+removeNode :: MonadIO m => Geth -> GethId -> m (Either Text ())
+removeNode geth gid = liftIO $ parse <$> post url body
+  where
+    url = T.unpack (gethUrl geth)
+
+    body :: Value
+    body = object
+      [ "id"      .= (1 :: Int)
+      , "jsonrpc" .= t "2.0"
+      , "method"  .= t "raft_removePeer"
+      , "params"  .= [toJSON (gId gid)]
+      ]
+
+    parse :: Response LSB.ByteString -> Either Text ()
+    parse r = fromMaybe parseFailure mParsed
+      where
+        parseFailure = Left $ toStrict $
+          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+        mParsed :: Maybe (Either Text ())
+        mParsed = (r^?responseBody.key "result".to (const (Right ())))
+              <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 sendEmptyTx :: MonadIO io => Geth -> io ()
 sendEmptyTx geth = liftIO $ void $
