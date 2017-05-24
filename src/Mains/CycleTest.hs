@@ -7,7 +7,6 @@ module Mains.CycleTest where
 
 import           Control.Lens
 import           Data.Set             as Set
-import           Turtle               (liftIO)
 
 import           Cluster
 import           Cluster.Client
@@ -64,9 +63,8 @@ cycleTestMain = do
     withSpammer [g4, g5, g6] $ td 2
 
     td 2
-    liftIO $ verify
-      (lastBlock <$> endInstrs)
-      (outstandingTxes <$> endInstrs)
-      (nodeTerminated <$> endInstrs)
+    verify (lastBlock <$> endInstrs)
+           (outstandingTxes <$> endInstrs)
+           (nodeTerminated <$> endInstrs)
 
   print result
