@@ -77,7 +77,7 @@ instance Monoid ShouldTerminate where
   mappend DoTerminateFailure _ = DoTerminateFailure
   mappend DontTerminate      t = t
 
-type TestPredicate = TestNum -> Validity -> ShouldTerminate
+type TestPredicate = TestNum -> ShouldTerminate
 
 type TestM = ExceptT FailureReason (ReaderT ClusterEnv Shell)
 
@@ -125,26 +125,25 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
         -- pause a second before checking last block
         td 1
 
-        let verifier = liftIO $ verify
-              (lastBlock <$> instruments)
-              (outstandingTxes <$> instruments)
-              (nodeTerminated <$> instruments)
+        let verifier = verify (lastBlock <$> instruments)
+                              (outstandingTxes <$> instruments)
+                              (nodeTerminated <$> instruments)
 
         -- wait an extra five seconds to guarantee raft has a chance to
         -- converge
-        verifier >>= \case
-          Falsified (WrongOrder _ _) -> td 5
-          Falsified NoBlockFound     -> td 5
-          _                          -> pure ()
+        liftIO $ run cEnv verifier >>= \case
+          Left (WrongOrder _ _) -> td 5
+          Left NoBlockFound     -> td 5
+          _                     -> pure ()
 
         verifier
 
       print result
       case result of
         Left reason -> print reason >> pure DoTerminateFailure
-        Right result' -> case p testNum result' of
+        Right ()    -> case p testNum of
           DontTerminate -> runMoreTests
-          term -> pure term
+          term          -> pure term
 
 -- Run nodes in a local cluster environment.
 run :: ClusterEnv -> TestM a -> IO (Either FailureReason a)
@@ -161,13 +160,10 @@ testNTimes
   -> NumNodes
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
-testNTimes times privacySupport numNodes =
-  let predicate _           (Falsified _) = DoTerminateFailure
-      predicate (TestNum n) _
-        | n == times - 1
-        = DoTerminateSuccess
-      predicate _           _             = DontTerminate
-  in tester predicate privacySupport numNodes
+testNTimes times = tester predicate
+  where
+    predicate (TestNum n) | n == times - 1 = DoTerminateSuccess
+                          | otherwise      = DontTerminate
 
 -- | Verify nodes show normal behavior:
 --
@@ -178,25 +174,27 @@ verify
   :: [Behavior (Last Block)]
   -> [Behavior OutstandingTxes]
   -> [Async NodeTerminated]
-  -> IO Validity
+  -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
-  lastBlocks <- traverse observe lastBlockBs
-  outstandingTxes_ <- traverse observe outstandingTxesBs
-  earlyTerminations <- traverse poll terminatedAsyncs
+  lastBlocks <- liftIO $ traverse observe lastBlockBs
+  outstandingTxes_ <- liftIO $ traverse observe outstandingTxesBs
+  earlyTerminations <- liftIO $ traverse poll terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
     let num = Set.size txes
-    when (num > 0) $ putStrLn $ "Outstanding txes: " ++ show num
+    when (num > 0) $ liftIO $ putStrLn $ "Outstanding txes: " ++ show num
 
   let noEarlyTerminations = mconcat $ flip map earlyTerminations $ \case
         Just _  -> Falsified TerminatedUnexpectedly
         Nothing -> Verified
+      validity = mconcat [ noEarlyTerminations
+                         , verifyLastBlocks lastBlocks
+                         , verifyOutstandingTxes outstandingTxes_
+                         ]
 
-  pure $ mconcat
-    [ noEarlyTerminations
-    , verifyLastBlocks lastBlocks
-    , verifyOutstandingTxes outstandingTxes_
-    ]
+  case validity of
+    Falsified reason -> throwError reason
+    Verified         -> pure ()
 
 verifyLastBlocks :: [Last Block] -> Validity
 verifyLastBlocks blocks = case allSame blocks of

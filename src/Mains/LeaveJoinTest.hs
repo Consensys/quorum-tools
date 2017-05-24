@@ -9,12 +9,11 @@
 module Mains.LeaveJoinTest where
 
 import           Control.Lens
-import Turtle.Shell
 
-import Cluster
-import Cluster.Control
-import Cluster.Types
-import TestOutline
+import           Cluster
+import           Cluster.Control
+import           Cluster.Types
+import           TestOutline
 
 leaveJoinTestMain :: IO ()
 leaveJoinTestMain = do
@@ -52,9 +51,8 @@ leaveJoinTestMain = do
     withSpammer [g1, g2, g3] $ td 1
     td 1
 
-    liftIO $ verify
-      (lastBlock <$> instruments)
-      (outstandingTxes <$> instruments)
-      (nodeTerminated <$> instruments)
+    verify (lastBlock <$> instruments)
+           (outstandingTxes <$> instruments)
+           (nodeTerminated <$> instruments)
 
   print result
