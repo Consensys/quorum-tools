@@ -108,7 +108,7 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
-      result <- run cEnv $ do
+      result <- runTestM cEnv $ do
         _ <- when (os == "darwin") PF.acquirePf
 
         geths <- wipeAndSetupNodes Nothing "gdata" gids
@@ -131,7 +131,7 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
         -- wait an extra five seconds to guarantee raft has a chance to
         -- converge
-        liftIO $ run cEnv verifier >>= \case
+        liftIO $ runTestM cEnv verifier >>= \case
           Left (WrongOrder _ _) -> td 5
           Left NoBlockFound     -> td 5
           _                     -> pure ()
@@ -146,8 +146,8 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
           term          -> pure term
 
 -- Run nodes in a local cluster environment.
-run :: ClusterEnv -> TestM a -> IO (Either FailureReason a)
-run cEnv action = do
+runTestM :: ClusterEnv -> TestM a -> IO (Either FailureReason a)
+runTestM cEnv action = do
   var <- newEmptyMVar
   sh $ do
     result <- runReaderT (runExceptT action) cEnv

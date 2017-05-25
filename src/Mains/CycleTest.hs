@@ -26,7 +26,7 @@ cycleTestMain = do
            & clusterInitialMembers .~ Set.fromList (take 3 gids)
            & clusterPassword       .~ password
 
-  result <- run cEnv $ do
+  result <- runTestM cEnv $ do
     [g1, g2, g3, g4, g5, g6] <- wipeAndSetupNodes Nothing "gdata" gids
 
     startInstrs <- traverse (runNode 3) [g1, g2, g3]
