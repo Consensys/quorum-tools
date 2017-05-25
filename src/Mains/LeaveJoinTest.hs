@@ -1,14 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- Test removing a node from the cluster and adding it back.
---
--- NOTE: this test is no longer valid -- raft does not allow a geth to re-join
--- the cluster after it's been removed. the node would have to re-join with a
--- new ID.
---
+-- Test removing a node from the cluster and adding it back with a new raft ID
 module Mains.LeaveJoinTest where
 
+import           Control.Concurrent.Async (wait)
 import           Control.Lens
+import           Control.Monad            (void)
+import           Data.Monoid              ((<>))
+import           Turtle                   (liftIO)
 
 import           Cluster
 import           Cluster.Control
@@ -18,6 +17,7 @@ import           TestOutline
 leaveJoinTestMain :: IO ()
 leaveJoinTestMain = do
   let gids = [1..3] :: [GethId]
+      clusterSize = length gids
       password = CleartextPassword "abcd"
 
   keys <- generateClusterKeys (length gids) password
@@ -28,7 +28,7 @@ leaveJoinTestMain = do
   result <- run cEnv $ do
     [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gids
 
-    instruments <- traverse (runNode 3) [g1, g2, g3]
+    instruments <- traverse (runNode clusterSize) [g1, g2, g3]
 
     awaitAll (assumedRole <$> instruments)
 
@@ -37,22 +37,29 @@ leaveJoinTestMain = do
 
     withSpammer [g1, g2, g3] $ td 1
 
-    -- remove g1, pause, add it back
+    -- remove g1, pause, add it back as g4, with the same blockchain data.
     g2 `removesNode` g1
 
     withSpammer [g2, g3] $ td 1
 
-    -- TODO: update g1's GethId to be 4.
+    let g4 = g1 { gethId = 4
+                 , gethJoinMode = JoinExisting
+                 }
 
-    g3 `addsNode` g1
+    g3 `addsNode` g4
 
-    -- TODO: start geth 4
+    g4i <- runNode clusterSize g4
 
-    withSpammer [g1, g2, g3] $ td 1
+    void $ liftIO $ wait $ assumedRole g4i
+
+    withSpammer [g2, g3, g4] $ td 1
     td 1
 
-    verify (lastBlock <$> instruments)
-           (outstandingTxes <$> instruments)
-           (nodeTerminated <$> instruments)
+    let allInstruments     = instruments <> [g4i]
+        runningInstruments = drop 1 allInstruments
+
+    verify (lastBlock       <$> runningInstruments)
+           (outstandingTxes <$> allInstruments)
+           (nodeTerminated  <$> runningInstruments)
 
   print result

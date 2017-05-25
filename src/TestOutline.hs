@@ -176,9 +176,9 @@ verify
   -> [Async NodeTerminated]
   -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
-  lastBlocks <- liftIO $ traverse observe lastBlockBs
-  outstandingTxes_ <- liftIO $ traverse observe outstandingTxesBs
-  earlyTerminations <- liftIO $ traverse poll terminatedAsyncs
+  lastBlocks        <- liftIO $ traverse observe lastBlockBs
+  outstandingTxes_  <- liftIO $ traverse observe outstandingTxesBs
+  earlyTerminations <- liftIO $ traverse poll    terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
     let num = Set.size txes
