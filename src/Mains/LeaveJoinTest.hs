@@ -25,7 +25,7 @@ leaveJoinTestMain = do
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterPassword       .~ password
 
-  result <- run cEnv $ do
+  result <- runTestM cEnv $ do
     [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gids
 
     instruments <- traverse (runNode clusterSize) [g1, g2, g3]
@@ -43,8 +43,8 @@ leaveJoinTestMain = do
     withSpammer [g2, g3] $ td 1
 
     let g4 = g1 { gethId = 4
-                 , gethJoinMode = JoinExisting
-                 }
+                , gethJoinMode = JoinExisting
+                }
 
     g3 `addsNode` g4
 

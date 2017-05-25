@@ -52,21 +52,21 @@ readNodeInfo = refine >=> \instruments -> (,)
 
 node1Plan :: ClusterEnv -> Geth -> IO NodeInfo
 node1Plan cEnv geth = do
-  _ <- run cEnv $ do
+  _ <- runTestM cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     td 5
 
   td 1
 
-  readNodeInfo <=< run cEnv $ do
+  readNodeInfo <=< runTestM cEnv $ do
     instruments <- runNode numNodes geth
     td 8
     pure instruments
 
 nodes23Plan :: ClusterEnv -> Geth -> IO NodeInfo
 nodes23Plan cEnv geth =
-  readNodeInfo <=< run cEnv $ do
+  readNodeInfo <=< runTestM cEnv $ do
     instruments <- runNode numNodes geth
     waitForElection instruments
     withSpammer [geth] $ td 4
@@ -86,7 +86,7 @@ restartNodeTestMain = do
   let cEnv = mkLocalEnv keys
            & clusterPassword .~ password
 
-  nodes <- run cEnv $ wipeAndSetupNodes Nothing "gdata" gids
+  nodes <- runTestM cEnv $ wipeAndSetupNodes Nothing "gdata" gids
 
   g1:g2g3 <- refine nodes
 
