@@ -36,7 +36,8 @@ library
     unordered-containers  == 0.2.*,
     vector                == 0.12.*,
     memory                == 0.14.*,
-    monad-loops           == 0.4.*
+    monad-loops           == 0.4.*,
+    optional-args         == 1.0.*
   exposed-modules:
     QuorumTools
     Mains.AwsBootstrap
