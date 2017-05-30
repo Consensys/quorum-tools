@@ -455,9 +455,7 @@ runNode numInitialNodes geth = do
 runNodesIndefinitely :: MonadManaged m => [Geth] -> m ()
 runNodesIndefinitely geths = do
   let numInitialNodes = length geths
-      extractInstruments NodeInstrumentation {nodeOnline, nodeTerminated} =
-        (nodeOnline, nodeTerminated)
   instruments <- traverse (runNode numInitialNodes) geths
-  let (_, terminatedAsyncs) = unzip $ extractInstruments <$> instruments
+  let terminatedAsyncs = nodeTerminated <$> instruments
 
   awaitAll terminatedAsyncs
