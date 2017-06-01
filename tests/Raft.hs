@@ -1,12 +1,12 @@
 module Main where
 
-import Mains.CycleTest
-import Mains.LeaderPartitionTest
-import Mains.LeaveJoinTest
-import Mains.NewcomerRejoinTest
-import Mains.PrivateStateTest
-import Mains.PublicStateTest
-import Mains.RestartNodeTest
+import QuorumTools.Test.Raft.CycleTest
+import QuorumTools.Test.Raft.LeaderPartitionTest
+import QuorumTools.Test.Raft.LeaveJoinTest
+import QuorumTools.Test.Raft.NewcomerRejoinTest
+import QuorumTools.Test.Raft.PrivateStateTest
+import QuorumTools.Test.Raft.PublicStateTest
+import QuorumTools.Test.Raft.RestartNodeTest
 
 main :: IO ()
 main = do
