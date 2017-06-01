@@ -1,6 +1,6 @@
 name: quorum-tools
 version: 0.0.1
-synopsis: Orchestration, testing, and demonstration of JPM Raft-Ethereum
+synopsis: Orchestration and testing for the Quorum blockchain
 license: Apache
 license-file: LICENSE.md
 build-type: Simple
