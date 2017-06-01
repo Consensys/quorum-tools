@@ -42,7 +42,6 @@ import           Cluster.Util               (HexPrefix (..), bytes20P,
                                              inshellWithJoinedErr, matchOnce,
                                              printHex, tee, textDecode,
                                              textEncode)
-
 import           Cluster.Control
 import           Constellation              (constellationConfPath,
                                              setupConstellationNode)

@@ -42,17 +42,16 @@ library
     QuorumTools
     Mains.AwsBootstrap
     Mains.AwsSpam
+    Mains.LocalNew
+    Mains.LocalSpam
+    Mains.LocalStart
     Mains.CycleTest
     Mains.LeaderPartitionTest
     Mains.LeaveJoinTest
     Mains.NewcomerRejoinTest
-    Mains.LocalNew
-    Mains.LocalSpam
-    Mains.LocalStart
     Mains.PrivateStateTest
     Mains.PublicStateTest
     Mains.RestartNodeTest
-    Mains.Test2
   other-modules:
     ClusterAsync
     Cluster
@@ -109,64 +108,8 @@ executable aws-spam
   build-depends    : base, quorum-tools
   default-language : Haskell2010
 
-test-suite test2
-  main-is          : Test2.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite leader-partition
-  main-is          : LeaderPartitionTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite public-state
-  main-is          : PublicStateTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite private-state
-  main-is          : PrivateStateTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite restart-node
-  main-is          : RestartNodeTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite leave-join
-  main-is          : LeaveJoinTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite newcomer-rejoin
-  main-is          : NewcomerRejoinTest.hs
-  type             : exitcode-stdio-1.0
-  hs-source-dirs   : tests
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-test-suite cycle
-  main-is          : CycleTest.hs
+test-suite raft
+  main-is          : Raft.hs
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
