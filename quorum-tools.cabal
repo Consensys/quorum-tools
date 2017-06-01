@@ -40,37 +40,35 @@ library
     optional-args         == 1.0.*
   exposed-modules:
     QuorumTools
-    Mains.AwsBootstrap
-    Mains.AwsSpam
-    Mains.LocalNew
-    Mains.LocalSpam
-    Mains.LocalStart
-    Mains.CycleTest
-    Mains.LeaderPartitionTest
-    Mains.LeaveJoinTest
-    Mains.NewcomerRejoinTest
-    Mains.PrivateStateTest
-    Mains.PublicStateTest
-    Mains.RestartNodeTest
+    QuorumTools.Mains.AwsBootstrap
+    QuorumTools.Mains.AwsSpam
+    QuorumTools.Mains.LocalNew
+    QuorumTools.Mains.LocalSpam
+    QuorumTools.Mains.LocalStart
+    QuorumTools.Test.Raft.CycleTest
+    QuorumTools.Test.Raft.LeaderPartitionTest
+    QuorumTools.Test.Raft.LeaveJoinTest
+    QuorumTools.Test.Raft.NewcomerRejoinTest
+    QuorumTools.Test.Raft.PrivateStateTest
+    QuorumTools.Test.Raft.PublicStateTest
+    QuorumTools.Test.Raft.RestartNodeTest
   other-modules:
-    ClusterAsync
-    Cluster
-    Cluster.Aws
-    Cluster.Client
-    Cluster.Control
-    Cluster.Genesis
-    Cluster.GenesisCode
-    Cluster.Observing
-    Cluster.SpamArgs
-    Cluster.StateTestsShared
-    Cluster.Types
-    Cluster.Util
-    Constellation
-    PacketFilter
-    IpTables
-    SharedPartitioning
-    TestOutline
-    Checkpoint
+    QuorumTools.Client
+    QuorumTools.Cluster
+    QuorumTools.Constellation
+    QuorumTools.Control
+    QuorumTools.IpTables
+    QuorumTools.PacketFilter
+    QuorumTools.Test.Outline
+    QuorumTools.Test.State
+    QuorumTools.Types
+    QuorumTools.Util
+    QuorumTools.Aws
+    QuorumTools.Checkpoint
+    QuorumTools.Genesis
+    QuorumTools.Observing
+    QuorumTools.Partition
+    QuorumTools.Spam
   default-language: Haskell2010
 
 executable local-new
@@ -113,5 +111,7 @@ test-suite raft
   type             : exitcode-stdio-1.0
   hs-source-dirs   : tests
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
+  build-depends    :
+    base,
+    quorum-tools
   default-language : Haskell2010
