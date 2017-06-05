@@ -53,22 +53,23 @@ library
     QuorumTools.Test.Raft.PublicStateTest
     QuorumTools.Test.Raft.RestartNodeTest
   other-modules:
+    QuorumTools.Aws
+    QuorumTools.Checkpoint
     QuorumTools.Client
     QuorumTools.Cluster
     QuorumTools.Constellation
     QuorumTools.Control
+    QuorumTools.Genesis
+    QuorumTools.Genesis.Contract
     QuorumTools.IpTables
+    QuorumTools.NetworkInfo
+    QuorumTools.Observing
     QuorumTools.PacketFilter
+    QuorumTools.Spam
     QuorumTools.Test.Outline
     QuorumTools.Test.State
     QuorumTools.Types
     QuorumTools.Util
-    QuorumTools.Aws
-    QuorumTools.Checkpoint
-    QuorumTools.Genesis
-    QuorumTools.NetworkInfo
-    QuorumTools.Observing
-    QuorumTools.Spam
   default-language: Haskell2010
 
 executable local-new
