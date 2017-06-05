@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module QuorumTools.Partition where
+module QuorumTools.NetworkInfo where
 
 import qualified Control.Foldl              as Fold
 import           Control.Lens.Prism         (prism', Prism')
