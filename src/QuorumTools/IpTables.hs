@@ -4,14 +4,14 @@
 
 module QuorumTools.IpTables where
 
-import           Control.Concurrent    (threadDelay)
-import           Control.Monad.Managed (MonadManaged)
-import qualified Data.Text             as T
-import           Prelude               hiding (FilePath, lines)
+import           Control.Concurrent      (threadDelay)
+import           Control.Monad.Managed   (MonadManaged)
+import qualified Data.Text               as T
+import           Prelude                 hiding (FilePath, lines)
 import           Turtle
 
-import           QuorumTools.Control   (onExit)
-import           QuorumTools.Partition
+import           QuorumTools.Control     (onExit)
+import           QuorumTools.NetworkInfo
 import           QuorumTools.Types
 
 iptables :: Format Text r -> r

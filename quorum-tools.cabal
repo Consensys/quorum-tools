@@ -66,8 +66,8 @@ library
     QuorumTools.Aws
     QuorumTools.Checkpoint
     QuorumTools.Genesis
+    QuorumTools.NetworkInfo
     QuorumTools.Observing
-    QuorumTools.Partition
     QuorumTools.Spam
   default-language: Haskell2010
 

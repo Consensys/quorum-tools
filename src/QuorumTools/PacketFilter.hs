@@ -19,7 +19,7 @@ import           Prelude                    hiding (FilePath, lines)
 import           Turtle
 
 import QuorumTools.Control (onExit)
-import QuorumTools.Partition
+import QuorumTools.NetworkInfo
 import QuorumTools.Types
 import QuorumTools.Util (matchOnce)
 
