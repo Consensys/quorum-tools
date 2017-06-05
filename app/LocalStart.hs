@@ -1,6 +1,6 @@
 module Main where
 
-import Mains.LocalStart
+import QuorumTools.Mains.LocalStart
 
 main :: IO ()
 main = localStartMain

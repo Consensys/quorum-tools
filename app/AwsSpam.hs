@@ -1,6 +1,6 @@
 module Main where
 
-import Mains.AwsSpam
+import QuorumTools.Mains.AwsSpam
 
 main :: IO ()
 main = awsSpamMain
