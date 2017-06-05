@@ -1,6 +1,6 @@
 module Main where
 
-import Mains.AwsBootstrap
+import QuorumTools.Mains.AwsBootstrap
 
 main :: IO ()
 main = awsBootstrapMain

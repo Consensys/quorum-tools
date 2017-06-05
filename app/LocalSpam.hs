@@ -1,6 +1,6 @@
 module Main where
 
-import Mains.LocalSpam
+import QuorumTools.Mains.LocalSpam
 
 main :: IO ()
 main = localSpamMain

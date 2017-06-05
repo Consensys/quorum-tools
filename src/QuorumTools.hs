@@ -3,18 +3,18 @@ module QuorumTools where
 
 import Control.Concurrent
 
-import Mains.AwsBootstrap (AwsConfig(..))
-import qualified Mains.AwsBootstrap as AwsBootstrap
+import QuorumTools.Mains.AwsBootstrap (AwsConfig(..))
+import qualified QuorumTools.Mains.AwsBootstrap as AwsBootstrap
 
-import Mains.AwsSpam (SpamConfig(..))
-import qualified Mains.AwsSpam as AwsSpam
+import QuorumTools.Mains.AwsSpam (SpamConfig(..))
+import qualified QuorumTools.Mains.AwsSpam as AwsSpam
 
-import Mains.LocalNew (localNewMain)
+import QuorumTools.Mains.LocalNew (localNewMain)
 
-import Mains.LocalSpam (LocalSpamConfig(..))
-import qualified Mains.LocalSpam as LocalSpam
+import QuorumTools.Mains.LocalSpam (LocalSpamConfig(..))
+import qualified QuorumTools.Mains.LocalSpam as LocalSpam
 
-import Mains.LocalStart (localStartMain)
+import QuorumTools.Mains.LocalStart (localStartMain)
 
 awsBootstrap :: AwsConfig -> IO ThreadId
 awsBootstrap = forkIO . AwsBootstrap.awsBootstrap
