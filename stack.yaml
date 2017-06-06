@@ -12,6 +12,10 @@ packages:
     git: git@github.com:joelburget/symmetric-properties.git
     commit: ce2a00df46751896966482b9beeadb1220fda575
   extra-dep: true
+- location:
+    git: https://github.com/jpmorganchase/constellation.git
+    commit: 67707bb2ad82e58390a279b77f6e23a7a05a7f97
+  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
@@ -19,11 +23,13 @@ extra-deps:
 - rate-limit-1.1.1
 - time-units-1.0.0
 - vector-0.12.0.0
-- wreq-0.4.1.0
-- http-client-0.4.31.2
-- http-client-tls-0.2.4.1
+- wreq-0.5.0.1
 - authenticate-oauth-1.5.1.2
 - aeson-1.1.0.0
+- BerkeleyDB-0.8.7        # constellation
+- logging-3.0.4           # constellation
+- saltine-0.0.0.5         # constellation
+- cryptonite-0.22         # constellation
 
 # Override default flag values for local packages and extra-deps
 flags: {}
