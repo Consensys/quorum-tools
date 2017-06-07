@@ -90,7 +90,7 @@ tester
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
 tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
-  DoTerminateSuccess -> exit ExitSuccess
+  DoTerminateSuccess -> return ()
   DoTerminateFailure -> exit failedTestCode
   DontTerminate      -> putStrLn "all successful!"
 
