@@ -1,3 +1,4 @@
 packages:
   ./quorum-tools.cabal
   ./symmetric-properties/symmetric-properties.cabal
+  ./constellation/constellation.cabal
