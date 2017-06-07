@@ -114,34 +114,45 @@ setupCommand gid = format ("geth --datadir "%fp%
                       <*> httpPort gid
 
 gethCommand :: Geth -> Text -> Text
-gethCommand geth = format ("geth --datadir "%fp                    %
-                               " --port "%d                        %
-                               " --rpcport "%d                     %
-                               " --networkid "%d                   %
-                               " --verbosity "%d                   %
-                               " --nodiscover"                     %
-                               " --rpc"                            %
-                               " --rpccorsdomain '*'"              %
-                               " --rpcaddr localhost"              %
-                               " --rpcapi eth,net,web3,raft,admin" %
-                               " "%s%
-                               " "%s)
+gethCommand geth more = format (s%" geth --datadir "%fp                    %
+                                       " --port "%d                        %
+                                       " --rpcport "%d                     %
+                                       " --networkid "%d                   %
+                                       " --verbosity "%d                   %
+                                       " --nodiscover"                     %
+                                       " --rpc"                            %
+                                       " --rpccorsdomain '*'"              %
+                                       " --rpcaddr localhost"              %
+                                       " --rpcapi eth,net,web3,raft,admin" %
+                                       " --unlock 0"                       %
+                                       " "%s%
+                                       " "%s)
+                          envVar
                           (dataDirPath (gethDataDir geth))
                           (gethHttpPort geth)
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
-                          (consensusOptions (gethConsensusPeer geth))
+                          consensusOptions
+                          more
   where
-    consensusOptions :: ConsensusPeer -> Text
-    consensusOptions RaftPeer = "--raft"
-    consensusOptions (QuorumChainPeer acctId mRole) = case mRole of
-      Nothing -> ""
-      Just BlockMaker ->
-        format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-               (accountIdToText acctId)
-      Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
-                           (accountIdToText acctId)
+    envVar :: Text
+    envVar = case gethConstellationConfig geth of
+      Just conf -> "PRIVATE_CONFIG=" <> format fp conf
+      Nothing   -> ""
+
+    consensusOptions :: Text
+    consensusOptions = case gethConsensusPeer geth of
+      RaftPeer -> case gethJoinMode geth of
+        JoinExisting   -> format ("--raft --raftjoinexisting "%d) (gId $ gethId geth)
+        JoinNewCluster -> "--raft"
+      QuorumChainPeer acctId mRole -> case mRole of
+        Nothing -> ""
+        Just BlockMaker ->
+          format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
+                 (accountIdToText acctId)
+        Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
+                             (accountIdToText acctId)
 
 initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
 initNode genesisJsonPath gid = do
@@ -361,10 +372,7 @@ mkConstellationConfig thisGid = do
 
 setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
 setupNodes deployDatadir gids = do
-  unset "PRIVATE_CONFIG" -- clear privacy env var, if it was set earlier
-
   acctKeys <- view clusterAccountKeys
-
   genesisJsonPath <- createGenesisJson $ _akAccountId <$> Map.elems acctKeys
 
   clusterEnv <- ask
@@ -404,16 +412,7 @@ gethShell geth = do
   pwPath <- using $ fileContaining $ select $ textToLines $
     pwCleartext $ gethPassword geth
 
-  case gethConstellationConfig geth of
-    Just conf -> export "PRIVATE_CONFIG" (format fp conf)
-    Nothing   -> pure ()
-
-  let joinStr = case gethJoinMode geth of
-        JoinExisting   -> format (" --raftjoinexisting "%d) (gId $ gethId geth)
-        JoinNewCluster -> ""
-
-  inshellWithJoinedErr (gethCommand geth $
-                                    format ("--unlock 0 --password "%fp%" "%s) pwPath joinStr)
+  inshellWithJoinedErr (gethCommand geth $ format ("--password "%fp) pwPath)
                        empty
 
 runNode :: forall m. (MonadManaged m)
