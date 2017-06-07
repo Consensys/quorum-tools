@@ -15,9 +15,9 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let [g1, g2, g3] = fst <$> iNodes
       (_, geth1Instruments) = head iNodes
 
-  key3 <- liftIO $
-    readTextFile "credentials/constellation-keys/3/constellation.pub"
   -- geth1 and geth3 are both party to this tx, but geth2 is not
+  key3 <- liftIO $ readTextFile "gdata/geth3/keys/constellation.pub"
+
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
   privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 

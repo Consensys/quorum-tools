@@ -21,6 +21,8 @@ expectEq :: MonadError FailureReason m => Either Text Int -> Int -> m ()
 expectEq val expected = when (val /= Right expected) $
   throwError $ WrongValue expected val
 
+-- TODO: ideally this would wait for the tx that definitively corresponds to the
+-- contract creation.
 createContract :: MonadManaged m => Geth -> Contract -> Behavior TxAddrs -> m Addr
 createContract geth contract addrs = do
   let initVal = intToBytes32 42

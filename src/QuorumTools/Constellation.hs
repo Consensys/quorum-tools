@@ -1,18 +1,22 @@
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module QuorumTools.Constellation where
 
-import           Control.Concurrent    (threadDelay)
-import           Control.Monad         (forM_)
-import           Control.Monad.Managed (MonadManaged)
-import           Data.Maybe            (fromMaybe)
-import           Data.Text             (Text)
-import           Prelude               hiding (FilePath, lines)
-import           Turtle                hiding (f)
+import           Constellation.Enclave.Key (newKeyPair, b64EncodePublicKey,
+                                            jsonEncodePrivateKey)
+import           Control.Concurrent        (threadDelay)
+import           Control.Monad             (forM_)
+import           Control.Monad.Managed     (MonadManaged)
+import qualified Data.ByteString.Lazy      as LBS
+import           Data.Maybe                (fromMaybe)
+import           Data.Text                 (Text)
+import           Prelude                   hiding (FilePath, lines)
+import           Turtle                    hiding (f)
 
 import           QuorumTools.Types
-import           QuorumTools.Util      (tee, inshellWithJoinedErr)
+import           QuorumTools.Util          (tee, inshellWithJoinedErr)
 
 fShow :: Show a => a -> FilePath
 fShow = fromString . show
@@ -24,18 +28,23 @@ constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
 -- TODO: we can now change all of these to take Geth values. should simplify
 --
 
--- | Copy the contellation's keypair to its datadir
-copyKeys :: MonadIO io => ConstellationConfig -> io ()
-copyKeys conf = sh $ do
-  --
-  -- TODO: remove this hard-coded path.
-  --
-  let predir = "credentials/constellation-keys" </> fShow (gId (ccGethId conf))
-      postdir = dataDirPath (ccDatadir conf) </> "keys"
+generateKeyPair :: MonadIO m => DataDir -> m ()
+generateKeyPair datadir = liftIO $ do
+    (pub, priv) <- newKeyPair
+    mktree keyDir
+    writeLazyBytes pubFile $ b64EncodePublicKey pub
+    writeLazyBytes keyFile =<< jsonEncodePrivateKey passwd priv
 
-  file <- ls predir
-  mktree postdir
-  cp file (postdir </> filename file)
+  where
+    passwd  = Nothing
+    keyDir  = dataDirPath datadir </> "keys"
+    pubFile = keyDir </> "constellation.pub"
+    keyFile = keyDir </> "constellation.key"
+
+    writeLazyBytes :: MonadIO m => FilePath -> LBS.ByteString -> m ()
+    writeLazyBytes path contents = sh $ do
+      handle <- using $ writeonly path
+      liftIO $ LBS.hPut handle contents
 
 -- | Writes the constellation config to its datadir
 installConfig :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
@@ -47,7 +56,7 @@ installConfig mDeployDatadir conf = do
 
 setupConstellationNode :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
 setupConstellationNode deployDatadir conf = do
-  copyKeys conf
+  generateKeyPair (ccDatadir conf)
   installConfig deployDatadir conf
 
 constellationNodeName :: GethId -> Text
