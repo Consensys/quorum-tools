@@ -160,10 +160,14 @@ initNode genesisJsonPath gid = do
   void $ sh $ inshellWithErr cmd empty
 
 generateClusterKeys :: MonadIO m => Int -> Password -> m (Map GethId AccountKey)
-generateClusterKeys size pw = Map.fromList . zip gids
-                          <$> replicateM size (generateAccountKey pw)
+generateClusterKeys size pw = liftIO $ with mkDataDirs $ \dirs ->
+    Map.fromList . zip gids <$> forConcurrently dirs (createAccount pw)
+
   where
     gids = clusterGids size
+
+    mkDataDirs :: Managed [DataDir]
+    mkDataDirs = replicateM size $ DataDir <$> mktempdir "/tmp" "geth"
 
 findAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
 findAccountKey dir acctId = do
@@ -347,10 +351,6 @@ readEnodeId gid = do
   where
     forceEnodeId = fromMaybe $ error $
       "enode ID not found in list for " <> show gid
-
-generateAccountKey :: MonadIO m => Password -> m AccountKey
-generateAccountKey password = liftIO $
-  with (DataDir <$> mktempdir "/tmp" "geth") $ createAccount password
 
 -- TODO: probably refactor this to take a Geth, not GethId?
 mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
