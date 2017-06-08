@@ -159,15 +159,13 @@ initNode genesisJsonPath gid = do
   cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
   void $ sh $ inshellWithErr cmd empty
 
-generateClusterKeys :: MonadIO m => Int -> Password -> m (Map GethId AccountKey)
-generateClusterKeys size pw = liftIO $ with mkDataDirs $ \dirs ->
+generateClusterKeys :: MonadIO m => [GethId] -> Password -> m (Map GethId AccountKey)
+generateClusterKeys gids pw = liftIO $ with mkDataDirs $ \dirs ->
     Map.fromList . zip gids <$> forConcurrently dirs (createAccount pw)
 
   where
-    gids = clusterGids size
-
     mkDataDirs :: Managed [DataDir]
-    mkDataDirs = replicateM size $ DataDir <$> mktempdir "/tmp" "geth"
+    mkDataDirs = replicateM (length gids) $ DataDir <$> mktempdir "/tmp" "geth"
 
 findAccountKey :: MonadIO m => DataDir -> AccountId -> m (Maybe AccountKey)
 findAccountKey dir acctId = do

@@ -21,7 +21,7 @@ newcomerRejoinTestMain = do
       clusterSize = length gids
       password = CleartextPassword "abcd"
 
-  keys <- generateClusterKeys clusterSize password
+  keys <- generateClusterKeys gids password
   let cEnv = mkLocalEnv keys
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterInitialMembers .~ Set.fromList (take 2 gids)

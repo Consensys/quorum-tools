@@ -41,15 +41,15 @@ localNewMain :: IO ()
 localNewMain = do
     config <- parseConfig
 
-    let totalSize = totalPeers config
+    let totalSize   = totalPeers config
         initialSize = fromMaybe totalSize (initialPeers config)
+        gids        = clusterGids totalSize
 
     when (totalSize < initialSize) $
       error "initial peers can not be greater than total peers"
 
-    keys <- generateClusterKeys totalSize password
-    let gids = clusterGids totalSize
-        cEnv = mkLocalEnv keys
+    keys <- generateClusterKeys gids password
+    let cEnv = mkLocalEnv keys
              & clusterPrivacySupport .~ PrivacyEnabled
              & clusterInitialMembers .~ Set.fromList (take initialSize gids)
              & clusterPassword       .~ password
