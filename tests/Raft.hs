@@ -12,9 +12,8 @@ import QuorumTools.Test.Raft.RestartNodeTest
 
 run :: String -> IO () -> IO ()
 run description action = do
-  putStrLn $ description <> " test"
+  putStrLn $ "\n" <> description <> " test"
   action
-  putStrLn ""
 
 main :: IO ()
 main = do
