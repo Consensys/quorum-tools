@@ -20,7 +20,7 @@ leaveJoinTestMain = do
       clusterSize = length gids
       password = CleartextPassword "abcd"
 
-  keys <- generateClusterKeys (length gids) password
+  keys <- generateClusterKeys gids password
   let cEnv = mkLocalEnv keys
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterPassword       .~ password

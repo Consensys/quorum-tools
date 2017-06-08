@@ -19,7 +19,7 @@ cycleTestMain = do
   let gids = [1..6] :: [GethId]
       password = CleartextPassword "abcd"
 
-  keys <- generateClusterKeys (length gids) password
+  keys <- generateClusterKeys gids password
 
   let cEnv = mkLocalEnv keys
            & clusterPrivacySupport .~ PrivacyDisabled

@@ -81,7 +81,7 @@ restartNodeTestMain = do
   let gids = [1..GethId numNodes]
       password = CleartextPassword "abcd"
 
-  keys <- generateClusterKeys numNodes password
+  keys <- generateClusterKeys gids password
 
   let cEnv = mkLocalEnv keys
            & clusterPassword .~ password

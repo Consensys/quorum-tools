@@ -8,7 +8,6 @@ import           Control.Lens         ((.~))
 import           Control.Monad.Reader (runReaderT)
 import           Data.Bool            (bool)
 import           Data.Map.Strict      (Map)
-import qualified Data.Map.Strict      as Map
 import           Prelude              hiding (FilePath)
 import           Turtle
 
@@ -58,12 +57,12 @@ awsBootstrapMain = awsBootstrap =<< parseConfig
 
 awsBootstrap :: AwsConfig -> IO ()
 awsBootstrap config = do
-    keys <- generateClusterKeys (clusterSize config) password
-    let gids = Map.keys keys
+    keys <- generateClusterKeys gids password
 
     sh $ flip runReaderT (mkBootstrapEnv config password keys) $
       wipeAndSetupNodes (Just remoteDataDir) (rootDir config) gids
 
   where
+    gids          = [1..GethId (clusterSize config)]
     remoteDataDir = DataDir "/datadir"
     password      = CleartextPassword "abcd"

@@ -101,7 +101,7 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
           password = CleartextPassword "abcd"
           gids = [1..GethId numNodes']
 
-      keys <- generateClusterKeys (length gids) password
+      keys <- generateClusterKeys gids password
 
       let cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
