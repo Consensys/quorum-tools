@@ -85,7 +85,7 @@ startConstellationNodes geths = do
   liftIO $ threadDelay 1000000
 
 -- We parameterize by a DataDir here so that we can handle the case of
--- bootstrapping a cluster for AWS -- where the datadir is located in a
+-- bootstrapping a cluster (eg for AWS) -- where the datadir is located in a
 -- different place on the filesystem.
 confText :: DataDir -> ConstellationConfig -> Text
 confText (DataDir ddPath) conf =

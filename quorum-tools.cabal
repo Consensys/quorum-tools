@@ -41,8 +41,6 @@ library
     constellation         == 0.1.*
   exposed-modules:
     QuorumTools
-    QuorumTools.Mains.AwsBootstrap
-    QuorumTools.Mains.AwsSpam
     QuorumTools.Mains.LocalNew
     QuorumTools.Mains.LocalSpam
     QuorumTools.Mains.LocalStart
@@ -54,7 +52,6 @@ library
     QuorumTools.Test.Raft.PublicStateTest
     QuorumTools.Test.Raft.RestartNodeTest
   other-modules:
-    QuorumTools.Aws
     QuorumTools.Checkpoint
     QuorumTools.Client
     QuorumTools.Cluster
@@ -89,20 +86,6 @@ executable local-start
 
 executable local-spam
   main-is          : LocalSpam.hs
-  hs-source-dirs   : app
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-executable aws-bootstrap
-  main-is          : AwsBootstrap.hs
-  hs-source-dirs   : app
-  ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
-  build-depends    : base, quorum-tools
-  default-language : Haskell2010
-
-executable aws-spam
-  main-is          : AwsSpam.hs
   hs-source-dirs   : app
   ghc-options      : -Wall -fwarn-tabs -threaded -rtsopts
   build-depends    : base, quorum-tools

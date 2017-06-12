@@ -261,12 +261,6 @@ data Privacy
 -- * abi
 data Contract = Contract Privacy [UnencodedMethod] Text Text
 
--- AWS support
-
-data AwsClusterType
-  = SingleRegion
-  | MultiRegion
-
 -- put ClusterEnv all the way at the end so its template haskell doesn't break
 -- this module into phases
 
