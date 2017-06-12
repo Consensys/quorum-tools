@@ -30,9 +30,9 @@ newcomerRejoinTestMain = do
   result <- runTestM cEnv $ do
     [g1, g2, g3] <- wipeAndSetupNodes Nothing "gdata" gids
 
-    instruments <- take 2 <$> traverse (runNode clusterSize) [g1, g2, g3]
+    [g1i, g2i, g3i] <- traverse (runNode clusterSize) [g1, g2, g3]
 
-    awaitAll (assumedRole <$> instruments)
+    awaitAll (assumedRole <$> [g1i, g2i])
 
     timestampedMessage "starting test with a pause"
     td 2
@@ -49,6 +49,9 @@ newcomerRejoinTestMain = do
     g2 `removesNode` g3
 
     withSpammer [g1, g2] $ td 1
+
+    _ <- liftIO $ killNode g3i
+
     td 1
 
     let g4 = g3 { gethId = 4
@@ -64,7 +67,7 @@ newcomerRejoinTestMain = do
     withSpammer [g1, g2, g4] $ td 1
     td 1
 
-    let instruments' = g4i : instruments
+    let instruments' = [g1i, g2i, g4i]
 
     verify (lastBlock       <$> instruments')
            (outstandingTxes <$> instruments')

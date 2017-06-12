@@ -12,7 +12,7 @@
 module QuorumTools.Cluster where
 
 import           Control.Arrow              ((>>>))
-import           Control.Concurrent.Async   (forConcurrently)
+import           Control.Concurrent.Async   (cancel, forConcurrently, waitCatch)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, has, ix, view, (^.), (^?))
 import           Control.Monad              (replicateM)
@@ -444,7 +444,10 @@ runNode numInitialNodes geth = do
         & observingTxes       (transition outstandingTxes) (transition txAddrs)
 
   _ <- fork $ wait clusterIsFull >> triggerConnected
-  nodeTerminated <- fork $ NodeTerminated <$ sh instrumentedLines
+
+  nodeHandle <- fork $ sh instrumentedLines
+  let killNode = cancel nodeHandle
+  nodeTerminated <- fork $ NodeTerminated <$ waitCatch nodeHandle
 
   pure NodeInstrumentation {..}
 

@@ -221,6 +221,7 @@ data NodeInstrumentation = NodeInstrumentation
   , txAddrs         :: Behavior TxAddrs
   , allConnected    :: Async AllConnected
   , assumedRole     :: Async AssumedRole
+  , killNode        :: IO ()
   }
 
 -- Checkpointing

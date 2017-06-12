@@ -42,6 +42,8 @@ leaveJoinTestMain = do
 
     withSpammer [g2, g3] $ td 1
 
+    _ <- liftIO $ killNode (head instruments)
+
     let g4 = g1 { gethId = 4
                 , gethJoinMode = JoinExisting
                 }
