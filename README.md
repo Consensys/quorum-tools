@@ -1,6 +1,8 @@
 # Quorum Tools
 
-This repo contains tools for running a Quorum cluster and integration testing Quorum.
+This project contains tools for running Quorum clusters and integration testing Quorum.
+
+At the moment, this project runs all Quorum clusters with Raft-based consensus by default. We'll be adding QuorumChain support in short order.
 
 ## Installation
 
@@ -9,7 +11,7 @@ First install Haskell [Stack](https://www.haskell.org/downloads#stack).
 Now, in the project directory:
 
 ```
-$ stack setup
+$ stack setup # this is only necessary to run once
 $ stack build
 ```
 
@@ -26,7 +28,19 @@ $ stack install
 $ local-new
 ```
 
-To run tests interactively, load the REPL:
+To run all integration tests in batch, make sure that you can `sudo` (for packet filtering), and then run:
+
+```
+$ stack test
+```
+
+The following invocation might help to enable packet filtering during the test suite, if `sudo` requires a password on your machine:
+
+```
+$ sudo whoami && stack test
+```
+
+To run tests interactively, you can run them from the REPL:
 
 ```
 $ stack ghci quorum-tools:lib
@@ -34,12 +48,13 @@ $ stack ghci quorum-tools:lib
 
 ## Tests
 
-This repo tests the following cases:
+Here are some high-level cluster tests that we include in our suite:
 
-* A network partition of one node in a running cluster (including the case where this node is the Raft leader)
-* Public and private state consistency
-* Completely stopping and restarting a node in a running cluster.
-* etc
+* Continually adding and removing nodes from a cluster until none of the initial members are left
+* Partitioning a node from the rest of the network
+* Public and [private state](https://github.com/jpmorganchase/quorum/wiki/Transaction-Processing) consistency
+* Stopping, then restarting a node
+* Revoking a node's membership in the cluster, re-registering it, and bringing it back online
 
 The test sources are located in `src/QuorumTools/Test/`.
 
@@ -47,6 +62,6 @@ The test sources are located in `src/QuorumTools/Test/`.
 
 We also include scripts for running a cluster without necessarily testing it.
 
-* `local-new`: creat and start a new cluster, destroying old data directories
-* `local-start`: start an existing cluster
+* `local-new`: create and start a new cluster, destroying old data directories
+* `local-start`: start a cluster from existing data directories
 * `local-spam`: send a rate-limited stream of transactions to a geth node
