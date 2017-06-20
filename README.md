@@ -2,7 +2,7 @@
 
 This project contains tools for running Quorum clusters and integration testing Quorum.
 
-At the moment, this project runs all Quorum clusters with Raft-based consensus by default. We'll be adding QuorumChain support in short order.
+At the moment, this project runs all Quorum clusters with Raft-based consensus by default and depends on [dynamic raft membership support in Quorum](https://github.com/jpmorganchase/quorum/pull/130). We'll be adding QuorumChain support in short order.
 
 ## Installation
 
