@@ -233,10 +233,6 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
 
 -- | We need to use the RPC interface to get the EnodeId if we haven't yet
 -- started up geth.
---
--- TODO: see if we can do this through HTTP instead, now that we've whitelisted
---       access to the admin API via RPC.
---
 requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 requestEnodeId gid = do
   mkCmd <- setupCommand gid
