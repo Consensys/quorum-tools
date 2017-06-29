@@ -16,6 +16,7 @@ import           Control.Concurrent.Async   (cancel, forConcurrently, waitCatch)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, has, ix, view, (^.), (^?))
 import           Control.Monad              (replicateM)
+import           Control.Monad.Except       (MonadError, throwError, runExceptT)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
@@ -30,6 +31,7 @@ import           Data.Semigroup             ((<>))
 import           Data.Set                   (member)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
+import           Data.Traversable           (for)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (hClose)
@@ -154,10 +156,16 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
         Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
                              (accountIdToText acctId)
 
-initNode :: (MonadIO m, HasEnv m) => FilePath -> GethId -> m ()
+initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
+         => FilePath
+         -> GethId
+         -> m ()
 initNode genesisJsonPath gid = do
   cmd <- setupCommand gid <*> pure (format ("init "%fp) genesisJsonPath)
-  void $ sh $ inshellWithErr cmd empty
+  (exitCode, _, stdErr) <- shellStrictWithErr cmd empty
+  case exitCode of
+    ExitSuccess -> return ()
+    ExitFailure _ -> throwError $ GethInitFailed exitCode stdErr
 
 generateClusterKeys :: MonadIO m => [GethId] -> Password -> m (Map GethId AccountKey)
 generateClusterKeys gids pw = liftIO $ with mkDataDirs $ \dirs ->
@@ -296,7 +304,7 @@ installAccountKey gid acctKey = do
       jsonPath = keystoreDir </> fromText (nodeName gid)
   output jsonPath (select $ textToLines $ _akKey acctKey)
 
-createNode :: (MonadIO m, HasEnv m)
+createNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
            => FilePath
            -> GethId
            -> m Geth
@@ -370,8 +378,15 @@ setupNodes deployDatadir gids = do
   genesisJsonPath <- createGenesisJson $ _akAccountId <$> Map.elems acctKeys
 
   clusterEnv <- ask
-  geths <- liftIO $ forConcurrently gids $ \gid ->
-    runReaderT (createNode genesisJsonPath gid) clusterEnv
+  eGeths <- liftIO $ forConcurrently gids $ \gid ->
+    runExceptT $ runReaderT (createNode genesisJsonPath gid) clusterEnv
+
+  geths <- for eGeths $ \case
+    Left (GethInitFailed exitCode stdErr) -> do
+      stderr $ select $ ["", "`geth init` failed! stderr output:", ""]
+      stderr $ select $ textToLines stdErr
+      exit exitCode
+    Right geth -> return geth
 
   let initialGeths = filter ((JoinNewCluster ==) . gethJoinMode) geths
 

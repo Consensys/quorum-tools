@@ -19,7 +19,7 @@ import           Data.Set                 (Set)
 import           Data.String
 import           Data.Text                (Text)
 import           Prelude                  hiding (FilePath)
-import           Turtle                   (FilePath)
+import           Turtle                   (FilePath, ExitCode)
 
 import           QuorumTools.Util
 
@@ -110,6 +110,9 @@ newtype Password
 
 instance Show Password where
   show _ = "Password \"[REDACTED]\""
+
+data ProvisionError
+  = GethInitFailed ExitCode Text
 
 data Geth =
   Geth { gethId                  :: GethId
