@@ -18,15 +18,8 @@ import           Turtle                    hiding (f)
 import           QuorumTools.Types
 import           QuorumTools.Util          (tee, inshellWithJoinedErr)
 
-fShow :: Show a => a -> FilePath
-fShow = fromString . show
-
 constellationConfPath :: DataDir -> FilePath
 constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
-
---
--- TODO: we can now change all of these to take Geth values. should simplify
---
 
 generateKeyPair :: MonadIO m => DataDir -> m ()
 generateKeyPair datadir = liftIO $ do
@@ -49,14 +42,16 @@ generateKeyPair datadir = liftIO $ do
 -- | Writes the constellation config to a deploy datadir, or its datadir
 installConfig :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
 installConfig mDeployDataDir conf = liftIO $ writeTextFile path contents
-
   where
     path          = constellationConfPath localDataDir
     localDataDir  = ccDataDir conf
     deployDataDir = fromMaybe localDataDir mDeployDataDir
     contents      = confText deployDataDir conf
 
-setupConstellationNode :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
+setupConstellationNode :: MonadIO io
+                       => Maybe DataDir
+                       -> ConstellationConfig
+                       -> io ()
 setupConstellationNode deployDataDir conf = do
     generateKeyPair localDataDir
     installConfig deployDataDir conf
@@ -64,25 +59,21 @@ setupConstellationNode deployDataDir conf = do
   where
     localDataDir = ccDataDir conf
 
-constellationNodeName :: GethId -> Text
-constellationNodeName gid = format ("constellation"%d) (gId gid)
-
 startConstellationNode :: MonadManaged io => Geth -> io ()
 startConstellationNode geth = do
-  let confPath = forceConfigPath $ gethConstellationConfig geth
-  let logPath = fromText $ constellationNodeName (gethId geth) <> ".out"
+    _ <- fork $ sh $ inshellWithJoinedErr command "" & tee logPath
 
-  _ <- fork $ sh $
-    inshellWithJoinedErr (format ("constellation-node "%fp) confPath) ""
-    & tee logPath
-
-  -- put in a small delay so this constellation can start its server before the
-  -- next hits it
-  liftIO $ threadDelay 50000
+    -- a small delay so this constellation can start its server before the next
+    -- one sends a request to it
+    liftIO $ threadDelay 50000
 
   where
     forceConfigPath :: Maybe FilePath -> FilePath
     forceConfigPath = fromMaybe $ error "missing constellation config"
+
+    confPath = forceConfigPath $ gethConstellationConfig geth
+    command = format ("constellation-node "%fp) confPath
+    logPath = fromText $ format ("constellation"%d%".out") (gId $ gethId geth)
 
 startConstellationNodes :: (Foldable f, MonadManaged io) => f Geth -> io ()
 startConstellationNodes geths = do
