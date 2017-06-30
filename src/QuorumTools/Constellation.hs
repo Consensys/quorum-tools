@@ -46,18 +46,23 @@ generateKeyPair datadir = liftIO $ do
       handle <- using $ writeonly path
       liftIO $ LBS.hPut handle contents
 
--- | Writes the constellation config to its datadir
+-- | Writes the constellation config to a deploy datadir, or its datadir
 installConfig :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
-installConfig mDeployDatadir conf = do
-  let localDataDir = ccDatadir conf
-      confPath = constellationConfPath localDataDir
-      deployDatadir = fromMaybe localDataDir mDeployDatadir
-  liftIO $ writeTextFile confPath (confText deployDatadir conf)
+installConfig mDeployDataDir conf = liftIO $ writeTextFile path contents
+
+  where
+    path          = constellationConfPath localDataDir
+    localDataDir  = ccDataDir conf
+    deployDataDir = fromMaybe localDataDir mDeployDataDir
+    contents      = confText deployDataDir conf
 
 setupConstellationNode :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
-setupConstellationNode deployDatadir conf = do
-  generateKeyPair (ccDatadir conf)
-  installConfig deployDatadir conf
+setupConstellationNode deployDataDir conf = do
+    generateKeyPair localDataDir
+    installConfig deployDataDir conf
+
+  where
+    localDataDir = ccDataDir conf
 
 constellationNodeName :: GethId -> Text
 constellationNodeName gid = format ("constellation"%d) (gId gid)
@@ -89,7 +94,7 @@ startConstellationNodes geths = do
 -- different place on the filesystem.
 confText :: DataDir -> ConstellationConfig -> Text
 confText (DataDir ddPath) conf =
-  let ConstellationConfig {ccUrl, ccGethId, ccOtherNodes} = conf
+  let ConstellationConfig {ccUrl, ccPort, ccOtherNodes} = conf
 
       lf :: Format r r
       lf = "\n"
@@ -97,7 +102,7 @@ confText (DataDir ddPath) conf =
       quote :: Format a b -> Format a b
       quote f = "\""%f%"\""
 
-      contents =
+      template =
         "url = "%quote s%lf%
         "port = "%d%lf%
         "socketPath = "%quote fp%lf%
@@ -106,12 +111,11 @@ confText (DataDir ddPath) conf =
         "privateKeyPath = "%quote fp%lf%
         "storagePath = "%quote fp%lf
 
-  --
-  -- TODO: use base constellation port
-  --
-  in format contents ccUrl (9000 + gId ccGethId)
-       (ddPath </> "constellation.ipc")
-       ccOtherNodes
-       (ddPath </> "keys" </> "constellation.pub")
-       (ddPath </> "keys" </> "constellation.key")
-       (ddPath </> "constellation")
+  in format template
+            ccUrl
+            ccPort
+            (ddPath </> "constellation.ipc")
+            ccOtherNodes
+            (ddPath </> "keys" </> "constellation.pub")
+            (ddPath </> "keys" </> "constellation.key")
+            (ddPath </> "constellation")
