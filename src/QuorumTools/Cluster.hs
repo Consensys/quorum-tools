@@ -365,7 +365,6 @@ mkConstellationConfig thisGid = do
 
     ConstellationConfig <$> constellationUrl thisGid
                         <*> gidDataDir thisGid
-                        <*> pure thisGid
                         <*> constellationPort thisGid
                         <*> traverse constellationUrl priorPeers
   where

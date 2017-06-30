@@ -28,7 +28,6 @@ import           QuorumTools.Util
 data ConstellationConfig = ConstellationConfig
   { ccUrl        :: Text
   , ccDataDir    :: DataDir -- TODO: probably pull this out
-  , ccGethId     :: GethId  -- TODO: probably pull this out
   , ccPort       :: Port
   , ccOtherNodes :: [Text]
   } deriving (Eq, Show)
