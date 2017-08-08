@@ -19,6 +19,8 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   key3 <- liftIO $ readTextFile "gdata/geth3/keys/constellation.pub"
 
+  td 2
+
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
   privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 
@@ -30,6 +32,7 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
     (\instrumentation -> watch (lastBlock instrumentation) Just)
     instruments
   awaitAll lastBlockWatches
+  -- td 2
 
   [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 

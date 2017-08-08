@@ -135,6 +135,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpcapi eth,net,web3,raft,admin" %
                                        " --emitcheckpoints"                %
                                        " --unlock 0"                       %
+                                       " --password /dev/null"             %
                                        " "%s%
                                        " "%s)
                           envVar

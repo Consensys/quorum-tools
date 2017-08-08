@@ -12,12 +12,14 @@ import           QuorumTools.Test.State
 import           QuorumTools.Types
 
 publicStateTestMain :: IO ()
-publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
+publicStateTestMain = testNTimes 10 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
       (geths, instruments) = unzip iNodes
       -- sendTo = cycle geths
       sendTo = repeat geth1
       contract = simpleStorage Public
+
+  td 1
 
   storageAddr <- createContract geth1 contract (txAddrs geth1Instruments)
 
@@ -32,8 +34,8 @@ publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   lastBlockWatches <- traverse
     (\instrumentation -> watch (lastBlock instrumentation) Just)
     instruments
+
   awaitAll lastBlockWatches
-  td 1
 
   [i1, i2, i3] <- traverse (getStorage contract storageAddr) geths
 

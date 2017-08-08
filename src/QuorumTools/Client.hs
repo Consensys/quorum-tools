@@ -47,6 +47,9 @@ import           QuorumTools.Util
 t :: Text -> Text
 t = id
 
+i :: Int -> Int
+i = id
+
 encodeMethod :: UnencodedMethod -> Bytes32
 encodeMethod (UnencodedMethod signature) = sha3Bytes (T.encodeUtf8 signature)
 
@@ -64,7 +67,7 @@ setPrivateFor privacy params = case privacy of
 
 emptyTxRpcBody :: Geth -> Value
 emptyTxRpcBody geth = object
-    [ "id"      .= (1 :: Int)
+    [ "id"      .= i 1
     , "jsonrpc" .= t "2.0"
     , "method"  .= t "eth_sendTransaction"
     , "params"  .=
@@ -77,7 +80,7 @@ emptyTxRpcBody geth = object
 
 sendBody :: Tx -> Geth -> Value
 sendBody (Tx maybeTo method privacy sync) geth = object
-    [ "id"      .= (1 :: Int)
+    [ "id"      .= i 1
     , "jsonrpc" .= t "2.0"
     , "method"  .= opName sync
     , "params"  .= [ object params' ]
@@ -95,7 +98,7 @@ createBody :: CreateArgs -> Geth -> Value
 createBody
   (CreateArgs (Contract privacy _methods bytecode _abi) initVal sync)
   geth         = object
-  [ "id"      .= (1 :: Int)
+  [ "id"      .= i 1
   , "jsonrpc" .= t "2.0"
   , "method"  .= opName sync
   , "params"  .=
@@ -109,7 +112,7 @@ createBody
 
 callBody :: CallArgs -> Geth -> Value
 callBody (CallArgs toBytes method) geth = object
-  [ "id"      .= (1 :: Int)
+  [ "id"      .= i 1
   , "jsonrpc" .= t "2.0"
   , "method"  .= t "eth_call"
   , "params"  .=
@@ -151,7 +154,7 @@ addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
 
     body :: Value
     body = object
-      [ "id"      .= (1 :: Int)
+      [ "id"      .= i 1
       , "jsonrpc" .= t "2.0"
       , "method"  .= t "raft_addPeer"
       , "params"  .= [String eid]
@@ -173,7 +176,7 @@ removeNode geth gid = liftIO $ parse <$> post url body
 
     body :: Value
     body = object
-      [ "id"      .= (1 :: Int)
+      [ "id"      .= i 1
       , "jsonrpc" .= t "2.0"
       , "method"  .= t "raft_removePeer"
       , "params"  .= [toJSON (gId gid)]

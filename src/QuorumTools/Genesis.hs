@@ -98,10 +98,10 @@ createGenesisJson acctIds = do
       [ "alloc"      .= object (header:balances)
       , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
       , "config"     .= object
-        [ "homesteadBlock" .= i 0
-        , "chainId"        .= i 12345
-        , "eip155Block"    .= i 0
-        , "eip158Block"    .= i 0
+        [ "homesteadBlock" .= i 100000000
+        , "chainId"        .= i 1
+        , "eip155Block"    .= i 100000000
+        , "eip158Block"    .= i 100000000
         ]
       , "difficulty" .= t "0x0"
       , "extraData"  .= t "0x0000000000000000000000000000000000000000000000000000000000000000"

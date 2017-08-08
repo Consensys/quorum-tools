@@ -10,7 +10,7 @@ library
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs
   build-depends:
-    base                  == 4.9.*,
+    base                  == 4.9.* || == 4.10.*,
     text                  == 1.2.*,
     mtl                   == 2.2.*,
     async                 == 2.1.*,
