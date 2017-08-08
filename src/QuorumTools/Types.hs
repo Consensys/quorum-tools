@@ -27,8 +27,8 @@ import           QuorumTools.Util
 
 data ConstellationConfig = ConstellationConfig
   { ccUrl        :: Text
-  , ccDatadir    :: DataDir -- TODO: probably pull this out
-  , ccGethId     :: GethId  -- TODO: probably pull this out
+  , ccDataDir    :: DataDir -- TODO: probably pull this out
+  , ccPort       :: Port
   , ccOtherNodes :: [Text]
   } deriving (Eq, Show)
 
@@ -265,28 +265,28 @@ data Privacy
 -- * abi
 data Contract = Contract Privacy [UnencodedMethod] Text Text
 
--- put ClusterEnv all the way at the end so its template haskell doesn't break
--- this module into phases
-
 data ClusterEnv
-  = ClusterEnv { _clusterPassword           :: Password
-               , _clusterNetworkId          :: Int
-               , _clusterBaseHttpPort       :: Port
-               , _clusterBaseRpcPort        :: Port
+  = ClusterEnv { _clusterPassword              :: Password
+               , _clusterNetworkId             :: Int
+               , _clusterBaseHttpPort          :: Port
+               , _clusterBaseRpcPort           :: Port
+               , _clusterBaseConstellationPort :: Port
+               , _clusterVerbosity             :: Verbosity
+               , _clusterGenesisJson           :: FilePath
+               , _clusterIps                   :: Map GethId Ip
+               , _clusterDataDirs              :: Map GethId DataDir
                --
-               -- TODO: add base constellation port
+               -- TODO: remove this? seems to be unused:
                --
-               , _clusterVerbosity          :: Verbosity
-               , _clusterGenesisJson        :: FilePath
-               , _clusterIps                :: Map GethId Ip
-               , _clusterDataDirs           :: Map GethId DataDir
-               , _clusterConstellationConfs :: Map GethId FilePath -- TODO: remove this? seems to be unused
-               , _clusterAccountKeys        :: Map GethId AccountKey
-               , _clusterInitialMembers     :: Set GethId
-               , _clusterConsensus          :: Consensus
-               , _clusterPrivacySupport     :: PrivacySupport
+               , _clusterConstellationConfs    :: Map GethId FilePath
+               , _clusterAccountKeys           :: Map GethId AccountKey
+               , _clusterInitialMembers        :: Set GethId
+               , _clusterConsensus             :: Consensus
+               , _clusterPrivacySupport        :: PrivacySupport
                }
   deriving (Eq, Show)
+
+-- Lenses
 
 makeLenses ''ClusterEnv
 makeLenses ''AccountKey

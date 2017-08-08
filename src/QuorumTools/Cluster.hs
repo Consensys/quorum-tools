@@ -50,19 +50,20 @@ import           QuorumTools.Util           (HexPrefix (..), bytes20P,
 
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
-  { _clusterPassword           = CleartextPassword "abcd"
-  , _clusterNetworkId          = 1418
-  , _clusterBaseHttpPort       = 30400
-  , _clusterBaseRpcPort        = 40400
-  , _clusterVerbosity          = 3
-  , _clusterGenesisJson        = "gdata" </> "genesis.json"
-  , _clusterIps                = Map.empty
-  , _clusterDataDirs           = Map.empty
-  , _clusterConstellationConfs = Map.empty
-  , _clusterAccountKeys        = Map.empty
-  , _clusterInitialMembers     = Set.empty
-  , _clusterConsensus          = Raft
-  , _clusterPrivacySupport     = PrivacyDisabled
+  { _clusterPassword              = CleartextPassword "abcd"
+  , _clusterNetworkId             = 1418
+  , _clusterBaseHttpPort          = 30400
+  , _clusterBaseRpcPort           = 40400
+  , _clusterBaseConstellationPort = 9000
+  , _clusterVerbosity             = 3
+  , _clusterGenesisJson           = "gdata" </> "genesis.json"
+  , _clusterIps                   = Map.empty
+  , _clusterDataDirs              = Map.empty
+  , _clusterConstellationConfs    = Map.empty
+  , _clusterAccountKeys           = Map.empty
+  , _clusterInitialMembers        = Set.empty
+  , _clusterConsensus             = Raft
+  , _clusterPrivacySupport        = PrivacyDisabled
   }
 
 mkClusterEnv :: (GethId -> Ip)
@@ -102,7 +103,8 @@ rpcPort :: HasEnv m => GethId -> m Port
 rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
 
 constellationPort :: HasEnv m => GethId -> m Port
-constellationPort (GethId gid) = pure $ (fromIntegral gid +) 9000 -- TODO: CONVERT THIS TO USE BASE PORT
+constellationPort (GethId gid) =
+  (fromIntegral gid +) <$> view clusterBaseConstellationPort
 
 rawCommand :: DataDir -> Text -> Text
 rawCommand dir = format ("geth --datadir "%fp%" "%s) (dataDirPath dir)
@@ -363,7 +365,7 @@ mkConstellationConfig thisGid = do
 
     ConstellationConfig <$> constellationUrl thisGid
                         <*> gidDataDir thisGid
-                        <*> pure thisGid
+                        <*> constellationPort thisGid
                         <*> traverse constellationUrl priorPeers
   where
     constellationUrl :: HasEnv m => GethId -> m Text

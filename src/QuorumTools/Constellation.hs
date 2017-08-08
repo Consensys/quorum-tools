@@ -18,15 +18,8 @@ import           Turtle                    hiding (f)
 import           QuorumTools.Types
 import           QuorumTools.Util          (tee, inshellWithJoinedErr)
 
-fShow :: Show a => a -> FilePath
-fShow = fromString . show
-
 constellationConfPath :: DataDir -> FilePath
 constellationConfPath (DataDir ddPath) = ddPath </> "constellation.toml"
-
---
--- TODO: we can now change all of these to take Geth values. should simplify
---
 
 generateKeyPair :: MonadIO m => DataDir -> m ()
 generateKeyPair datadir = liftIO $ do
@@ -46,38 +39,41 @@ generateKeyPair datadir = liftIO $ do
       handle <- using $ writeonly path
       liftIO $ LBS.hPut handle contents
 
--- | Writes the constellation config to its datadir
+-- | Writes the constellation config to a deploy datadir, or its datadir
 installConfig :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
-installConfig mDeployDatadir conf = do
-  let localDataDir = ccDatadir conf
-      confPath = constellationConfPath localDataDir
-      deployDatadir = fromMaybe localDataDir mDeployDatadir
-  liftIO $ writeTextFile confPath (confText deployDatadir conf)
+installConfig mDeployDataDir conf = liftIO $ writeTextFile path contents
+  where
+    path          = constellationConfPath localDataDir
+    localDataDir  = ccDataDir conf
+    deployDataDir = fromMaybe localDataDir mDeployDataDir
+    contents      = confText deployDataDir conf
 
-setupConstellationNode :: MonadIO io => Maybe DataDir -> ConstellationConfig -> io ()
-setupConstellationNode deployDatadir conf = do
-  generateKeyPair (ccDatadir conf)
-  installConfig deployDatadir conf
+setupConstellationNode :: MonadIO io
+                       => Maybe DataDir
+                       -> ConstellationConfig
+                       -> io ()
+setupConstellationNode deployDataDir conf = do
+    generateKeyPair localDataDir
+    installConfig deployDataDir conf
 
-constellationNodeName :: GethId -> Text
-constellationNodeName gid = format ("constellation"%d) (gId gid)
+  where
+    localDataDir = ccDataDir conf
 
 startConstellationNode :: MonadManaged io => Geth -> io ()
 startConstellationNode geth = do
-  let confPath = forceConfigPath $ gethConstellationConfig geth
-  let logPath = fromText $ constellationNodeName (gethId geth) <> ".out"
+    _ <- fork $ sh $ inshellWithJoinedErr command "" & tee logPath
 
-  _ <- fork $ sh $
-    inshellWithJoinedErr (format ("constellation-node "%fp) confPath) ""
-    & tee logPath
-
-  -- put in a small delay so this constellation can start its server before the
-  -- next hits it
-  liftIO $ threadDelay 50000
+    -- a small delay so this constellation can start its server before the next
+    -- one sends a request to it
+    liftIO $ threadDelay 50000
 
   where
     forceConfigPath :: Maybe FilePath -> FilePath
     forceConfigPath = fromMaybe $ error "missing constellation config"
+
+    confPath = forceConfigPath $ gethConstellationConfig geth
+    command = format ("constellation-node "%fp) confPath
+    logPath = fromText $ format ("constellation"%d%".out") (gId $ gethId geth)
 
 startConstellationNodes :: (Foldable f, MonadManaged io) => f Geth -> io ()
 startConstellationNodes geths = do
@@ -89,7 +85,7 @@ startConstellationNodes geths = do
 -- different place on the filesystem.
 confText :: DataDir -> ConstellationConfig -> Text
 confText (DataDir ddPath) conf =
-  let ConstellationConfig {ccUrl, ccGethId, ccOtherNodes} = conf
+  let ConstellationConfig {ccUrl, ccPort, ccOtherNodes} = conf
 
       lf :: Format r r
       lf = "\n"
@@ -97,7 +93,7 @@ confText (DataDir ddPath) conf =
       quote :: Format a b -> Format a b
       quote f = "\""%f%"\""
 
-      contents =
+      template =
         "url = "%quote s%lf%
         "port = "%d%lf%
         "socketPath = "%quote fp%lf%
@@ -106,12 +102,11 @@ confText (DataDir ddPath) conf =
         "privateKeyPath = "%quote fp%lf%
         "storagePath = "%quote fp%lf
 
-  --
-  -- TODO: use base constellation port
-  --
-  in format contents ccUrl (9000 + gId ccGethId)
-       (ddPath </> "constellation.ipc")
-       ccOtherNodes
-       (ddPath </> "keys" </> "constellation.pub")
-       (ddPath </> "keys" </> "constellation.key")
-       (ddPath </> "constellation")
+  in format template
+            ccUrl
+            ccPort
+            (ddPath </> "constellation.ipc")
+            ccOtherNodes
+            (ddPath </> "keys" </> "constellation.pub")
+            (ddPath </> "keys" </> "constellation.key")
+            (ddPath </> "constellation")
