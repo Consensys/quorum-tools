@@ -6,8 +6,6 @@
 module QuorumTools.Types where
 
 import           Control.Concurrent.Async (Async)
-import           Control.Concurrent.Chan  (Chan)
-import           Control.Concurrent.MVar  (MVar)
 import           Control.Lens             (makeLenses)
 import           Control.Monad.Reader     (MonadReader)
 import           Data.Aeson               (FromJSON (parseJSON),
@@ -19,8 +17,9 @@ import           Data.Set                 (Set)
 import           Data.String
 import           Data.Text                (Text)
 import           Prelude                  hiding (FilePath)
-import           Turtle                   (FilePath, ExitCode)
+import           Turtle                   (ExitCode, FilePath)
 
+import           QuorumTools.Control      (Behavior)
 import           QuorumTools.Util
 
 -- Constellation
@@ -147,7 +146,7 @@ showGethAccountId :: Geth -> Text
 showGethAccountId = accountIdToText . gethAccountId
 
 data CallArgs = CallArgs
-  { callTo :: Bytes20
+  { callTo     :: Bytes20
   , callMethod :: UnencodedMethod
   }
 
@@ -211,9 +210,6 @@ data NodeTerminated = NodeTerminated deriving Eq
 
 -- All http connections for this node are established
 data AllConnected = AllConnected
-
--- TODO: ideally this type would be abstract:
-data Behavior a = Behavior (Chan a) (MVar a)
 
 data NodeInstrumentation = NodeInstrumentation
   { nodeOnline      :: Async NodeOnline

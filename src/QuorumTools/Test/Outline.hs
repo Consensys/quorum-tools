@@ -32,7 +32,7 @@ import Control.Concurrent.Async (async)
 import QuorumTools.Client
 import QuorumTools.Cluster
 import QuorumTools.Constellation
-import QuorumTools.Control (awaitAll, observe)
+import QuorumTools.Control (Behavior, awaitAll, observe)
 import QuorumTools.Types
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
