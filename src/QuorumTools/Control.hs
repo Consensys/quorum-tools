@@ -1,28 +1,23 @@
 {-# LANGUAGE RankNTypes #-}
+
 module QuorumTools.Control where
 
-import           Control.Concurrent.Async (Async)
-import           Control.Concurrent.Chan  (Chan, dupChan, newChan, readChan,
-                                           writeChan)
-import           Control.Concurrent.MVar  (MVar, modifyMVar, newEmptyMVar,
-                                           newMVar, readMVar, takeMVar,
-                                           tryPutMVar)
-import           Control.Exception        (bracket)
-import           Control.Monad.Loops      (untilJust)
-import           Control.Monad.Managed    (MonadManaged)
-import           Data.Foldable            (traverse_)
-import           Turtle                   (Fold (..), MonadIO, fork, liftIO,
-                                           void, wait)
+import           Control.Concurrent.Async     (Async)
+import           Control.Concurrent.MVar      (newEmptyMVar, takeMVar,
+                                               tryPutMVar)
+import           Control.Concurrent.STM       (atomically)
+import           Control.Concurrent.STM.TChan (TChan, dupTChan, newTChan,
+                                               readTChan, writeTChan)
+import           Control.Concurrent.STM.TMVar (TMVar, newTMVar, putTMVar,
+                                               readTMVar, takeTMVar)
+import           Control.Exception            (bracket)
+import           Control.Monad.Loops          (untilJust)
+import           Control.Monad.Managed        (MonadManaged)
+import           Data.Foldable                (traverse_)
+import           Turtle                       (Fold (..), MonadIO, fork, liftIO,
+                                               void, wait)
 
-import           QuorumTools.Types
-
-pureModifyMVar :: MVar a -> (a -> a) -> IO a
-pureModifyMVar var f = modifyMVar var f' where
-  f' a = let result = f a in pure (result, result)
-
--- | Fulfil the returned async as soon as the MVar is filled.
-awaitMVar :: MonadManaged m => MVar a -> m (Async a)
-awaitMVar = fork . takeMVar
+data Behavior a = Behavior (TChan a) (TMVar a)
 
 -- | Await fulfillment of all asyncs before continuing.
 --
@@ -52,35 +47,29 @@ find' predicate = Fold step Nothing id where
 event :: forall m e. MonadManaged m => e -> m (Async e, IO ())
 event e = do
   mvar <- liftIO newEmptyMVar
-  occurred <- awaitMVar mvar
+  occurred <- fork $ takeMVar mvar
   let fire = void $ tryPutMVar mvar e
   pure (occurred, fire)
 
--- | Creates a stream of values for a single publisher to update, and many
+-- | Creates a stream of values for a many publishers to update, and many
 -- consumers to subscribe (to value changes) or observe the current value.
---
--- NOTE: if we used STM+TChan+TMVar, we could remove the single-producer
--- restriction by modifying the chan and mvar concurrently.
---
 behavior :: (MonadIO m, Monoid a) => m (Behavior a)
-behavior = Behavior <$> liftIO newChan <*> liftIO (newMVar mempty)
+behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar mempty
 
 transition :: MonadIO m => Behavior a -> (a -> a) -> m ()
-transition (Behavior chan mvar) update = liftIO $ do
-  nextValue <- pureModifyMVar mvar update
-  writeChan chan nextValue
+transition (Behavior tc tm) f = liftIO $ atomically $ do
+  prev <- takeTMVar tm
+  let next = f prev
+  putTMVar tm next
+  writeTChan tc next
 
-subscribe :: MonadIO m => Behavior a -> m (Chan a)
-subscribe (Behavior chan _) = liftIO $ dupChan chan
+subscribe :: MonadIO m => Behavior a -> m (TChan a)
+subscribe (Behavior chan _) = liftIO $ atomically $ dupTChan chan
 
 observe :: MonadIO m => Behavior a -> m a
-observe (Behavior _ mvar) = liftIO $ readMVar mvar
+observe (Behavior _ mvar) = liftIO $ atomically $ readTMVar mvar
 
---
--- TODO: this won't leak memory via the duplicated channel after our event
--- occurs, right?
---
 watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
-watch b check = do
+watch b decide = do
   chan <- subscribe b
-  fork $ liftIO $ untilJust $ check <$> readChan chan
+  fork $ liftIO $ untilJust $ decide <$> atomically (readTChan chan)
