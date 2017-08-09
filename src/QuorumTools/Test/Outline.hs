@@ -33,7 +33,7 @@ import Control.Concurrent.Async (async)
 import QuorumTools.Client
 import QuorumTools.Cluster
 import QuorumTools.Constellation
-import QuorumTools.Control (awaitAll, observe)
+import QuorumTools.Control (Behavior, awaitAll, observe)
 import QuorumTools.Types
 import QuorumTools.Util (inshellWithJoinedErr)
 

@@ -39,7 +39,8 @@ library
     monad-loops           == 0.4.*,
     optional-args         == 1.0.*,
     ansi-terminal         == 0.6.*,
-    constellation         == 0.1.*
+    constellation         == 0.1.*,
+    stm                   == 2.4.*
   exposed-modules:
     QuorumTools
     QuorumTools.Mains.LocalNew
