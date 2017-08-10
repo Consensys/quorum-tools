@@ -14,10 +14,11 @@ import           Control.Exception            (bracket)
 import           Control.Monad.Loops          (untilJust)
 import           Control.Monad.Managed        (MonadManaged)
 import           Data.Foldable                (traverse_)
+import           Data.Maybe                   (fromMaybe)
 import           Turtle                       (Fold (..), MonadIO, fork, liftIO,
                                                void, wait)
 
-data Behavior a = Behavior (TChan a) (TMVar a)
+data Behavior a = Behavior (TChan a) (TMVar (Maybe a))
 
 -- | Await fulfillment of all asyncs before continuing.
 --
@@ -53,21 +54,27 @@ event e = do
 
 -- | Creates a stream of values for a many publishers to update, and many
 -- consumers to subscribe (to value changes) or observe the current value.
-behavior :: (MonadIO m, Monoid a) => m (Behavior a)
-behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar mempty
+behavior :: (MonadIO m) => m (Behavior a)
+behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar Nothing
 
-transition :: MonadIO m => Behavior a -> (a -> a) -> m ()
-transition (Behavior tc tm) f = liftIO $ atomically $ do
+transition' :: MonadIO m => Behavior a -> (Maybe a -> a) -> m ()
+transition' (Behavior tc tm) f = liftIO $ atomically $ do
   prev <- takeTMVar tm
   let next = f prev
-  putTMVar tm next
+  putTMVar tm $ Just next
   writeTChan tc next
+
+transition :: (MonadIO m, Monoid a) => Behavior a -> (a -> a) -> m ()
+transition b f = transition' b (f . fromMaybe mempty)
 
 subscribe :: MonadIO m => Behavior a -> m (TChan a)
 subscribe (Behavior chan _) = liftIO $ atomically $ dupTChan chan
 
-observe :: MonadIO m => Behavior a -> m a
-observe (Behavior _ mvar) = liftIO $ atomically $ readTMVar mvar
+observe' :: MonadIO m => Behavior a -> m (Maybe a)
+observe' (Behavior _ mvar) = liftIO $ atomically $ readTMVar mvar
+
+observe :: (MonadIO m, Monoid a) => Behavior a -> m a
+observe = fmap (fromMaybe mempty) . observe'
 
 watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
 watch b decide = do
