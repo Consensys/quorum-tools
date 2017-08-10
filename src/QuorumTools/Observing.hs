@@ -1,21 +1,21 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module QuorumTools.Observing where
 
-import qualified Data.Map.Strict            as Map
-import           Data.Monoid                (Last, (<>))
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text, isInfixOf, pack)
-import qualified Data.Text                  as T
-import           Prelude                    hiding (FilePath, lines)
-import           Turtle                     hiding (env, view)
+import qualified Data.Map.Strict        as Map
+import           Data.Monoid            (Last, (<>))
+import           Data.Set               (Set)
+import qualified Data.Set               as Set
+import           Data.Text              (Text, isInfixOf, pack)
+import qualified Data.Text              as T
+import           Prelude                hiding (FilePath, lines)
+import           Turtle                 hiding (env, view)
 
 import           QuorumTools.Checkpoint
-import           QuorumTools.Types          hiding (lastBlock, lastRaftStatus)
-import           QuorumTools.Util           (matchOnce)
+import           QuorumTools.Types      hiding (lastBlock, lastRaftStatus)
+import           QuorumTools.Util       (matchOnce)
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Text -> (a -> IO ()) -> IO ()
