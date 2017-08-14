@@ -68,15 +68,12 @@ event e = do
 behavior :: (MonadIO m) => m (Behavior a)
 behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar Nothing
 
-transition' :: MonadIO m => Behavior a -> (Maybe a -> a) -> m ()
-transition' (Behavior tc tm) f = liftIO $ atomically $ do
+transition :: MonadIO m => Behavior a -> (Maybe a -> a) -> m ()
+transition (Behavior tc tm) f = liftIO $ atomically $ do
   v <- takeTMVar tm
   let v' = f v
   putTMVar tm $ Just v'
   writeTChan tc v'
-
-transition :: (MonadIO m, Monoid a) => Behavior a -> (a -> a) -> m ()
-transition b f = transition' b (f . fromMaybe mempty)
 
 subscribe' :: Behavior a -> STM (TChan a)
 subscribe' (Behavior chan _) = dupTChan chan
@@ -114,7 +111,7 @@ mapB f upstream = do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
         let val' = f $! val
-        transition' downstream (const val')
+        transition downstream (const val')
 
 -- We use Vectors here for efficient update by index. If 'Behavior' was a
 -- 'Monad' then we could return the same @Traversable t@ instead.
@@ -136,7 +133,7 @@ combine upstreams = do
       for_ (zip [(0 :: Int)..] chans) $ \(i, chan) -> fork $ forever $ do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
-        transition' downstream $ (V.// [(i, Just val)]) . fromJust
+        transition downstream $ (V.// [(i, Just val)]) . fromJust
 
 -- | Yields the results in Right only when all 'Behavior's have produced a
 -- value, and they are all the same.

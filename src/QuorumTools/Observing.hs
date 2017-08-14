@@ -5,7 +5,8 @@
 module QuorumTools.Observing where
 
 import qualified Data.Map.Strict        as Map
-import           Data.Monoid            (Last, (<>))
+import           Data.Maybe             (fromMaybe)
+import           Data.Monoid            (Last)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.Text              (Text, isInfixOf, pack)
@@ -34,12 +35,12 @@ observingBoot trigger = observingLines $ \line ->
   when ("IPC endpoint opened:" `isInfixOf` line) trigger
 
 observingLastBlock
-  :: ((Last Block -> Last Block) -> IO ())
+  :: ((Maybe (Last Block) -> Last Block) -> IO ())
   -> Shell Line
   -> Shell Line
 observingLastBlock updateLastBlock = observingLines $ \line ->
     case matchOnce blockPattern line of
-      Just latest -> updateLastBlock (<> pure latest)
+      Just latest -> updateLastBlock $ const $ pure latest
       _           -> pure ()
 
   where
@@ -48,25 +49,25 @@ observingLastBlock updateLastBlock = observingLines $ \line ->
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
 
 observingTxes
-  :: ((OutstandingTxes -> OutstandingTxes) -> IO ())
-  -> ((TxAddrs -> TxAddrs) -> IO ())
+  :: ((Maybe OutstandingTxes -> OutstandingTxes) -> IO ())
+  -> ((Maybe TxAddrs -> TxAddrs) -> IO ())
   -> Shell Line
   -> Shell Line
 observingTxes updateOutstanding updateAddrs = observingLines $ \line -> do
     matchCheckpoint' TxCreated line $ \(tx, addr) -> do
-      updateOutstanding (OutstandingTxes . Set.insert tx . unOutstandingTxes)
-      updateAddrs (TxAddrs . Map.insert tx addr . unTxAddrs)
+      updateOutstanding (OutstandingTxes . Set.insert tx . unOutstandingTxes . fromMaybe mempty)
+      updateAddrs (TxAddrs . Map.insert tx addr . unTxAddrs . fromMaybe mempty)
 
     matchCheckpoint' TxAccepted line $ \tx ->
-      updateOutstanding (OutstandingTxes . Set.delete tx . unOutstandingTxes)
+      updateOutstanding (OutstandingTxes . Set.delete tx . unOutstandingTxes . fromMaybe mempty)
 
 observingRaftStatus
-  :: ((Last RaftStatus -> Last RaftStatus) -> IO ())
+  :: ((Maybe (Last RaftStatus) -> Last RaftStatus) -> IO ())
   -> Shell Line
   -> Shell Line
 observingRaftStatus updateRaftStatus = observingLines $ \line ->
     case matchOnce statusPattern line of
-      Just raftStatus -> liftIO $ updateRaftStatus (<> pure raftStatus)
+      Just raftStatus -> liftIO $ updateRaftStatus $ const $ pure raftStatus
       _               -> pure ()
 
   where
@@ -86,12 +87,12 @@ observingRoles trigger = observingLines $ \line -> do
   matchCheckpoint' BecameVerifier line $ \() -> trigger
 
 observingActivation
-  :: ((Set GethId -> Set GethId) -> IO ())
+  :: ((Maybe (Set GethId) -> Set GethId) -> IO ())
   -> Shell Line
   -> Shell Line
 observingActivation updateConnections = observingLines $ \line -> do
   matchCheckpoint' PeerConnected line $ \(PeerJoined joined) ->
-    updateConnections (Set.insert joined)
+    updateConnections (Set.insert joined . fromMaybe Set.empty)
 
   matchCheckpoint' PeerDisconnected line $ \(PeerLeft left) ->
-    updateConnections (Set.delete left)
+    updateConnections (Set.delete left . fromMaybe Set.empty)
