@@ -267,12 +267,12 @@ existingMember `addsNode` newcomer = do
     Right _raftId -> return ()
 
 removesNode :: Geth -> Geth -> TestM ()
-existingMember `removesNode` newcomer = do
-  let message = "removing node " <> T.pack (show (gId (gethId newcomer)))
+existingMember `removesNode` target = do
+  let message = "removing node " <> T.pack (show (gId (gethId target)))
   timestampedMessage $ "waiting before " <> message
   td 2
   timestampedMessage message
-  result <- removeNode existingMember (gethId newcomer)
+  result <- removeNode existingMember (gethId target)
   case result of
     Left _err -> throwError RemoveNodeFailure
     Right () -> return ()
