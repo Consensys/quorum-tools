@@ -5,7 +5,7 @@ module QuorumTools.Test.Raft.RestartNodeTest where
 
 import           Control.Concurrent.Async (Concurrently (..))
 import           Control.Lens             ((.~))
-import           Data.Monoid              (Last)
+import           Data.Maybe               (fromMaybe)
 import           Turtle
 
 import           QuorumTools.Cluster
@@ -22,7 +22,7 @@ waitForElection instruments = do
   _ <- wait (assumedRole instruments)
   timestampedMessage "initial election succeeded"
 
-type NodeInfo = (Last Block, OutstandingTxes)
+type NodeInfo = (Maybe Block, OutstandingTxes)
 
 refine :: Either FailureReason a -> IO a
 refine (Left failure) = print failure >> exit failedTestCode
@@ -31,7 +31,7 @@ refine (Right a)      = pure a
 readNodeInfo :: Either FailureReason NodeInstrumentation -> IO NodeInfo
 readNodeInfo = refine >=> \instruments -> (,)
   <$> observe (lastBlock instruments)
-  <*> observe (outstandingTxes instruments)
+  <*> fmap (fromMaybe mempty) (observe (outstandingTxes instruments))
 
 --   seconds  |   spammer    |    node 1    |    nodes 2 / 3
 -- ---------------------------------------------------------

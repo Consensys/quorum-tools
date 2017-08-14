@@ -6,14 +6,14 @@
 module QuorumTools.Test.Outline where
 
 import           Control.Concurrent       (threadDelay)
-import           Control.Concurrent.Async (Async, cancel, poll)
+import           Control.Concurrent.Async (Async, async, cancel, poll)
 import           Control.Concurrent.MVar  (readMVar, newEmptyMVar, putMVar)
 import           Control.Lens
 import           Control.Monad            (forM_)
 import           Control.Monad.Except
 import           Control.Monad.Managed    (MonadManaged)
-import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.Monoid              (Last (Last))
+import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader, ask)
+import           Data.Maybe               (fromMaybe)
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
 import qualified Data.Set                 as Set
@@ -27,8 +27,6 @@ import           Prelude                  hiding (FilePath)
 import           System.Info
 import           Turtle
 
-import Control.Monad.Reader (ask)
-import Control.Concurrent.Async (async)
 import QuorumTools.Client
 import QuorumTools.Cluster
 import QuorumTools.Constellation
@@ -39,7 +37,7 @@ newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
 
 data FailureReason
-  = WrongOrder (Last Block) (Last Block)
+  = WrongOrder (Maybe Block) (Maybe Block)
   | NoBlockFound
   | TerminatedUnexpectedly
   | LostTxes (Set TxId)
@@ -172,13 +170,14 @@ testNTimes times = tester predicate
 -- * There are no lost transactions
 -- * The nodes all have the same last block
 verify
-  :: [Behavior (Last Block)]
+  :: [Behavior Block]
   -> [Behavior OutstandingTxes]
   -> [Async NodeTerminated]
   -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
   lastBlocks        <- liftIO $ traverse observe lastBlockBs
-  outstandingTxes_  <- liftIO $ traverse observe outstandingTxesBs
+  outstandingTxes_  <- fmap (fmap $ fromMaybe mempty) <$>
+                         liftIO $ traverse observe outstandingTxesBs
   earlyTerminations <- liftIO $ traverse poll    terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
@@ -197,11 +196,11 @@ verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
     Falsified reason -> throwError reason
     Verified         -> pure ()
 
-verifyLastBlocks :: [Last Block] -> Validity
+verifyLastBlocks :: [Maybe Block] -> Validity
 verifyLastBlocks blocks = case allSame blocks of
-  NotSame a b -> Falsified $ WrongOrder a b
-  Same (Last Nothing) -> Falsified NoBlockFound
-  _ -> Verified
+  NotSame a b  -> Falsified $ WrongOrder a b
+  Same Nothing -> Falsified NoBlockFound
+  _            -> Verified
 
 verifyOutstandingTxes :: [OutstandingTxes] -> Validity
 verifyOutstandingTxes txes =

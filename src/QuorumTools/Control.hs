@@ -18,7 +18,7 @@ import           Control.Monad                (forever, (<$!>))
 import           Control.Monad.Loops          (untilJust)
 import           Control.Monad.Managed        (Managed, MonadManaged, with)
 import           Data.Foldable                (for_, toList, traverse_)
-import           Data.Maybe                   (fromJust, fromMaybe)
+import           Data.Maybe                   (fromJust)
 import           Data.Monoid.Same             (allSame_)
 import           Data.Time.Units              (TimeUnit, toMicroseconds)
 import           Data.Vector                  (Vector)
@@ -84,8 +84,8 @@ subscribe = liftIO . atomically . subscribe'
 observe' :: Behavior a -> STM (Maybe a)
 observe' (Behavior _ mvar) = readTMVar mvar
 
-observe :: (MonadIO m, Monoid a) => Behavior a -> m a
-observe = fmap (fromMaybe mempty) . liftIO . atomically . observe'
+observe :: (MonadIO m) => Behavior a -> m (Maybe a)
+observe = liftIO . atomically . observe'
 
 watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
 watch b decide = do

@@ -6,7 +6,6 @@ module QuorumTools.Observing where
 
 import qualified Data.Map.Strict        as Map
 import           Data.Maybe             (fromMaybe)
-import           Data.Monoid            (Last)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.Text              (Text, isInfixOf, pack)
@@ -35,12 +34,12 @@ observingBoot trigger = observingLines $ \line ->
   when ("IPC endpoint opened:" `isInfixOf` line) trigger
 
 observingLastBlock
-  :: ((Maybe (Last Block) -> Last Block) -> IO ())
+  :: ((Maybe Block -> Block) -> IO ())
   -> Shell Line
   -> Shell Line
 observingLastBlock updateLastBlock = observingLines $ \line ->
     case matchOnce blockPattern line of
-      Just latest -> updateLastBlock $ const $ pure latest
+      Just latest -> updateLastBlock $ const latest
       _           -> pure ()
 
   where
@@ -62,12 +61,12 @@ observingTxes updateOutstanding updateAddrs = observingLines $ \line -> do
       updateOutstanding (OutstandingTxes . Set.delete tx . unOutstandingTxes . fromMaybe mempty)
 
 observingRaftStatus
-  :: ((Maybe (Last RaftStatus) -> Last RaftStatus) -> IO ())
+  :: ((Maybe RaftStatus -> RaftStatus) -> IO ())
   -> Shell Line
   -> Shell Line
 observingRaftStatus updateRaftStatus = observingLines $ \line ->
     case matchOnce statusPattern line of
-      Just raftStatus -> liftIO $ updateRaftStatus $ const $ pure raftStatus
+      Just raftStatus -> liftIO $ updateRaftStatus $ const raftStatus
       _               -> pure ()
 
   where
