@@ -12,7 +12,7 @@ import           QuorumTools.Types
 
 privateStateTestMain :: IO ()
 privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
-  let [g1, g2, g3] = fst <$> iNodes
+  let ([g1, g2, g3], instruments) = unzip iNodes
       (_, geth1Instruments) = head iNodes
 
   -- geth1 and geth3 are both party to this tx, but geth2 is not
@@ -25,7 +25,7 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let increments = 5
   replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
 
-  td 2
+  awaitBlockConvergence instruments
 
   let expectedPrivateValue = 42 + increments
 

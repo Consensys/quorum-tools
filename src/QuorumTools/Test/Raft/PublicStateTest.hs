@@ -16,6 +16,7 @@ publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
       geths = fst <$> iNodes
       sendTo = cycle geths
       contract = simpleStorage Public
+      instruments = snd <$> iNodes
 
   storageAddr <- createContract geth1 contract (txAddrs geth1Instruments)
 
@@ -24,7 +25,7 @@ publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   forM_ (take increments sendTo) $ \geth ->
     incrementStorage geth contract storageAddr
 
-  td 2
+  awaitBlockConvergence instruments
 
   let expectedValue = 42 + increments
 
