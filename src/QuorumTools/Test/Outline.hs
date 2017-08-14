@@ -22,6 +22,8 @@ import           Data.Text                (Text, pack)
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as T
 import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
+import           Data.Time.Units          (Second)
+import           Data.Vector              (Vector)
 import qualified QuorumTools.IpTables     as IPT
 import qualified QuorumTools.PacketFilter as PF
 import           Prelude                  hiding (FilePath)
@@ -31,7 +33,7 @@ import           Turtle
 import QuorumTools.Client
 import QuorumTools.Cluster
 import QuorumTools.Constellation
-import QuorumTools.Control (Behavior, awaitAll, observe)
+import QuorumTools.Control (Behavior, awaitAll, observe, awaitConvergence)
 import QuorumTools.Types
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
@@ -270,3 +272,9 @@ existingMember `removesNode` newcomer = do
   case result of
     Left _err -> throwError RemoveNodeFailure
     Right () -> return ()
+
+raftConvergence :: (MonadManaged m, Traversable t)
+                => t NodeInstrumentation
+                -> m (Async (Either (Vector (Last Block))
+                                            (Vector Block)))
+raftConvergence = awaitConvergence (1 :: Second) . fmap lastBlock
