@@ -4,7 +4,8 @@
 
 module QuorumTools.Control where
 
-import           Control.Concurrent.Async     (Async)
+import           Control.Concurrent           (threadDelay)
+import           Control.Concurrent.Async     (Async, async, waitEitherCancel)
 import           Control.Concurrent.MVar      (newEmptyMVar, takeMVar,
                                                tryPutMVar)
 import           Control.Concurrent.STM       (STM, atomically)
@@ -15,9 +16,11 @@ import           Control.Concurrent.STM.TMVar (TMVar, newTMVar, putTMVar,
 import           Control.Exception            (bracket)
 import           Control.Monad                (forever, (<$!>))
 import           Control.Monad.Loops          (untilJust)
-import           Control.Monad.Managed        (MonadManaged)
+import           Control.Monad.Managed        (Managed, MonadManaged, with)
 import           Data.Foldable                (for_, toList, traverse_)
 import           Data.Maybe                   (fromJust, fromMaybe)
+import           Data.Monoid.Same             (allSame_)
+import           Data.Time.Units              (TimeUnit, toMicroseconds)
 import           Data.Vector                  (Vector)
 import qualified Data.Vector                  as V
 import           Turtle                       (Fold (..), MonadIO, fork, liftIO,
@@ -38,6 +41,9 @@ awaitAll = liftIO . traverse_ wait
 -- @
 onExit :: IO () -> (() -> IO r) -> IO r
 onExit action = bracket (pure ()) (const action)
+
+timer :: (TimeUnit t, MonadIO m) => t -> m (Async ())
+timer = liftIO . async . threadDelay . fromIntegral . toMicroseconds
 
 -- | @(find' predicate)@ returns the first @Just@ predicate result or 'Nothing'
 -- if no element satisfies the predicate
@@ -92,14 +98,6 @@ watch b decide = do
 nextFrom :: MonadManaged m => Behavior a -> m (Async a)
 nextFrom b = watch b Just
 
--- forkReplication :: MonadManaged m => forall r. (a -> IO b) -> Behavior a -> Behavior b -> m (Async r)
--- forkReplication act upstream downstream = fork $ do
---   chan <- subscribe upstream
---   forever $ do
---     val <- atomically $ readTChan chan
---     val' <- act val
---     transition' downstream (const val')
-
 mapB :: (MonadManaged m) => (a -> b) -> Behavior a -> m (Behavior b)
 mapB f upstream = do
     downstream <- behavior
@@ -118,17 +116,8 @@ mapB f upstream = do
         let val' = f $! val
         transition' downstream (const val')
 
--- -- | When any of the input behaviors post a new value, the output behavior will
--- -- post that value. In theory we could implement a simple 'merge' which works
--- -- over two 'Behavior's then implement this function in terms of that, but our
--- -- "FRP" implementation is not so efficient, so we don't have that luxury.
--- merged :: (MonadManaged m, Foldable f) => f (Behavior a) -> m (Behavior a)
--- merged upstreams = do
---   downstream <- behavior
---   for_ upstreams $ \upstream ->
---     forkReplication pure upstream downstream
---   return downstream
-
+-- We use Vectors here for efficient update by index. If 'Behavior' was a
+-- 'Monad' then we could return the same @Traversable t@ instead.
 combine :: forall a m t. (MonadManaged m, Traversable t)
         => t (Behavior a)
         -> m (Behavior (Vector (Maybe a)))
@@ -148,3 +137,36 @@ combine upstreams = do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
         transition' downstream $ (V.// [(i, Just val)]) . fromJust
+
+-- | Yields the results in Right only when all 'Behavior's have produced a
+-- value, and they are all the same.
+awaitConvergence :: forall m t time a
+                  . (MonadManaged m, Traversable t, TimeUnit time, Eq a)
+                 => time
+                 -> t (Behavior a)
+                 -> m (Async (Either (Vector (Maybe a))
+                                     (Vector a)))
+awaitConvergence time upstreams = do
+    updates <- combine upstreams
+    fork $ untilJust $ raceTimeout updates
+
+  where
+    -- @Nothing@ means the timeout was interrupted
+    -- @Just@ means the timer ran to completion without interruption
+    raceTimeout :: Behavior (Vector (Maybe a))
+                -> IO (Maybe (Either (Vector (Maybe a))
+                                     (Vector a)))
+    raceTimeout changes = unsafeDischargeManaged $ do
+      timeout <- timer time
+      nextChange <- nextFrom changes
+      winner <- liftIO $ waitEitherCancel timeout nextChange
+      case winner of
+        Left () -> return Nothing
+        Right vec ->
+          return $ Just $ case sequence vec of
+            Nothing -> Left vec
+            Just vals | allSame_ vals -> Right vals
+                      | otherwise -> Left vec
+
+    unsafeDischargeManaged :: Managed r -> IO r
+    unsafeDischargeManaged = flip with pure
