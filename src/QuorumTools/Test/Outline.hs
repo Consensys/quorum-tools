@@ -5,36 +5,39 @@
 
 module QuorumTools.Test.Outline where
 
-import           Control.Concurrent       (threadDelay)
-import           Control.Concurrent.Async (Async, async, cancel, poll)
-import           Control.Concurrent.MVar  (readMVar, newEmptyMVar, putMVar)
+import           Control.Concurrent        (threadDelay)
+import           Control.Concurrent.Async  (Async, async, cancel, poll)
+import           Control.Concurrent.MVar   (readMVar, newEmptyMVar, putMVar)
 import           Control.Lens
-import           Control.Monad            (forM_)
+import           Control.Monad             (forM_)
 import           Control.Monad.Except
-import           Control.Monad.Managed    (MonadManaged)
-import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader, ask)
-import           Data.Maybe               (fromMaybe)
-import           Data.Monoid              (Last (Last), getLast)
-import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
-import           Data.Set                 (Set)
-import qualified Data.Set                 as Set
-import           Data.Text                (Text, pack)
-import qualified Data.Text                as T
-import qualified Data.Text.IO             as T
-import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
-import           Data.Time.Units          (Second)
-import           Data.Vector              (Vector)
-import qualified QuorumTools.IpTables     as IPT
-import qualified QuorumTools.PacketFilter as PF
-import           Prelude                  hiding (FilePath)
+import           Control.Monad.Managed     (MonadManaged)
+import           Control.Monad.Reader      (ReaderT (runReaderT), MonadReader,
+                                            ask)
+import           Data.Maybe                (fromMaybe)
+import           Data.Monoid               (Last (Last), getLast)
+import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
+import           Data.Text                 (Text, pack)
+import qualified Data.Text                 as T
+import qualified Data.Text.IO              as T
+import           Data.Time                 (defaultTimeLocale, formatTime,
+                                            getZonedTime)
+import           Data.Time.Units           (Second)
+import           Data.Vector               (Vector)
+import qualified QuorumTools.IpTables      as IPT
+import qualified QuorumTools.PacketFilter  as PF
+import           Prelude                   hiding (FilePath)
 import           System.Info
 import           Turtle
 
-import QuorumTools.Client
-import QuorumTools.Cluster
-import QuorumTools.Constellation
-import QuorumTools.Control (Behavior, awaitAll, observe, awaitConvergence)
-import QuorumTools.Types
+import           QuorumTools.Client
+import           QuorumTools.Cluster
+import           QuorumTools.Constellation
+import           QuorumTools.Control       (Behavior, awaitAll, convergence,
+                                            observe)
+import           QuorumTools.Types
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -48,6 +51,7 @@ data FailureReason
   | WrongValue Int (Either Text Int)
   | AddNodeFailure
   | RemoveNodeFailure
+  | ClusterDivergence (Vector (Last Block))
   deriving Show
 
 data Validity
@@ -273,8 +277,20 @@ existingMember `removesNode` newcomer = do
     Left _err -> throwError RemoveNodeFailure
     Right () -> return ()
 
-raftConvergence :: (MonadManaged m, Traversable t)
-                => t NodeInstrumentation
-                -> m (Async (Either (Vector (Last Block))
-                                            (Vector Block)))
-raftConvergence = awaitConvergence (1 :: Second) . fmap lastBlock
+-- NOTE: This currently assumes raft-based consensus, due to the short duration.
+-- Once we have first-class support for multiple types of consensus, this should
+-- be aware of the expected latency across consensus mechanisms.
+blockConvergence :: (MonadManaged m, Traversable t)
+                 => t NodeInstrumentation
+                 -> m (Async (Either (Vector (Last Block)) Block))
+blockConvergence = convergence (1 :: Second) . fmap lastBlock
+
+awaitBlockConvergence
+  :: (MonadManaged m, MonadError FailureReason m, Traversable t)
+  => t NodeInstrumentation
+  -> m ()
+awaitBlockConvergence instruments = do
+  result <- wait =<< blockConvergence instruments
+  case result of
+    Left lastBlocks -> throwError $ ClusterDivergence lastBlocks
+    Right _block -> return ()

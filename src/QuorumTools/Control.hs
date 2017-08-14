@@ -20,7 +20,7 @@ import           Control.Monad.Managed        (Managed, MonadManaged, with)
 import           Data.Foldable                (for_, toList, traverse_)
 import           Data.Maybe                   (fromJust)
 import           Data.Monoid                  (Last (Last), getLast)
-import           Data.Monoid.Same             (allSame_)
+import           Data.Monoid.Same             (Same (..), allSame)
 import           Data.Time.Units              (TimeUnit, toMicroseconds)
 import           Data.Vector                  (Vector)
 import qualified Data.Vector                  as V
@@ -138,13 +138,12 @@ combine upstreams = do
 
 -- | Yields the results in Right only when all 'Behavior's have produced a
 -- value, and they are all the same.
-awaitConvergence :: forall m t time a
-                  . (MonadManaged m, Traversable t, TimeUnit time, Eq a)
-                 => time
-                 -> t (Behavior a)
-                 -> m (Async (Either (Vector (Last a))
-                                     (Vector a)))
-awaitConvergence time upstreams = do
+convergence :: forall m t time a
+             . (MonadManaged m, Traversable t, TimeUnit time, Eq a)
+            => time
+            -> t (Behavior a)
+            -> m (Async (Either (Vector (Last a)) a))
+convergence time upstreams = do
     updates <- combine upstreams
     fork $ untilJust $ raceTimeout updates
 
@@ -152,19 +151,23 @@ awaitConvergence time upstreams = do
     -- @Nothing@ means the timeout was interrupted
     -- @Just@ means the timer ran to completion without interruption
     raceTimeout :: Behavior (Vector (Last a))
-                -> IO (Maybe (Either (Vector (Last a))
-                                     (Vector a)))
+                -> IO (Maybe (Either (Vector (Last a)) a))
     raceTimeout changes = unsafeDischargeManaged $ do
       timeout <- timer time
       nextChange <- nextFrom changes
       winner <- liftIO $ waitEitherCancel timeout nextChange
       case winner of
-        Left () -> return Nothing
-        Right vec ->
-          return $ Just $ case sequence vec of
-            Last Nothing -> Left vec
-            Last (Just vals) | allSame_ vals -> Right vals
-                             | otherwise -> Left vec
+        Right _change -> return Nothing
+        Left () -> do
+          mvals <- observe changes
+          case mvals of
+            Last Nothing ->
+              error "impossible lack of last value from combined behavior"
+            Last (Just vals) -> return $ Just $ case allSame vals of
+              DegenerateSame -> Left V.empty
+              Same (Last Nothing) -> Left vals
+              Same (Last (Just val)) -> Right val
+              NotSame _ _ -> Left vals
 
     unsafeDischargeManaged :: Managed r -> IO r
     unsafeDischargeManaged = flip with pure
