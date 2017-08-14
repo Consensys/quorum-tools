@@ -102,6 +102,7 @@ createGenesisJson acctIds = do
         , "chainId"        .= i 1
         , "eip155Block"    .= i 100000000
         , "eip158Block"    .= i 100000000
+        , "isQuorum"       .= True
         ]
       , "difficulty" .= t "0x0"
       , "extraData"  .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
