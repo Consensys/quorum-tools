@@ -14,6 +14,7 @@ import           Control.Monad.Except
 import           Control.Monad.Managed    (MonadManaged)
 import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader, ask)
 import           Data.Maybe               (fromMaybe)
+import           Data.Monoid              (Last (Last), getLast)
 import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
 import           Data.Set                 (Set)
 import qualified Data.Set                 as Set
@@ -37,7 +38,7 @@ newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
 
 data FailureReason
-  = WrongOrder (Maybe Block) (Maybe Block)
+  = WrongOrder (Last Block) (Last Block)
   | NoBlockFound
   | TerminatedUnexpectedly
   | LostTxes (Set TxId)
@@ -176,7 +177,7 @@ verify
   -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
   lastBlocks        <- liftIO $ traverse observe lastBlockBs
-  outstandingTxes_  <- fmap (fmap $ fromMaybe mempty) <$>
+  outstandingTxes_  <- fmap (fmap $ fromMaybe mempty . getLast) <$>
                          liftIO $ traverse observe outstandingTxesBs
   earlyTerminations <- liftIO $ traverse poll    terminatedAsyncs
 
@@ -196,11 +197,11 @@ verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
     Falsified reason -> throwError reason
     Verified         -> pure ()
 
-verifyLastBlocks :: [Maybe Block] -> Validity
+verifyLastBlocks :: [Last Block] -> Validity
 verifyLastBlocks blocks = case allSame blocks of
-  NotSame a b  -> Falsified $ WrongOrder a b
-  Same Nothing -> Falsified NoBlockFound
-  _            -> Verified
+  NotSame a b         -> Falsified $ WrongOrder a b
+  Same (Last Nothing) -> Falsified NoBlockFound
+  _                   -> Verified
 
 verifyOutstandingTxes :: [OutstandingTxes] -> Validity
 verifyOutstandingTxes txes =

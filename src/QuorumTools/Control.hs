@@ -19,6 +19,7 @@ import           Control.Monad.Loops          (untilJust)
 import           Control.Monad.Managed        (Managed, MonadManaged, with)
 import           Data.Foldable                (for_, toList, traverse_)
 import           Data.Maybe                   (fromJust)
+import           Data.Monoid                  (Last (Last), getLast)
 import           Data.Monoid.Same             (allSame_)
 import           Data.Time.Units              (TimeUnit, toMicroseconds)
 import           Data.Vector                  (Vector)
@@ -26,7 +27,7 @@ import qualified Data.Vector                  as V
 import           Turtle                       (Fold (..), MonadIO, fork, liftIO,
                                                void, wait)
 
-data Behavior a = Behavior (TChan a) (TMVar (Maybe a))
+data Behavior a = Behavior (TChan a) (TMVar (Last a))
 
 -- | Await fulfillment of all asyncs before continuing.
 --
@@ -66,13 +67,13 @@ event e = do
 -- | Creates a stream of values for many publishers to update, and many
 -- consumers to subscribe (to value changes) or observe the current value.
 behavior :: (MonadIO m) => m (Behavior a)
-behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar Nothing
+behavior = liftIO $ atomically $ Behavior <$> newTChan <*> newTMVar mempty
 
-transition :: MonadIO m => Behavior a -> (Maybe a -> a) -> m ()
+transition :: MonadIO m => Behavior a -> (Last a -> a) -> m ()
 transition (Behavior tc tm) f = liftIO $ atomically $ do
   v <- takeTMVar tm
   let v' = f v
-  putTMVar tm $ Just v'
+  putTMVar tm $ Last $ Just v'
   writeTChan tc v'
 
 subscribe' :: Behavior a -> STM (TChan a)
@@ -81,10 +82,10 @@ subscribe' (Behavior chan _) = dupTChan chan
 subscribe :: MonadIO m => Behavior a -> m (TChan a)
 subscribe = liftIO . atomically . subscribe'
 
-observe' :: Behavior a -> STM (Maybe a)
+observe' :: Behavior a -> STM (Last a)
 observe' (Behavior _ mvar) = readTMVar mvar
 
-observe :: (MonadIO m) => Behavior a -> m (Maybe a)
+observe :: (MonadIO m) => Behavior a -> m (Last a)
 observe = liftIO . atomically . observe'
 
 watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
@@ -117,23 +118,23 @@ mapB f upstream = do
 -- 'Monad' then we could return the same @Traversable t@ instead.
 combine :: forall a m t. (MonadManaged m, Traversable t)
         => t (Behavior a)
-        -> m (Behavior (Vector (Maybe a)))
+        -> m (Behavior (Vector (Last a)))
 combine upstreams = do
     downstream <- behavior
     startReplication downstream
     return downstream
 
   where
-    startReplication :: Behavior (Vector (Maybe a)) -> m ()
+    startReplication :: Behavior (Vector (Last a)) -> m ()
     startReplication downstream@(Behavior _ downstreamTm) = do
       chans <- fmap toList $ liftIO $ atomically $ do
         mv0s <- traverse observe' upstreams
-        void $ swapTMVar downstreamTm $ Just $ V.fromList $ toList mv0s
+        void $ swapTMVar downstreamTm $ Last $ Just $ V.fromList $ toList mv0s
         traverse subscribe' upstreams
       for_ (zip [(0 :: Int)..] chans) $ \(i, chan) -> fork $ forever $ do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
-        transition downstream $ (V.// [(i, Just val)]) . fromJust
+        transition downstream $ (V.// [(i, Last $ Just val)]) . fromJust . getLast
 
 -- | Yields the results in Right only when all 'Behavior's have produced a
 -- value, and they are all the same.
@@ -141,7 +142,7 @@ awaitConvergence :: forall m t time a
                   . (MonadManaged m, Traversable t, TimeUnit time, Eq a)
                  => time
                  -> t (Behavior a)
-                 -> m (Async (Either (Vector (Maybe a))
+                 -> m (Async (Either (Vector (Last a))
                                      (Vector a)))
 awaitConvergence time upstreams = do
     updates <- combine upstreams
@@ -150,8 +151,8 @@ awaitConvergence time upstreams = do
   where
     -- @Nothing@ means the timeout was interrupted
     -- @Just@ means the timer ran to completion without interruption
-    raceTimeout :: Behavior (Vector (Maybe a))
-                -> IO (Maybe (Either (Vector (Maybe a))
+    raceTimeout :: Behavior (Vector (Last a))
+                -> IO (Maybe (Either (Vector (Last a))
                                      (Vector a)))
     raceTimeout changes = unsafeDischargeManaged $ do
       timeout <- timer time
@@ -161,9 +162,9 @@ awaitConvergence time upstreams = do
         Left () -> return Nothing
         Right vec ->
           return $ Just $ case sequence vec of
-            Nothing -> Left vec
-            Just vals | allSame_ vals -> Right vals
-                      | otherwise -> Left vec
+            Last Nothing -> Left vec
+            Last (Just vals) | allSame_ vals -> Right vals
+                             | otherwise -> Left vec
 
     unsafeDischargeManaged :: Managed r -> IO r
     unsafeDischargeManaged = flip with pure
