@@ -5,8 +5,7 @@
 module QuorumTools.Observing where
 
 import qualified Data.Map.Strict        as Map
-import           Data.Maybe             (fromMaybe)
-import           Data.Monoid            (Last, getLast)
+import           Data.Monoid            (Last)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.Text              (Text, isInfixOf, pack)
@@ -16,7 +15,7 @@ import           Turtle                 hiding (env, view)
 
 import           QuorumTools.Checkpoint
 import           QuorumTools.Types      hiding (lastBlock, lastRaftStatus)
-import           QuorumTools.Util       (matchOnce)
+import           QuorumTools.Util       (matchOnce, lastOrEmpty)
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Text -> (a -> IO ()) -> IO ()
@@ -47,9 +46,6 @@ observingLastBlock updateLastBlock = observingLines $ \line ->
     blockPattern :: Pattern Block
     blockPattern = has $
       Block . pack <$> ("Successfully extended chain: " *> count 64 hexDigit)
-
-lastOrEmpty :: Monoid a => Last a -> a
-lastOrEmpty = fromMaybe mempty . getLast
 
 observingTxes
   :: ((Last OutstandingTxes -> OutstandingTxes) -> IO ())

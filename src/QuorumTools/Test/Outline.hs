@@ -14,8 +14,7 @@ import           Control.Monad.Except
 import           Control.Monad.Managed     (MonadManaged)
 import           Control.Monad.Reader      (ReaderT (runReaderT), MonadReader,
                                             ask)
-import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               (Last (Last), getLast)
+import           Data.Monoid               (Last (Last))
 import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
@@ -38,6 +37,7 @@ import           QuorumTools.Constellation
 import           QuorumTools.Control       (Behavior, awaitAll, convergence,
                                             observe, timeLimit)
 import           QuorumTools.Types
+import           QuorumTools.Util          (lastOrEmpty)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -184,9 +184,9 @@ verify
   -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
   lastBlocks        <- liftIO $ traverse observe lastBlockBs
-  outstandingTxes_  <- fmap (fmap $ fromMaybe mempty . getLast) <$>
-                         liftIO $ traverse observe outstandingTxesBs
-  earlyTerminations <- liftIO $ traverse poll    terminatedAsyncs
+  outstandingTxes_  <- liftIO $ fmap lastOrEmpty <$>
+                         traverse observe outstandingTxesBs
+  earlyTerminations <- liftIO $ traverse poll terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
     let num = Set.size txes
