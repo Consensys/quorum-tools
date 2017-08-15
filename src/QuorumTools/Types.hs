@@ -6,8 +6,6 @@
 module QuorumTools.Types where
 
 import           Control.Concurrent.Async (Async)
-import           Control.Concurrent.Chan  (Chan)
-import           Control.Concurrent.MVar  (MVar)
 import           Control.Lens             (makeLenses)
 import           Control.Monad.Reader     (MonadReader)
 import           Data.Aeson               (FromJSON (parseJSON),
@@ -19,16 +17,17 @@ import           Data.Set                 (Set)
 import           Data.String
 import           Data.Text                (Text)
 import           Prelude                  hiding (FilePath)
-import           Turtle                   (FilePath, ExitCode)
+import           Turtle                   (ExitCode, FilePath)
 
+import           QuorumTools.Control      (Behavior)
 import           QuorumTools.Util
 
 -- Constellation
 
 data ConstellationConfig = ConstellationConfig
   { ccUrl        :: Text
-  , ccDatadir    :: DataDir -- TODO: probably pull this out
-  , ccGethId     :: GethId  -- TODO: probably pull this out
+  , ccDataDir    :: DataDir -- TODO: probably pull this out
+  , ccPort       :: Port
   , ccOtherNodes :: [Text]
   } deriving (Eq, Show)
 
@@ -148,7 +147,7 @@ showGethAccountId :: Geth -> Text
 showGethAccountId = accountIdToText . gethAccountId
 
 data CallArgs = CallArgs
-  { callTo :: Bytes20
+  { callTo     :: Bytes20
   , callMethod :: UnencodedMethod
   }
 
@@ -213,9 +212,6 @@ data NodeTerminated = NodeTerminated deriving Eq
 -- All http connections for this node are established
 data AllConnected = AllConnected
 
--- TODO: ideally this type would be abstract:
-data Behavior a = Behavior (Chan a) (MVar a)
-
 data NodeInstrumentation = NodeInstrumentation
   { nodeOnline      :: Async NodeOnline
   , nodeTerminated  :: Async NodeTerminated
@@ -269,28 +265,28 @@ data Privacy
 -- * abi
 data Contract = Contract Privacy [UnencodedMethod] Text Text
 
--- put ClusterEnv all the way at the end so its template haskell doesn't break
--- this module into phases
-
 data ClusterEnv
-  = ClusterEnv { _clusterPassword           :: Password
-               , _clusterNetworkId          :: Int
-               , _clusterBaseHttpPort       :: Port
-               , _clusterBaseRpcPort        :: Port
+  = ClusterEnv { _clusterPassword              :: Password
+               , _clusterNetworkId             :: Int
+               , _clusterBaseHttpPort          :: Port
+               , _clusterBaseRpcPort           :: Port
+               , _clusterBaseConstellationPort :: Port
+               , _clusterVerbosity             :: Verbosity
+               , _clusterGenesisJson           :: FilePath
+               , _clusterIps                   :: Map GethId Ip
+               , _clusterDataDirs              :: Map GethId DataDir
                --
-               -- TODO: add base constellation port
+               -- TODO: remove this? seems to be unused:
                --
-               , _clusterVerbosity          :: Verbosity
-               , _clusterGenesisJson        :: FilePath
-               , _clusterIps                :: Map GethId Ip
-               , _clusterDataDirs           :: Map GethId DataDir
-               , _clusterConstellationConfs :: Map GethId FilePath -- TODO: remove this? seems to be unused
-               , _clusterAccountKeys        :: Map GethId AccountKey
-               , _clusterInitialMembers     :: Set GethId
-               , _clusterConsensus          :: Consensus
-               , _clusterPrivacySupport     :: PrivacySupport
+               , _clusterConstellationConfs    :: Map GethId FilePath
+               , _clusterAccountKeys           :: Map GethId AccountKey
+               , _clusterInitialMembers        :: Set GethId
+               , _clusterConsensus             :: Consensus
+               , _clusterPrivacySupport        :: PrivacySupport
                }
   deriving (Eq, Show)
+
+-- Lenses
 
 makeLenses ''ClusterEnv
 makeLenses ''AccountKey
