@@ -36,7 +36,7 @@ import           QuorumTools.Client
 import           QuorumTools.Cluster
 import           QuorumTools.Constellation
 import           QuorumTools.Control       (Behavior, awaitAll, convergence,
-                                            observe)
+                                            observe, timeLimit)
 import           QuorumTools.Types
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
@@ -51,7 +51,8 @@ data FailureReason
   | WrongValue Int (Either Text Int)
   | AddNodeFailure
   | RemoveNodeFailure
-  | ClusterDivergence (Vector (Last Block))
+  | BlockDivergence (Vector (Last Block))
+  | BlockConvergenceTimeout
   deriving Show
 
 data Validity
@@ -282,8 +283,9 @@ existingMember `removesNode` target = do
 -- be aware of the expected latency across consensus mechanisms.
 blockConvergence :: (MonadManaged m, Traversable t)
                  => t NodeInstrumentation
-                 -> m (Async (Either (Vector (Last Block)) Block))
-blockConvergence = convergence (1 :: Second) . fmap lastBlock
+                 -> m (Async (Maybe (Either (Vector (Last Block)) Block)))
+blockConvergence = timeLimit (10 :: Second)
+               <=< convergence (1 :: Second) . fmap lastBlock
 
 awaitBlockConvergence
   :: (MonadManaged m, MonadError FailureReason m, Traversable t)
@@ -292,5 +294,6 @@ awaitBlockConvergence
 awaitBlockConvergence instruments = do
   result <- wait =<< blockConvergence instruments
   case result of
-    Left lastBlocks -> throwError $ ClusterDivergence lastBlocks
-    Right _block -> return ()
+    Nothing -> throwError BlockConvergenceTimeout
+    Just (Left lastBlocks) -> throwError $ BlockDivergence lastBlocks
+    Just (Right _block) -> return ()

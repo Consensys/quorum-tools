@@ -171,3 +171,8 @@ convergence time upstreams = do
 
     unsafeDischargeManaged :: Managed r -> IO r
     unsafeDischargeManaged = flip with pure
+
+timeLimit :: (MonadManaged m, TimeUnit t) => t -> Async a -> m (Async (Maybe a))
+timeLimit duration future = do
+  timeout <- timer duration
+  fork $ either (const Nothing) Just <$> waitEitherCancel timeout future
