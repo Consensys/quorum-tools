@@ -76,17 +76,17 @@ transition (Behavior tc tm) f = liftIO $ atomically $ do
   putTMVar tm $ Last $ Just v'
   writeTChan tc v'
 
-subscribe' :: Behavior a -> STM (TChan a)
-subscribe' (Behavior chan _) = dupTChan chan
+stmSubscribe :: Behavior a -> STM (TChan a)
+stmSubscribe (Behavior chan _) = dupTChan chan
 
 subscribe :: MonadIO m => Behavior a -> m (TChan a)
-subscribe = liftIO . atomically . subscribe'
+subscribe = liftIO . atomically . stmSubscribe
 
-observe' :: Behavior a -> STM (Last a)
-observe' (Behavior _ mvar) = readTMVar mvar
+stmObserve :: Behavior a -> STM (Last a)
+stmObserve (Behavior _ mvar) = readTMVar mvar
 
 observe :: (MonadIO m) => Behavior a -> m (Last a)
-observe = liftIO . atomically . observe'
+observe = liftIO . atomically . stmObserve
 
 watch :: MonadManaged m => Behavior a -> (a -> Maybe b) -> m (Async b)
 watch b decide = do
@@ -105,9 +105,9 @@ mapB f upstream = do
   where
     forkReplication downstream@(Behavior _ downstreamTm) = fork $ do
       chan <- atomically $ do
-        mv0 <- observe' upstream
+        mv0 <- stmObserve upstream
         void $ swapTMVar downstreamTm (f <$!> mv0)
-        subscribe' upstream
+        stmSubscribe upstream
       forever $ do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
@@ -128,9 +128,9 @@ combine upstreams = do
     startReplication :: Behavior (Vector (Last a)) -> m ()
     startReplication downstream@(Behavior _ downstreamTm) = do
       chans <- fmap toList $ liftIO $ atomically $ do
-        mv0s <- traverse observe' upstreams
+        mv0s <- traverse stmObserve upstreams
         void $ swapTMVar downstreamTm $ Last $ Just $ V.fromList $ toList mv0s
-        traverse subscribe' upstreams
+        traverse stmSubscribe upstreams
       for_ (zip [(0 :: Int)..] chans) $ \(i, chan) -> fork $ forever $ do
         val <- atomically $ readTChan chan
         -- NOTE: we publish downstream asychronously here
