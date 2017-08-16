@@ -11,19 +11,19 @@ import           Data.ByteString         (ByteString)
 import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Base16  as B16
 import qualified Data.ByteString.Char8   as B8
-import           Data.Monoid             ((<>))
+import           Data.Maybe              (fromMaybe)
+import           Data.Monoid             (Last, (<>), getLast)
 import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
 import qualified Data.Text.IO            as T
-import           System.IO               (BufferMode (..), hSetBuffering)
 import           Data.Text.Lazy          (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding as LT
-import           Numeric                 (showHex, readHex)
+import           Numeric                 (readHex, showHex)
 import           Prelude                 hiding (FilePath, lines)
+import           System.IO               (BufferMode (..), hSetBuffering)
 import           Turtle                  hiding (bytes, prefix, text)
-import           Turtle.Pattern          (Pattern, count, hexDigit, skip,
-                                          match)
+import           Turtle.Pattern          (Pattern, count, hexDigit, match, skip)
 
 inshellWithJoinedErr :: Text -> Shell Line -> Shell Line
 inshellWithJoinedErr cmd inputShell = do
@@ -157,3 +157,6 @@ toInt h = case readHex (B8.unpack (fromHex h)) of
 
 hexPrefixed :: Hex a => a -> Text
 hexPrefixed = printHex WithPrefix
+
+lastOrEmpty :: Monoid a => Last a -> a
+lastOrEmpty = fromMaybe mempty . getLast

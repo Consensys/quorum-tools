@@ -1,21 +1,21 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module QuorumTools.Observing where
 
-import qualified Data.Map.Strict            as Map
-import           Data.Monoid                (Last, (<>))
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text, isInfixOf)
-import qualified Data.Text                  as T
-import           Prelude                    hiding (FilePath, lines)
-import           Turtle                     hiding (env, view)
+import qualified Data.Map.Strict        as Map
+import           Data.Monoid            (Last)
+import           Data.Set               (Set)
+import qualified Data.Set               as Set
+import           Data.Text              (Text, isInfixOf)
+import qualified Data.Text              as T
+import           Prelude                hiding (FilePath, lines)
+import           Turtle                 hiding (env, view)
 
 import           QuorumTools.Checkpoint
-import           QuorumTools.Types          hiding (lastBlock, lastRaftStatus)
-import           QuorumTools.Util           (matchOnce)
+import           QuorumTools.Types      hiding (lastBlock, lastRaftStatus)
+import           QuorumTools.Util       (matchOnce, lastOrEmpty)
 
 -- | Helper for the most common (only) use case for matchCheckpoint.
 matchCheckpoint' :: Checkpoint a -> Text -> (a -> IO ()) -> IO ()
@@ -34,33 +34,34 @@ observingBoot trigger = observingLines $ \line ->
   when ("IPC endpoint opened:" `isInfixOf` line) trigger
 
 observingLastBlock
-  :: ((Last Block -> Last Block) -> IO ())
+  :: ((Last Block -> Block) -> IO ())
   -> Shell Line
   -> Shell Line
 observingLastBlock updateLastBlock = observingLines $ \line ->
-  matchCheckpoint' BlockCreated line $ \block ->
-    updateLastBlock (<> pure block)
+  matchCheckpoint' BlockCreated line $ updateLastBlock . const
 
 observingTxes
-  :: ((OutstandingTxes -> OutstandingTxes) -> IO ())
-  -> ((TxAddrs -> TxAddrs) -> IO ())
+  :: ((Last OutstandingTxes -> OutstandingTxes) -> IO ())
+  -> ((Last TxAddrs -> TxAddrs) -> IO ())
   -> Shell Line
   -> Shell Line
 observingTxes updateOutstanding updateAddrs = observingLines $ \line -> do
-    matchCheckpoint' TxCreated line $ \(tx, addr) -> do
-      updateOutstanding (OutstandingTxes . Set.insert tx . unOutstandingTxes)
-      updateAddrs (TxAddrs . Map.insert tx addr . unTxAddrs)
+  matchCheckpoint' TxCreated line $ \(tx, addr) -> do
+    updateOutstanding
+      (OutstandingTxes . Set.insert tx . unOutstandingTxes . lastOrEmpty)
+    updateAddrs (TxAddrs . Map.insert tx addr . unTxAddrs . lastOrEmpty)
 
-    matchCheckpoint' TxAccepted line $ \tx ->
-      updateOutstanding (OutstandingTxes . Set.delete tx . unOutstandingTxes)
+  matchCheckpoint' TxAccepted line $ \tx ->
+    updateOutstanding
+      (OutstandingTxes . Set.delete tx . unOutstandingTxes . lastOrEmpty)
 
 observingRaftStatus
-  :: ((Last RaftStatus -> Last RaftStatus) -> IO ())
+  :: ((Last RaftStatus -> RaftStatus) -> IO ())
   -> Shell Line
   -> Shell Line
 observingRaftStatus updateRaftStatus = observingLines $ \line ->
     case matchOnce statusPattern line of
-      Just raftStatus -> liftIO $ updateRaftStatus (<> pure raftStatus)
+      Just raftStatus -> liftIO $ updateRaftStatus $ const raftStatus
       _               -> pure ()
 
   where
@@ -81,12 +82,12 @@ observingRoles trigger = observingLines $ \line -> do
   matchCheckpoint' BlockVotingStarted line $ \() -> trigger
 
 observingActivation
-  :: ((Set GethId -> Set GethId) -> IO ())
+  :: ((Last (Set GethId) -> Set GethId) -> IO ())
   -> Shell Line
   -> Shell Line
 observingActivation updateConnections = observingLines $ \line -> do
   matchCheckpoint' PeerConnected line $ \(PeerJoined joined) ->
-    updateConnections (Set.insert joined)
+    updateConnections (Set.insert joined . lastOrEmpty)
 
   matchCheckpoint' PeerDisconnected line $ \(PeerLeft left) ->
-    updateConnections (Set.delete left)
+    updateConnections (Set.delete left . lastOrEmpty)

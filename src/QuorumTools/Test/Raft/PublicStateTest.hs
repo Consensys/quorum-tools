@@ -6,7 +6,6 @@ module QuorumTools.Test.Raft.PublicStateTest where
 import           Control.Monad            (forM_)
 import           Prelude                  hiding (FilePath)
 
-import           QuorumTools.Control          (awaitAll, watch)
 import           QuorumTools.Test.Outline hiding (verify)
 import           QuorumTools.Test.State
 import           QuorumTools.Types
@@ -28,16 +27,12 @@ publicStateTestMain = testNTimes 10 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   forM_ (take increments sendTo) $ \geth ->
     incrementStorage geth contract storageAddr
 
-  let expectedValue = 42 + increments
-      [id1, id2, id3] = gethId <$> geths
-
-  lastBlockWatches <- traverse
-    (\instrumentation -> watch (lastBlock instrumentation) Just)
-    instruments
-
-  awaitAll lastBlockWatches
+  awaitBlockConvergence instruments
 
   [i1, i2, i3] <- traverse (getStorage contract storageAddr) geths
+
+  let expectedValue = 42 + increments
+      [id1, id2, id3] = gethId <$> geths
 
   expectEq
     [ (id1, expectedValue, i1)

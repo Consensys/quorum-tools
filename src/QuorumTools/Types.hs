@@ -12,7 +12,6 @@ import           Data.Aeson               (FromJSON (parseJSON),
                                            ToJSON (toJSON), Value (String))
 import           Data.Aeson.Types         (typeMismatch)
 import           Data.Map.Strict          (Map)
-import           Data.Monoid              (Last)
 import           Data.Set                 (Set)
 import           Data.String
 import           Data.Text                (Text)
@@ -215,8 +214,8 @@ data AllConnected = AllConnected
 data NodeInstrumentation = NodeInstrumentation
   { nodeOnline      :: Async NodeOnline
   , nodeTerminated  :: Async NodeTerminated
-  , lastBlock       :: Behavior (Last Block)
-  , lastRaftStatus  :: Behavior (Last RaftStatus)
+  , lastBlock       :: Behavior Block
+  , lastRaftStatus  :: Behavior RaftStatus
   , outstandingTxes :: Behavior OutstandingTxes
   , txAddrs         :: Behavior TxAddrs
   , allConnected    :: Async AllConnected

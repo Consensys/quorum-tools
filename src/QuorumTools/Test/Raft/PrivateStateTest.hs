@@ -6,7 +6,6 @@ module QuorumTools.Test.Raft.PrivateStateTest where
 import           Prelude                  hiding (FilePath)
 import           Turtle                   hiding (match)
 
-import           QuorumTools.Control          (awaitAll, watch)
 import           QuorumTools.Test.Outline hiding (verify)
 import           QuorumTools.Test.State
 import           QuorumTools.Types
@@ -28,11 +27,7 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let increments = 5
   replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
 
-  lastBlockWatches <- traverse
-    (\instrumentation -> watch (lastBlock instrumentation) Just)
-    instruments
-  awaitAll lastBlockWatches
-  -- td 2
+  awaitBlockConvergence instruments
 
   [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 

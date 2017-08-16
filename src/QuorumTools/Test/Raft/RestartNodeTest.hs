@@ -12,6 +12,7 @@ import           QuorumTools.Cluster
 import           QuorumTools.Control
 import           QuorumTools.Test.Outline
 import           QuorumTools.Types
+import           QuorumTools.Util         (lastOrEmpty)
 
 numNodes :: Int
 numNodes = 3
@@ -31,7 +32,7 @@ refine (Right a)      = pure a
 readNodeInfo :: Either FailureReason NodeInstrumentation -> IO NodeInfo
 readNodeInfo = refine >=> \instruments -> (,)
   <$> observe (lastBlock instruments)
-  <*> observe (outstandingTxes instruments)
+  <*> fmap lastOrEmpty (observe (outstandingTxes instruments))
 
 --   seconds  |   spammer    |    node 1    |    nodes 2 / 3
 -- ---------------------------------------------------------

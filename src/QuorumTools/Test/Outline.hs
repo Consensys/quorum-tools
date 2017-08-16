@@ -5,37 +5,41 @@
 
 module QuorumTools.Test.Outline where
 
-import           Control.Concurrent       (threadDelay)
-import           Control.Concurrent.Async (Async, cancel, poll)
-import           Control.Concurrent.MVar  (readMVar, newEmptyMVar, putMVar)
+import           Control.Concurrent        (threadDelay)
+import           Control.Concurrent.Async  (Async, async, cancel, poll)
+import           Control.Concurrent.MVar   (readMVar, newEmptyMVar, putMVar)
 import           Control.Lens
-import           Control.Monad            (forM_)
+import           Control.Monad             (forM_)
 import           Control.Monad.Except
-import           Control.Monad.Managed    (MonadManaged)
-import           Control.Monad.Reader     (ReaderT (runReaderT), MonadReader)
-import           Data.Monoid              (Last (Last))
-import           Data.Monoid.Same         (Same (NotSame, Same), allSame)
-import           Data.Set                 (Set)
-import qualified Data.Set                 as Set
-import           Data.Text                (Text, pack, unpack)
-import qualified Data.Text                as T
-import qualified Data.Text.IO             as T
-import           Data.Time                (getZonedTime, formatTime, defaultTimeLocale)
-import qualified QuorumTools.IpTables     as IPT
-import qualified QuorumTools.PacketFilter as PF
-import           Prelude                  hiding (FilePath)
+import           Control.Monad.Managed     (MonadManaged)
+import           Control.Monad.Reader      (ReaderT (runReaderT), MonadReader,
+                                            ask)
+import           Data.Foldable             (toList)
+import           Data.Monoid               (Last (Last))
+import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
+import           Data.Text                 (Text, pack, unpack)
+import qualified Data.Text                 as T
+import qualified Data.Text.IO              as T
+import           Data.Time                 (defaultTimeLocale, formatTime,
+                                            getZonedTime)
+import           Data.Time.Units           (Second)
+import           Data.Vector               (Vector)
+import qualified QuorumTools.IpTables      as IPT
+import qualified QuorumTools.PacketFilter  as PF
+import           Prelude                   hiding (FilePath)
 import           System.Console.ANSI
 import           System.Info
 import           Turtle
 
-import Control.Monad.Reader (ask)
-import Control.Concurrent.Async (async)
-import QuorumTools.Client
-import QuorumTools.Cluster
-import QuorumTools.Constellation
-import QuorumTools.Control (Behavior, awaitAll, observe)
-import QuorumTools.Types
-import QuorumTools.Util (inshellWithJoinedErr)
+import           QuorumTools.Client
+import           QuorumTools.Cluster
+import           QuorumTools.Constellation
+import           QuorumTools.Control       (Behavior, awaitAll, convergence,
+                                            observe, timeLimit)
+import           QuorumTools.Types
+import           QuorumTools.Util          (lastOrEmpty, inshellWithJoinedErr)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -49,6 +53,8 @@ data FailureReason
   | RemoveNodeFailure
   -- For each @GethId@, Expected @Int@, received @Either Text Int@
   | WrongValue [(GethId, Int, Either Text Int)]
+  | BlockDivergence (Vector (Last Block))
+  | BlockConvergenceTimeout
   deriving Show
 
 data Validity
@@ -79,6 +85,8 @@ printFailureReason reason = withColor Red $ case reason of
   LostTxes txes -> putStrLn $ "some transactions were lost: " ++ show txes
   AddNodeFailure -> putStrLn "Failed to add a node"
   RemoveNodeFailure -> putStrLn "Failed to remove a node"
+  BlockDivergence blocks -> putStrLn $ "different last blocks on each node: " ++ show (toList blocks)
+  BlockConvergenceTimeout -> putStrLn "blocks failed to converge before timeout"
 
 instance Monoid Validity where
   mempty = Verified
@@ -203,14 +211,15 @@ testNTimes times = tester predicate
 -- * There are no lost transactions
 -- * The nodes all have the same last block
 verify
-  :: [Behavior (Last Block)]
+  :: [Behavior Block]
   -> [Behavior OutstandingTxes]
   -> [Async NodeTerminated]
   -> TestM ()
 verify lastBlockBs outstandingTxesBs terminatedAsyncs = do
   lastBlocks        <- liftIO $ traverse observe lastBlockBs
-  outstandingTxes_  <- liftIO $ traverse observe outstandingTxesBs
-  earlyTerminations <- liftIO $ traverse poll    terminatedAsyncs
+  outstandingTxes_  <- liftIO $ fmap lastOrEmpty <$>
+                         traverse observe outstandingTxesBs
+  earlyTerminations <- liftIO $ traverse poll terminatedAsyncs
 
   forM_ outstandingTxes_ $ \(OutstandingTxes txes) -> do
     let num = Set.size txes
@@ -292,12 +301,32 @@ existingMember `addsNode` newcomer = do
     Right _raftId -> return ()
 
 removesNode :: Geth -> Geth -> TestM ()
-existingMember `removesNode` newcomer = do
-  let message = "removing node " <> T.pack (show (gId (gethId newcomer)))
+existingMember `removesNode` target = do
+  let message = "removing node " <> T.pack (show (gId (gethId target)))
   timestampedMessage $ "waiting before " <> message
   td 2
   timestampedMessage message
-  result <- removeNode existingMember (gethId newcomer)
+  result <- removeNode existingMember (gethId target)
   case result of
     Left _err -> throwError RemoveNodeFailure
     Right () -> return ()
+
+-- NOTE: This currently assumes raft-based consensus, due to the short duration.
+-- Once we have first-class support for multiple types of consensus, this should
+-- be aware of the expected latency across consensus mechanisms.
+blockConvergence :: (MonadManaged m, Traversable t)
+                 => t NodeInstrumentation
+                 -> m (Async (Maybe (Either (Vector (Last Block)) Block)))
+blockConvergence = timeLimit (10 :: Second)
+               <=< convergence (1 :: Second) . fmap lastBlock
+
+awaitBlockConvergence
+  :: (MonadManaged m, MonadError FailureReason m, Traversable t)
+  => t NodeInstrumentation
+  -> m ()
+awaitBlockConvergence instruments = do
+  result <- wait =<< blockConvergence instruments
+  case result of
+    Nothing -> throwError BlockConvergenceTimeout
+    Just (Left lastBlocks) -> throwError $ BlockDivergence lastBlocks
+    Just (Right _block) -> return ()
