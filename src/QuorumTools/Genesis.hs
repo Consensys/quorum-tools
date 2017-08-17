@@ -83,9 +83,6 @@ createGenesisJson acctIds = do
       (\aid -> accountIdToText aid .= object [ "balance" .= t "0" ])
       acctIds
 
-    i :: Int -> Int
-    i = id
-
     header = "0x0000000000000000000000000000000000000020" .= object
       [ "code"    .= qcContractCode
       , "storage" .= createStorage voters [maker]
@@ -110,8 +107,8 @@ createGenesisJson acctIds = do
       , "mixhash"    .= t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
       , "nonce"      .= t "0x0"
       , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
-      , "timestamp"  .= t "0x0"
+      , "timestamp"  .= t "0x00"
       ]
 
     t = id :: Text -> Text
-
+    i = id :: Int -> Int
