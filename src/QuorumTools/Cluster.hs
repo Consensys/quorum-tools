@@ -111,8 +111,9 @@ rpcPort :: HasEnv m => GethId -> m Port
 rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
 
 raftPort :: HasEnv m => GethId -> m (Maybe Port)
-raftPort (GethId gid) = fmap (fromIntegral gid +) . getFirst
-                    <$> view (clusterConsensus.raftBasePort.to (First . Just))
+raftPort (GethId gid) = do
+  firstPort <- view $ clusterConsensus.raftBasePort.to (First . Just)
+  return $ (fromIntegral gid +) <$> getFirst firstPort
 
 constellationPort :: HasEnv m => GethId -> m Port
 constellationPort (GethId gid) =
