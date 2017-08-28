@@ -70,7 +70,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterConstellationConfs    = Map.empty
   , _clusterAccountKeys           = Map.empty
   , _clusterInitialMembers        = Set.empty
-  , _clusterConsensus             = Raft 50400
+  , _clusterConsensus             = Raft { _raftBasePort = 50400 }
   , _clusterPrivacySupport        = PrivacyDisabled
   }
 
