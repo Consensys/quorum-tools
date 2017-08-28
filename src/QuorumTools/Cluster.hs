@@ -14,7 +14,8 @@ module QuorumTools.Cluster where
 import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (cancel, forConcurrently, waitCatch)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, has, ix, view, (^.), (^?))
+import           Control.Lens               (at, has, ix, over, to, view, (^.),
+                                             (^?))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Except       (MonadError, throwError, runExceptT)
 import           Control.Monad.Managed      (MonadManaged)
@@ -24,18 +25,25 @@ import           Data.Aeson                 (Value, withObject, (.:))
 import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bool                  (bool)
+import qualified Data.ByteString.Char8      as B8
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
+import           Data.Monoid                (First (..))
 import           Data.Semigroup             ((<>))
 import           Data.Set                   (member)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
+import qualified Data.Text                  as T
+import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
 import           Data.Traversable           (for)
 import           Prelude                    hiding (FilePath, lines)
 import           Safe                       (atMay, headMay)
 import           System.IO                  (hClose)
 import           Turtle                     hiding (env, has, view, (<>))
+import           URI.ByteString             (parseURI, serializeURIRef',
+                                             strictURIParserOptions, queryL,
+                                             queryPairsL)
 
 import           QuorumTools.Constellation  (constellationConfPath,
                                              setupConstellationNode)
@@ -62,7 +70,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterConstellationConfs    = Map.empty
   , _clusterAccountKeys           = Map.empty
   , _clusterInitialMembers        = Set.empty
-  , _clusterConsensus             = Raft
+  , _clusterConsensus             = Raft { _raftBasePort = 50400 }
   , _clusterPrivacySupport        = PrivacyDisabled
   }
 
@@ -101,6 +109,11 @@ httpPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseHttpPort
 
 rpcPort :: HasEnv m => GethId -> m Port
 rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
+
+raftPort :: HasEnv m => GethId -> m (Maybe Port)
+raftPort (GethId gid) = do
+  firstPort <- view $ clusterConsensus.raftBasePort.to (First . Just)
+  return $ (fromIntegral gid +) <$> getFirst firstPort
 
 constellationPort :: HasEnv m => GethId -> m Port
 constellationPort (GethId gid) =
@@ -147,9 +160,11 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
 
     consensusOptions :: Text
     consensusOptions = case gethConsensusPeer geth of
-      RaftPeer -> case gethJoinMode geth of
-        JoinExisting   -> format ("--raft --raftjoinexisting "%d) (gId $ gethId geth)
-        JoinNewCluster -> "--raft"
+      RaftPeer port -> case gethJoinMode geth of
+        JoinExisting -> format ("--raft --raftjoinexisting "%d%" --raftport "%d)
+                               (gId $ gethId geth)
+                               port
+        JoinNewCluster -> format ("--raft --raftport "%d) port
       QuorumChainPeer acctId mRole -> case mRole of
         Nothing -> ""
         Just BlockMaker ->
@@ -242,29 +257,48 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
     force = fromMaybe $ error $ "no IP found for " <> show gid
 
 -- | We need to use the RPC interface to get the EnodeId if we haven't yet
--- started up geth.
+-- started up geth, or if the node is not in the static peers list.
 requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 requestEnodeId gid = do
-  mkCmd <- setupCommand gid
-  (Ip ip) <- gidIp gid
+    mkCmd <- setupCommand gid
+    (Ip ip) <- gidIp gid
 
-  let enodeIdShell = do
-                       jsPath <- using $ fileContaining jsPayload
-                       let cmd = mkCmd $ format ("js "%fp) jsPath
-                       inshellWithJoinedErr cmd empty
-                   & grep (begins "enode")
-                   & sed (fmap (\a b -> a <> ip <> b) chars
-                           <*  text "[::]"
-                           <*> chars)
+    let enodeIdShell = do
+                         jsPath <- using $ fileContaining jsPayload
+                         let cmd = mkCmd $ format ("js "%fp) jsPath
+                         inshellWithJoinedErr cmd empty
+                     & grep (begins "enode")
+                     & sed (fmap (\a b -> a <> ip <> b) chars
+                             <*  text "[::]"
+                             <*> chars)
 
-  EnodeId . lineToText . forceNodeId <$> fold enodeIdShell Fold.head
+    EnodeId . lineToText . forceNodeId <$> fold enodeIdShell Fold.head
 
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
     forceNodeId = fromMaybe $ error "unable to extract enode ID"
 
+addRaftPort :: Port -> EnodeId -> EnodeId
+addRaftPort (Port port) (EnodeId url) = EnodeId
+                                      . removeMissingPassword
+                                      . either crash (serializeUri . addQsParam)
+                                      . deserializeUri
+                                      $ url
+  where
+    addQsParam = over (queryL . queryPairsL)
+                      (("raftport", B8.pack $ show port) :)
+    deserializeUri = parseURI strictURIParserOptions . encodeUtf8
+    serializeUri = decodeUtf8 . serializeURIRef'
+    crash parseErr = error $ "failed to parse enodeID ("
+                          <> T.unpack url
+                          <> "): "
+                          <> show parseErr
+    removeMissingPassword :: Text -> Text
+    removeMissingPassword = T.replace ":@" "@"
+
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
-mkConsensusPeer _   _   Raft = RaftPeer
+mkConsensusPeer gid _   (Raft basePort) =
+  RaftPeer $ basePort + fromIntegral (gId gid)
 mkConsensusPeer gid aid (QuorumChain bmGid voterGids) =
   QuorumChainPeer aid $ if | gid == bmGid ->           Just BlockMaker
                            | gid `member` voterGids -> Just Voter
@@ -315,8 +349,18 @@ createNode genesisJsonPath gid = do
     cEnv <- ask
     let acctKey = forceAcctKey $ cEnv ^? clusterAccountKeys . ix gid
     installAccountKey gid acctKey
+    -- The following enode ID from geth does *not* contain a raft port, ever.
+    -- TODO: we should fix this on the geth side, which is nontrivial for now
+    -- TODO: in order to help simplify the fix this on the geth side, we should
+    --       enforce that --raft mode forcibly implies --nodiscover. This is
+    --       something we should be doing already anyhow.
     eid <- requestEnodeId gid
-    mkGeth gid eid
+    mRaftPort <- raftPort gid
+    -- Augment the eid with a raft port:
+    let eid' = case mRaftPort of
+          Nothing -> eid
+          Just port -> addRaftPort port eid
+    mkGeth gid eid'
 
   where
     forceAcctKey :: Maybe AccountKey -> AccountKey
@@ -343,8 +387,9 @@ readStaticNodes (DataDir ddPath) = force . textDecode <$> strict (input path)
     path = ddPath </> "static-nodes.json"
     force = fromMaybe $ error "failed to load enodes from static-nodes.json"
 
--- | If we've already started up geth in the past, we don't need to use RPC
--- interface to get the EnodeId; we can read it directly from the datadir.
+-- | If we've already started up geth in the past, and the node is in the
+-- initial/static peers list, we don't need to use RPC interface to get the
+-- EnodeId; we can read it directly from the datadir.
 readEnodeId :: (HasEnv m, MonadIO m) => GethId -> m EnodeId
 readEnodeId gid = do
     nodeDataDir <- gidDataDir gid
