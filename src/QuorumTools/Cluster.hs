@@ -348,8 +348,14 @@ createNode genesisJsonPath gid = do
     cEnv <- ask
     let acctKey = forceAcctKey $ cEnv ^? clusterAccountKeys . ix gid
     installAccountKey gid acctKey
+    -- The following enode ID from geth does *not* contain a raft port, ever.
+    -- TODO: we should fix this on the geth side, which is nontrivial for now
+    -- TODO: in order to help simplify the fix this on the geth side, we should
+    --       enforce that --raft mode forcibly implies --nodiscover. This is
+    --       something we should be doing already anyhow.
     eid <- requestEnodeId gid
     mRaftPort <- raftPort gid
+    -- Augment the eid with a raft port:
     let eid' = case mRaftPort of
           Nothing -> eid
           Just port -> addRaftPort port eid
