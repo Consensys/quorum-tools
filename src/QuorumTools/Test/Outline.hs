@@ -49,7 +49,7 @@ data FailureReason
   | NoBlockFound
   | TerminatedUnexpectedly
   | LostTxes (Set TxId)
-  | AddNodeFailure
+  | AddNodeFailure Text
   | RemoveNodeFailure
   -- For each @GethId@, Expected @Int@, received @Either Text Int@
   | WrongValue [(GethId, Int, Either Text Int)]
@@ -83,7 +83,9 @@ printFailureReason reason = withColor Red $ case reason of
     "Two blocks were found in the wrong order: " ++ show b1 ++ ", " ++ show b2
   TerminatedUnexpectedly -> putStrLn "A node panicked"
   LostTxes txes -> putStrLn $ "some transactions were lost: " ++ show txes
-  AddNodeFailure -> putStrLn "Failed to add a node"
+  AddNodeFailure msg -> do
+    putStrLn "Failed to add a node:"
+    T.putStrLn msg
   RemoveNodeFailure -> putStrLn "Failed to remove a node"
   BlockDivergence blocks -> putStrLn $ "different last blocks on each node: " ++ show (toList blocks)
   BlockConvergenceTimeout -> putStrLn "blocks failed to converge before timeout"
@@ -297,7 +299,7 @@ existingMember `addsNode` newcomer = do
   timestampedMessage message
   result <- addNode existingMember (gethEnodeId newcomer)
   case result of
-    Left _err -> throwError AddNodeFailure
+    Left reason -> throwError $ AddNodeFailure reason
     Right _raftId -> return ()
 
 removesNode :: Geth -> Geth -> TestM ()
@@ -318,7 +320,7 @@ blockConvergence :: (MonadManaged m, Traversable t)
                  => t NodeInstrumentation
                  -> m (Async (Maybe (Either (Vector (Last Block)) Block)))
 blockConvergence = timeLimit (10 :: Second)
-               <=< convergence (1 :: Second) . fmap lastBlock
+               <=< convergence (2 :: Second) . fmap lastBlock
 
 awaitBlockConvergence
   :: (MonadManaged m, MonadError FailureReason m, Traversable t)

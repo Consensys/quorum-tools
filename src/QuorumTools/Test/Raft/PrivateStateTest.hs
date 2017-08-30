@@ -11,7 +11,7 @@ import           QuorumTools.Test.State
 import           QuorumTools.Types
 
 privateStateTestMain :: IO ()
-privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
+privateStateTestMain = testNTimes 5 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   let (geths, instruments) = unzip iNodes
       (g1, geth1Instruments) = head iNodes
 

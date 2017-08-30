@@ -44,6 +44,8 @@ import           QuorumTools.Cluster
 import           QuorumTools.Types
 import           QuorumTools.Util
 
+import Debug.Trace
+
 t :: Text -> Text
 t = id
 
@@ -144,8 +146,10 @@ sendTransaction geth args = liftIO $ void $
   post (T.unpack (gethUrl geth)) (sendBody args geth)
 
 create :: MonadIO io => Geth -> CreateArgs -> io ()
-create geth args = liftIO $ void $
-  post (T.unpack (gethUrl geth)) (createBody args geth)
+create geth args = liftIO $ do
+  resp <- post (T.unpack (gethUrl geth)) (createBody args geth)
+  print resp
+  pure ()
 
 addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)
 addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
@@ -153,7 +157,7 @@ addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
     url = T.unpack (gethUrl geth)
 
     body :: Value
-    body = object
+    body = traceShowId $ object
       [ "id"      .= i 1
       , "jsonrpc" .= t "2.0"
       , "method"  .= t "raft_addPeer"

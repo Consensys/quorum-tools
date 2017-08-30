@@ -55,7 +55,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterBaseHttpPort          = 30400
   , _clusterBaseRpcPort           = 40400
   , _clusterBaseConstellationPort = 9000
-  , _clusterVerbosity             = 3
+  , _clusterVerbosity             = 6
   , _clusterGenesisJson           = "gdata" </> "genesis.json"
   , _clusterIps                   = Map.empty
   , _clusterDataDirs              = Map.empty
@@ -137,7 +137,8 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpcapi eth,net,web3,raft,admin" %
                                        " --emitcheckpoints"                %
                                        " --unlock 0"                       %
-                                       " --password /dev/null"             %
+                                       -- " --unlock "%s                      %
+                                       -- " --password /dev/null"             %
                                        " "%s%
                                        " "%s)
                           envVar
@@ -146,6 +147,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
+                          -- (accountIdToText (gethAccountId geth))
                           (consensusOptions (gethConsensusPeer geth))
                           more
   where
