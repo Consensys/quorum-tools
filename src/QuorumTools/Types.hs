@@ -69,6 +69,7 @@ data Consensus
   | QuorumChain { qcBootEnode     :: EnodeId
                 , qcBlockMaker    :: GethId
                 , qcVoterAccounts :: Set GethId }
+  | Istanbul
   deriving (Eq, Show)
 
 data QuorumChainRole
@@ -77,7 +78,8 @@ data QuorumChainRole
   deriving (Eq, Show)
 
 data ConsensusPeer
-  = RaftPeer Port
+  = ByzantineGeneral
+  | RaftPeer Port
   | QuorumChainPeer EnodeId AccountId (Maybe QuorumChainRole)
   deriving (Eq, Show)
 

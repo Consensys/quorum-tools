@@ -70,7 +70,8 @@ emptyClusterEnv = ClusterEnv
   , _clusterConstellationConfs    = Map.empty
   , _clusterAccountKeys           = Map.empty
   , _clusterInitialMembers        = Set.empty
-  , _clusterConsensus             = Raft { _raftBasePort = 50400 }
+  -- , _clusterConsensus             = Raft { _raftBasePort = 50400 }
+  , _clusterConsensus             = Istanbul
   , _clusterPrivacySupport        = PrivacyDisabled
   }
 
@@ -147,7 +148,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpc"                            %
                                        " --rpccorsdomain '*'"              %
                                        " --rpcaddr localhost"              %
-                                       " --rpcapi eth,net,web3,raft,admin" %
+                                       " --rpcapi eth,net,web3,raft,admin,istanbul" %
                                        " --emitcheckpoints"                %
                                        " --unlock 0"                       %
                                        -- " --unlock "%s                      %
@@ -171,6 +172,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
 
     consensusOptions :: Text
     consensusOptions = case gethConsensusPeer geth of
+      ByzantineGeneral -> "--mine"
       RaftPeer port -> case gethJoinMode geth of
         JoinExisting -> format ("--raft --raftjoinexisting "%d%" --raftport "%d)
                                (gId $ gethId geth)
@@ -315,6 +317,7 @@ addRaftPort (Port port) (EnodeId url) = EnodeId
     removeMissingPassword = T.replace ":@" "@"
 
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
+mkConsensusPeer _   _   Istanbul = ByzantineGeneral
 mkConsensusPeer gid _   (Raft basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
 mkConsensusPeer gid aid (QuorumChain bootnode bmGid voterGids) =
