@@ -65,7 +65,7 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
   deriving (Show, Eq)
 
 data Consensus
-  = Raft
+  = Raft        { _raftBasePort :: Port }
   | QuorumChain { qcBootEnode     :: EnodeId
                 , qcBlockMaker    :: GethId
                 , qcVoterAccounts :: Set GethId }
@@ -77,7 +77,7 @@ data QuorumChainRole
   deriving (Eq, Show)
 
 data ConsensusPeer
-  = RaftPeer
+  = RaftPeer Port
   | QuorumChainPeer EnodeId AccountId (Maybe QuorumChainRole)
   deriving (Eq, Show)
 
@@ -287,5 +287,6 @@ data ClusterEnv
 
 -- Lenses
 
-makeLenses ''ClusterEnv
 makeLenses ''AccountKey
+makeLenses ''ClusterEnv
+makeLenses ''Consensus
