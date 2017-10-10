@@ -62,6 +62,8 @@ The test sources are located in `src/QuorumTools/Test/`.
 
 We also include scripts for running a cluster without necessarily testing it.
 
-* `local-new`: create and start a new cluster, destroying old data directories
-* `local-start`: start a cluster from existing data directories
+* `local-new`: create and start a new cluster, destroying old data directories (under `gdata` in the current directory)
+* `local-start`: start a cluster from existing data directories (under `gdata` in the current directory)
 * `local-spam`: send a rate-limited stream of transactions to a geth node
+
+`local-new` runs indefinitely, with multiple `geth`s forked from the process. While the cluster is up and running, you can inspect the logs from the geth nodes (e.g. `tail -f geth1.log`), or send in transactions -- e.g. `local-spam -g 1 -r 10` will send 10 transactions per second to geth 1 while it is running. Additionally you can attach to a geth node via its IPC file under `gdata`: `geth attach gdata/geth1.geth.ipc`. If the `local-new` process is stopped, you can restart the cluster from the existing datadirs under `gdata` by issuing `local-start`.
