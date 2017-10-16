@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 
 module QuorumTools.Client
   ( SpamMode(..)
@@ -17,13 +18,13 @@ module QuorumTools.Client
   , removeNode
   ) where
 
-import           Control.Lens            (to, (^.), (^?))
+import           Control.Lens            (Fold, to, (^.), (^?))
 import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
-import           Data.Aeson              (Value(Array, String), object, (.=),
-                                          toJSON)
+import           Data.Aeson              (Value (Array, String), object, toJSON,
+                                          (.=))
+import           Data.Aeson.Lens         (key, _Integral, _String)
 import           Data.Aeson.Types        (Pair)
-import           Data.Aeson.Lens         (key, _String, _Integral)
 import qualified Data.ByteString.Lazy    as LSB
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid             ((<>))
@@ -38,7 +39,7 @@ import           Network.Wreq            (Response, post, responseBody)
 import           Network.Wreq.Session    (Session)
 import qualified Network.Wreq.Session    as Sess
 import           Prelude                 hiding (FilePath, lines)
-import           Turtle
+import           Turtle                  hiding (Fold)
 
 import           QuorumTools.Cluster
 import           QuorumTools.Types
@@ -147,8 +148,17 @@ create :: MonadIO io => Geth -> CreateArgs -> io ()
 create geth args = liftIO $ void $
   post (T.unpack (gethUrl geth)) (createBody args geth)
 
+extractResult :: Fold Value a -> Response LSB.ByteString -> Either Text a
+extractResult subfield r = fromMaybe parseFailure mParsed
+  where
+    parseFailure = Left $ toStrict $
+      "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+    mParsed = r^?responseBody.key "result".subfield.to Right
+          <|> r^?responseBody.key "error".key "message"._String.to Left
+
 addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)
-addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
+addNode geth (EnodeId eid) = liftIO $
+    extractResult (_Integral . to GethId) <$> post url body
   where
     url = T.unpack (gethUrl geth)
 
@@ -160,17 +170,8 @@ addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
       , "params"  .= [String eid]
       ]
 
-    parse :: Response LSB.ByteString -> Either Text GethId
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text GethId)
-        mParsed = (r^?responseBody.key "result"._Integral.to (Right . GethId))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
-
 removeNode :: MonadIO m => Geth -> GethId -> m (Either Text ())
-removeNode geth gid = liftIO $ parse <$> post url body
+removeNode geth gid = liftIO $ extractResult (to $ const ()) <$> post url body
   where
     url = T.unpack (gethUrl geth)
 
@@ -181,15 +182,6 @@ removeNode geth gid = liftIO $ parse <$> post url body
       , "method"  .= t "raft_removePeer"
       , "params"  .= [toJSON (gId gid)]
       ]
-
-    parse :: Response LSB.ByteString -> Either Text ()
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text ())
-        mParsed = (r^?responseBody.key "result".to (const (Right ())))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 sendEmptyTx :: MonadIO io => Geth -> io ()
 sendEmptyTx geth = liftIO $ void $
