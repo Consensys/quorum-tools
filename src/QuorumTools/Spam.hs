@@ -23,10 +23,10 @@ b64Digit = satisfy isB64Digit
 
 -- A (compressed) Secp256k1 public key is 32 bytes (* 11 / 8) = 44 base-64
 -- characters (64 = 2^11).
-pubKeyP :: Pattern Secp256k1
+pubKeyP :: Pattern PublicKey
 pubKeyP = Secp256k1 . T.pack <$> count 44 b64Digit
 
-privateForPattern :: Pattern [Secp256k1]
+privateForPattern :: Pattern [PublicKey]
 privateForPattern = pubKeyP `sepBy` ","
 
 processContractArgs :: Maybe Text -> Maybe Text -> SpamMode

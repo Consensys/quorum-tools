@@ -251,12 +251,12 @@ newtype Pid = Pid Int
 -- Contracts
 
 -- Holding a base-64 encoded public key
-newtype Secp256k1 = Secp256k1 { unSecp256k1 :: Text }
+newtype PublicKey = Secp256k1 { unSecp256k1 :: Text }
 
 -- | A contract may be visible to everyone or only to a list of public keys
 data Privacy
   = Public
-  | PrivateFor [Secp256k1]
+  | PrivateFor [PublicKey]
 
 -- A contract is:
 -- * its privacy
