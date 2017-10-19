@@ -24,14 +24,19 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
   privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 
   -- The storage starts with a value of 42 and we increment it five times
-  let increments = 5
-  replicateM_ increments $ incrementStorage g1 Sync privStorage privStorageAddr
+  let initialValue = 42
+      asyncIncs = 2
+      syncIncs = 3
+      increments = syncIncs + asyncIncs
+
+  replicateM_ asyncIncs $ incrementStorage g1 Async privStorage privStorageAddr
+  replicateM_ syncIncs $ incrementStorage g1 Sync privStorage privStorageAddr
 
   awaitBlockConvergence instruments
 
   [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 
-  let expectedPrivateValue = 42 + increments
+  let expectedPrivateValue = initialValue + increments
       [id1, id2, id3] = gethId <$> geths
 
   expectEq
