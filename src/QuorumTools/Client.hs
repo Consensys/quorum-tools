@@ -23,7 +23,7 @@ import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
 import           Data.Aeson              (Value (Array, String), object, toJSON,
                                           (.=))
-import           Data.Aeson.Lens         (key, _Integral, _String)
+import           Data.Aeson.Lens         (key, _Integral, _Null, _String)
 import           Data.Aeson.Types        (Pair)
 import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Lazy    as LSB
@@ -45,6 +45,11 @@ import           Turtle                  hiding (Fold)
 import           QuorumTools.Cluster
 import           QuorumTools.Types
 import           QuorumTools.Util
+
+data TxResult
+  = TxAck TxId -- for sync
+  | TxSent     -- for async
+  deriving (Show)
 
 t :: Text -> Text
 t = id
@@ -141,15 +146,20 @@ call geth args =
   where
     extract = extractResult $ _String.to textToBytes.traverse
 
-extractTxId :: Response LSB.ByteString -> Either Text TxId
-extractTxId = extractResult $ _String . to textToBytes32 . traverse . to TxId
+extractTxResult :: TxSync -> Response LSB.ByteString -> Either Text TxResult
+extractTxResult mode resp =
+  case mode of
+    Sync -> extractResult
+              (_String . to textToBytes32 . traverse . to (TxAck . TxId))
+              resp
+    Async -> extractResult (_Null . to (const TxSent)) resp
 
-sendTransaction :: MonadIO m => Geth -> Tx -> m (Either Text TxId)
-sendTransaction geth args = liftIO $ extractTxId <$>
+sendTransaction :: MonadIO m => Geth -> Tx -> m (Either Text TxResult)
+sendTransaction geth args = liftIO $ extractTxResult (txSync args) <$>
   post (T.unpack (gethUrl geth)) (sendBody args geth)
 
-create :: MonadIO m => Geth -> CreateArgs -> m (Either Text TxId)
-create geth args = liftIO $ extractTxId <$>
+create :: MonadIO m => Geth -> CreateArgs -> m (Either Text TxResult)
+create geth args@(CreateArgs _ _ mode) = liftIO $ extractTxResult mode <$>
   post (T.unpack (gethUrl geth)) (createBody args geth)
 
 addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)

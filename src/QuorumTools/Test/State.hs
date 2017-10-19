@@ -40,7 +40,7 @@ createContract geth contract addrs = do
   eTxId <- Client.create geth (CreateArgs contract initVal Sync)
   case eTxId of
     Left msg -> throwError $ RpcFailure msg
-    Right _txid -> return ()
+    Right _txResult -> return ()
 
   wait creationTxEvt
 
@@ -51,7 +51,7 @@ incrementStorage geth mode (Contract privacy _ _ _) (Addr addrBytes) = do
   eAddr <- Client.sendTransaction geth txArgs
   case eAddr of
     Left msg -> throwError $ RpcFailure msg
-    Right _txid -> return ()
+    Right _txResult -> return ()
 
 getStorage :: MonadIO io => Contract -> Addr -> Geth -> io (Either Text Int)
 getStorage _contract addr geth = do
