@@ -25,7 +25,7 @@ privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
 
   -- The storage starts with a value of 42 and we increment it five times
   let increments = 5
-  replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
+  replicateM_ increments $ incrementStorage g1 Sync privStorage privStorageAddr
 
   awaitBlockConvergence instruments
 

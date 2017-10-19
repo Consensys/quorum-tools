@@ -55,6 +55,7 @@ data FailureReason
   | WrongValue [(GethId, Int, Either Text Int)]
   | BlockDivergence (Vector (Last Block))
   | BlockConvergenceTimeout
+  | RpcFailure Text
   deriving Show
 
 data Validity
@@ -87,6 +88,7 @@ printFailureReason reason = withColor Red $ case reason of
   RemoveNodeFailure -> putStrLn "Failed to remove a node"
   BlockDivergence blocks -> putStrLn $ "different last blocks on each node: " ++ show (toList blocks)
   BlockConvergenceTimeout -> putStrLn "blocks failed to converge before timeout"
+  RpcFailure msg -> putStrLn $ "rpc failure: " <> unpack msg
 
 instance Monoid Validity where
   mempty = Verified

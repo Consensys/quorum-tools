@@ -25,7 +25,7 @@ publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let increments = 10
 
   forM_ (take increments sendTo) $ \geth ->
-    incrementStorage geth contract storageAddr
+    incrementStorage geth Sync contract storageAddr
 
   awaitBlockConvergence instruments
 

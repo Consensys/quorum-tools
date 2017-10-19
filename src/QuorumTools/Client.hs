@@ -25,6 +25,7 @@ import           Data.Aeson              (Value (Array, String), object, toJSON,
                                           (.=))
 import           Data.Aeson.Lens         (key, _Integral, _String)
 import           Data.Aeson.Types        (Pair)
+import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Lazy    as LSB
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid             ((<>))
@@ -126,28 +127,6 @@ callBody (CallArgs toBytes method) geth = object
     ]
   ]
 
--- Calls javascript
-call :: MonadIO io => Geth -> CallArgs -> io (Either Text Text)
-call geth args
-  = liftIO $ parse <$> post (T.unpack (gethUrl geth)) (callBody args geth)
-  where
-    parse :: Response LSB.ByteString -> Either Text Text
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text Text)
-        mParsed = (r^?responseBody.key "result"._String.to Right)
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
-
-sendTransaction :: MonadIO io => Geth -> Tx -> io ()
-sendTransaction geth args = liftIO $ void $
-  post (T.unpack (gethUrl geth)) (sendBody args geth)
-
-create :: MonadIO io => Geth -> CreateArgs -> io ()
-create geth args = liftIO $ void $
-  post (T.unpack (gethUrl geth)) (createBody args geth)
-
 extractResult :: Fold Value a -> Response LSB.ByteString -> Either Text a
 extractResult subfield r = fromMaybe parseFailure mParsed
   where
@@ -155,6 +134,23 @@ extractResult subfield r = fromMaybe parseFailure mParsed
       "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
     mParsed = r^?responseBody.key "result".subfield.to Right
           <|> r^?responseBody.key "error".key "message"._String.to Left
+
+call :: MonadIO io => Geth -> CallArgs -> io (Either Text BS.ByteString)
+call geth args =
+    liftIO $ extract <$> post (T.unpack (gethUrl geth)) (callBody args geth)
+  where
+    extract = extractResult $ _String.to textToBytes.traverse
+
+extractTxId :: Response LSB.ByteString -> Either Text TxId
+extractTxId = extractResult $ _String . to textToBytes32 . traverse . to TxId
+
+sendTransaction :: MonadIO m => Geth -> Tx -> m (Either Text TxId)
+sendTransaction geth args = liftIO $ extractTxId <$>
+  post (T.unpack (gethUrl geth)) (sendBody args geth)
+
+create :: MonadIO m => Geth -> CreateArgs -> m (Either Text TxId)
+create geth args = liftIO $ extractTxId <$>
+  post (T.unpack (gethUrl geth)) (createBody args geth)
 
 addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)
 addNode geth (EnodeId eid) = liftIO $
