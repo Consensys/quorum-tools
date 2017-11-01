@@ -26,6 +26,7 @@ import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bool                  (bool)
 import qualified Data.ByteString.Char8      as B8
+import           Data.Foldable              (toList)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
@@ -416,17 +417,16 @@ readEnodeId gid = do
     forceEnodeId = fromMaybe $ error $
       "enode ID not found in list for " <> show gid
 
--- TODO: probably refactor this to take a Geth, not GethId?
+-- TODO: probably refactor this to take a Geth, not GethId? (don't use HasEnv)
+-- TODO: then move the function to QuorumTools.Constellation
 mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
 mkConstellationConfig thisGid = do
-    -- Everyone connects to all the nodes spun up before them
-    let priorPeers :: [GethId]
-        priorPeers = enumFromTo 1 (pred thisGid)
+    otherPeers <- filter (/= thisGid) . toList <$> view clusterInitialMembers
 
     ConstellationConfig <$> constellationUrl thisGid
                         <*> gidDataDir thisGid
                         <*> constellationPort thisGid
-                        <*> traverse constellationUrl priorPeers
+                        <*> traverse constellationUrl otherPeers
   where
     constellationUrl :: HasEnv m => GethId -> m Text
     constellationUrl gid = do
@@ -445,7 +445,7 @@ setupNodes deployDatadir gids = do
 
   geths <- for eGeths $ \case
     Left (GethInitFailed exitCode stdErr) -> do
-      stderr $ select $ ["", "`geth init` failed! stderr output:", ""]
+      stderr $ select ["", "`geth init` failed! stderr output:", ""]
       stderr $ select $ textToLines stdErr
       exit exitCode
     Right geth -> return geth

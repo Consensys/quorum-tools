@@ -60,24 +60,23 @@ setupConstellationNode deployDataDir conf = do
     localDataDir = ccDataDir conf
 
 startConstellationNode :: MonadManaged io => Geth -> io ()
-startConstellationNode geth = do
-    _ <- fork $ sh $ inshellWithJoinedErr command "" & tee logPath
-
-    -- a small delay so this constellation can start its server before the next
-    -- one sends a request to it
-    liftIO $ threadDelay 50000
+startConstellationNode geth =
+    void $ fork $ sh $ inshellWithJoinedErr command "" & tee logPath
 
   where
     forceConfigPath :: Maybe FilePath -> FilePath
     forceConfigPath = fromMaybe $ error "missing constellation config"
 
     confPath = forceConfigPath $ gethConstellationConfig geth
-    command = format ("constellation-node "%fp) confPath
+    command = format ("constellation-node -v "%fp) confPath
     logPath = fromText $ format ("constellation"%d%".out") (gId $ gethId geth)
 
 startConstellationNodes :: (Foldable f, MonadManaged io) => f Geth -> io ()
 startConstellationNodes geths = do
   forM_ geths startConstellationNode
+  --
+  -- TODO: connect to constellations via http instead of this:
+  --
   liftIO $ threadDelay 1000000
 
 -- We parameterize by a DataDir here so that we can handle the case of
