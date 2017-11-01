@@ -11,8 +11,9 @@ import           Data.ByteString         (ByteString)
 import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Base16  as B16
 import qualified Data.ByteString.Char8   as B8
+import           Data.Foldable           (toList)
 import           Data.Maybe              (fromMaybe)
-import           Data.Monoid             (Last, (<>), getLast)
+import           Data.Monoid             (Last, getLast, (<>))
 import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
@@ -31,6 +32,12 @@ inshellWithJoinedErr cmd inputShell = do
   case line of
     Left txt  -> return txt
     Right txt -> return txt
+
+inshellDroppingErr :: Text -> Shell Line -> Shell Line
+inshellDroppingErr cmd = droppingLefts . inshellWithErr cmd
+  where
+    droppingLefts :: Shell (Either Line Line) -> Shell Line
+    droppingLefts = (>>= select . toList)
 
 tee :: FilePath -> Shell Line -> Shell Line
 tee filepath lines = do

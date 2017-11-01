@@ -53,6 +53,7 @@ import           QuorumTools.Genesis        (createGenesisJson)
 import           QuorumTools.Observing
 import           QuorumTools.Types
 import           QuorumTools.Util           (HexPrefix (..), bytes20P,
+                                             inshellDroppingErr,
                                              inshellWithJoinedErr, matchOnce,
                                              printHex, tee, textDecode,
                                              textEncode)
@@ -238,17 +239,6 @@ readAccountKey (DataDir ddPath) gid = do
 
 createAccount :: MonadIO m => Password -> DataDir -> m AccountKey
 createAccount (CleartextPassword pw) dir = do
-    let cmd = rawCommand dir "account new"
-    -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
-                  & grep (begins "Address: ")
-                  & sed (chars *> between (char '{') (char '}') chars)
-    let mkAccountId = forceAcctId -- force head
-          >>> lineToText
-          -- expect this line to be 20 hex bytes
-          >>> matchOnce (bytes20P WithoutPrefix) >>> forceAcctBytes
-          -- an account id is an Addr, is 20 bytes
-          >>> Addr >>> AccountId
     aid <- mkAccountId <$> fold acctShell Fold.head
     mKey <- findAccountKey dir aid
     return $ forceKey mKey
@@ -257,6 +247,19 @@ createAccount (CleartextPassword pw) dir = do
     forceAcctId    = fromMaybe $ error "unable to extract account ID (createAccount)"
     forceAcctBytes = fromMaybe $ error "unable to convert account ID to bytes"
     forceKey       = fromMaybe $ error "unable to find key in keystore"
+
+    cmd = rawCommand dir "account new"
+    -- To respond to "Passphrase:" and "Repeat passphrase:"
+    passwordTwice = select (textToLines pw <> textToLines pw)
+    acctShell = inshellDroppingErr cmd passwordTwice
+              & grep (begins "Address: ")
+              & sed (chars *> between (char '{') (char '}') chars)
+    mkAccountId = forceAcctId -- force head
+              >>> lineToText
+              -- expect this line to be 20 hex bytes
+              >>> matchOnce (bytes20P WithoutPrefix) >>> forceAcctBytes
+              -- an account id is an Addr, is 20 bytes
+              >>> Addr >>> AccountId
 
 fileContaining :: Shell Line -> Managed FilePath
 fileContaining contents = do
