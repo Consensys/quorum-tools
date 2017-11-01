@@ -31,7 +31,7 @@ library
     time-units            == 1.0.*,
     http-client           == 0.5.*,
     base16-bytestring     == 0.1.*,
-    cryptonite            == 0.22.*,
+    cryptonite            == 0.24.*,
     byteable              == 0.1.*,
     unordered-containers  == 0.2.*,
     vector                == 0.12.*,

@@ -6,7 +6,7 @@
 module QuorumTools.Test.Raft.CycleTest where
 
 import           Control.Lens
-import           Data.Set             as Set
+import qualified Data.Set                 as Set
 
 import           QuorumTools.Client
 import           QuorumTools.Cluster
