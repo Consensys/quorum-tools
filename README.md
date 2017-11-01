@@ -2,11 +2,11 @@
 
 This project contains tools for running Quorum clusters and integration testing Quorum.
 
-At the moment, this project runs all Quorum clusters with Raft-based consensus by default and depends on [dynamic raft membership support in Quorum](https://github.com/jpmorganchase/quorum/pull/130). We'll be adding QuorumChain support in short order.
-
 ## Installation
 
-First install Haskell [Stack](https://www.haskell.org/downloads#stack).
+Install [Quorum 2.0](https://github.com/jpmorganchase/quorum/releases/tag/v2.0.0) and [Constellation](https://github.com/jpmorganchase/constellation) so they're on your `PATH`.
+
+Install Haskell [Stack](https://www.haskell.org/downloads#stack).
 
 Now, in the project directory:
 
