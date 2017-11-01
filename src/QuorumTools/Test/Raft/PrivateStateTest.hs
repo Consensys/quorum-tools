@@ -12,29 +12,35 @@ import           QuorumTools.Types
 
 privateStateTestMain :: IO ()
 privateStateTestMain = testNTimes 1 PrivacyEnabled (NumNodes 3) $ \iNodes -> do
-  let ([g1, g2, g3], instruments) = unzip iNodes
-      (_, geth1Instruments) = head iNodes
+  let (geths, instruments) = unzip iNodes
+      (g1, geth1Instruments) = head iNodes
 
   -- geth1 and geth3 are both party to this tx, but geth2 is not
   key3 <- liftIO $ readTextFile "gdata/geth3/keys/constellation.pub"
+
+  td 2
 
   let privStorage = simpleStorage (PrivateFor [Secp256k1 key3])
   privStorageAddr <- createContract g1 privStorage (txAddrs geth1Instruments)
 
   -- The storage starts with a value of 42 and we increment it five times
-  let increments = 5
-  replicateM_ increments $ incrementStorage g1 privStorage privStorageAddr
+  let initialValue = 42
+      asyncIncs = 2
+      syncIncs = 3
+      increments = syncIncs + asyncIncs
+
+  replicateM_ asyncIncs $ incrementStorage g1 Async privStorage privStorageAddr
+  replicateM_ syncIncs $ incrementStorage g1 Sync privStorage privStorageAddr
 
   awaitBlockConvergence instruments
 
-  let expectedPrivateValue = 42 + increments
+  [i1, i2, i3] <- traverse (getStorage privStorage privStorageAddr) geths
 
-  i1 <- getStorage g1 privStorage privStorageAddr
-  expectEq i1 expectedPrivateValue
+  let expectedPrivateValue = initialValue + increments
+      [id1, id2, id3] = gethId <$> geths
 
-  i2 <- getStorage g2 privStorage privStorageAddr
-  expectEq i2 0
-  -- TODO confirm geth2 also gets transaction
-
-  i3 <- getStorage g3 privStorage privStorageAddr
-  expectEq i3 expectedPrivateValue
+  expectEq
+    [ (id1, expectedPrivateValue, i1)
+    , (id2,                    0, i2)
+    , (id3, expectedPrivateValue, i3)
+    ]

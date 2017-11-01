@@ -1,6 +1,3 @@
-[submodule "symmetric-properties"]
-	path = symmetric-properties
-	url = git@github.com:joelburget/symmetric-properties.git
 [submodule "constellation"]
 	path = constellation
 	url = https://github.com/jpmorganchase/constellation.git

@@ -9,17 +9,14 @@ resolver: lts-8.3
 packages:
 - '.'
 - location:
-    git: git@github.com:joelburget/symmetric-properties.git
-    commit: ce2a00df46751896966482b9beeadb1220fda575
-  extra-dep: true
-- location:
     git: https://github.com/jpmorganchase/constellation.git
-    commit: 67707bb2ad82e58390a279b77f6e23a7a05a7f97
+    commit: e268b075f5fb8fe8e485ff05cdf567216d76e7d8
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
+- symmetric-properties-0.1.0.0
 - rate-limit-1.1.1
 - time-units-1.0.0
 - vector-0.12.0.0
@@ -30,6 +27,7 @@ extra-deps:
 - logging-3.0.4           # constellation
 - saltine-0.0.0.5         # constellation
 - cryptonite-0.22         # constellation
+- leveldb-haskell-0.6.5   # constellation
 
 # Override default flag values for local packages and extra-deps
 flags: {}

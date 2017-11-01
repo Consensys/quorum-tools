@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 
 module QuorumTools.Client
   ( SpamMode(..)
@@ -17,13 +18,14 @@ module QuorumTools.Client
   , removeNode
   ) where
 
-import           Control.Lens            (to, (^.), (^?))
+import           Control.Lens            (Fold, to, (^.), (^?))
 import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
                                           generateRateLimitedFunction)
-import           Data.Aeson              (Value(Array, String), object, (.=),
-                                          toJSON)
+import           Data.Aeson              (Value (Array, String), object, toJSON,
+                                          (.=))
+import           Data.Aeson.Lens         (key, _Integral, _Null, _String)
 import           Data.Aeson.Types        (Pair)
-import           Data.Aeson.Lens         (key, _String, _Integral)
+import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Lazy    as LSB
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid             ((<>))
@@ -38,14 +40,22 @@ import           Network.Wreq            (Response, post, responseBody)
 import           Network.Wreq.Session    (Session)
 import qualified Network.Wreq.Session    as Sess
 import           Prelude                 hiding (FilePath, lines)
-import           Turtle
+import           Turtle                  hiding (Fold)
 
 import           QuorumTools.Cluster
 import           QuorumTools.Types
 import           QuorumTools.Util
 
+data TxResult
+  = TxAck TxId -- for sync
+  | TxSent     -- for async
+  deriving (Show)
+
 t :: Text -> Text
 t = id
+
+i :: Int -> Int
+i = id
 
 encodeMethod :: UnencodedMethod -> Bytes32
 encodeMethod (UnencodedMethod signature) = sha3Bytes (T.encodeUtf8 signature)
@@ -64,7 +74,7 @@ setPrivateFor privacy params = case privacy of
 
 emptyTxRpcBody :: Geth -> Value
 emptyTxRpcBody geth = object
-    [ "id"      .= (1 :: Int)
+    [ "id"      .= i 1
     , "jsonrpc" .= t "2.0"
     , "method"  .= t "eth_sendTransaction"
     , "params"  .=
@@ -77,7 +87,7 @@ emptyTxRpcBody geth = object
 
 sendBody :: Tx -> Geth -> Value
 sendBody (Tx maybeTo method privacy sync) geth = object
-    [ "id"      .= (1 :: Int)
+    [ "id"      .= i 1
     , "jsonrpc" .= t "2.0"
     , "method"  .= opName sync
     , "params"  .= [ object params' ]
@@ -95,21 +105,21 @@ createBody :: CreateArgs -> Geth -> Value
 createBody
   (CreateArgs (Contract privacy _methods bytecode _abi) initVal sync)
   geth         = object
-  [ "id"      .= (1 :: Int)
+  [ "id"      .= i 1
   , "jsonrpc" .= t "2.0"
   , "method"  .= opName sync
   , "params"  .=
     [ object $ setPrivateFor privacy
       [ "from"  .= showGethAccountId geth
-      , "data"  .= (bytecode <> printHex WithoutPrefix initVal)
-      , "gas"   .= t "4700000"
+      , "data"  .= ("0x" <> bytecode <> printHex WithoutPrefix initVal)
+      , "gas"   .= t "0x47B760"
       ]
     ]
   ]
 
 callBody :: CallArgs -> Geth -> Value
 callBody (CallArgs toBytes method) geth = object
-  [ "id"      .= (1 :: Int)
+  [ "id"      .= i 1
   , "jsonrpc" .= t "2.0"
   , "method"  .= t "eth_call"
   , "params"  .=
@@ -122,71 +132,62 @@ callBody (CallArgs toBytes method) geth = object
     ]
   ]
 
--- Calls javascript
-call :: MonadIO io => Geth -> CallArgs -> io (Either Text Text)
-call geth args
-  = liftIO $ parse <$> post (T.unpack (gethUrl geth)) (callBody args geth)
+extractResult :: Fold Value a -> Response LSB.ByteString -> Either Text a
+extractResult subfield r = fromMaybe parseFailure mParsed
   where
-    parse :: Response LSB.ByteString -> Either Text Text
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text Text)
-        mParsed = (r^?responseBody.key "result"._String.to Right)
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
+    parseFailure = Left $ toStrict $
+      "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
+    mParsed = r^?responseBody.key "result".subfield.to Right
+          <|> r^?responseBody.key "error".key "message"._String.to Left
 
-sendTransaction :: MonadIO io => Geth -> Tx -> io ()
-sendTransaction geth args = liftIO $ void $
+call :: MonadIO io => Geth -> CallArgs -> io (Either Text BS.ByteString)
+call geth args =
+    liftIO $ extract <$> post (T.unpack (gethUrl geth)) (callBody args geth)
+  where
+    extract = extractResult $ _String.to textToBytes.traverse
+
+extractTxResult :: TxSync -> Response LSB.ByteString -> Either Text TxResult
+extractTxResult mode resp =
+  case mode of
+    Sync -> extractResult
+              (_String . to textToBytes32 . traverse . to (TxAck . TxId))
+              resp
+    Async -> extractResult (_Null . to (const TxSent)) resp
+
+sendTransaction :: MonadIO m => Geth -> Tx -> m (Either Text TxResult)
+sendTransaction geth args = liftIO $ extractTxResult (txSync args) <$>
   post (T.unpack (gethUrl geth)) (sendBody args geth)
 
-create :: MonadIO io => Geth -> CreateArgs -> io ()
-create geth args = liftIO $ void $
+create :: MonadIO m => Geth -> CreateArgs -> m (Either Text TxResult)
+create geth args@(CreateArgs _ _ mode) = liftIO $ extractTxResult mode <$>
   post (T.unpack (gethUrl geth)) (createBody args geth)
 
 addNode :: MonadIO m => Geth -> EnodeId -> m (Either Text GethId)
-addNode geth (EnodeId eid) = liftIO $ parse <$> post url body
+addNode geth (EnodeId eid) = liftIO $
+    extractResult (_Integral . to GethId) <$> post url body
   where
     url = T.unpack (gethUrl geth)
 
     body :: Value
     body = object
-      [ "id"      .= (1 :: Int)
+      [ "id"      .= i 1
       , "jsonrpc" .= t "2.0"
       , "method"  .= t "raft_addPeer"
       , "params"  .= [String eid]
       ]
 
-    parse :: Response LSB.ByteString -> Either Text GethId
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text GethId)
-        mParsed = (r^?responseBody.key "result"._Integral.to (Right . GethId))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
-
 removeNode :: MonadIO m => Geth -> GethId -> m (Either Text ())
-removeNode geth gid = liftIO $ parse <$> post url body
+removeNode geth gid = liftIO $ extractResult (to $ const ()) <$> post url body
   where
     url = T.unpack (gethUrl geth)
 
     body :: Value
     body = object
-      [ "id"      .= (1 :: Int)
+      [ "id"      .= i 1
       , "jsonrpc" .= t "2.0"
       , "method"  .= t "raft_removePeer"
       , "params"  .= [toJSON (gId gid)]
       ]
-
-    parse :: Response LSB.ByteString -> Either Text ()
-    parse r = fromMaybe parseFailure mParsed
-      where
-        parseFailure = Left $ toStrict $
-          "failed to parse RPC response: " <> LT.decodeUtf8 (r^.responseBody)
-        mParsed :: Maybe (Either Text ())
-        mParsed = (r^?responseBody.key "result".to (const (Right ())))
-              <|> (r^?responseBody.key "error".key "message"._String.to Left)
 
 sendEmptyTx :: MonadIO io => Geth -> io ()
 sendEmptyTx geth = liftIO $ void $

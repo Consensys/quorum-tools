@@ -26,6 +26,7 @@ import           Data.Aeson.Types           (parseMaybe)
 import qualified Data.Aeson.Types           as Aeson
 import           Data.Bool                  (bool)
 import qualified Data.ByteString.Char8      as B8
+import           Data.Foldable              (toList)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
@@ -52,6 +53,7 @@ import           QuorumTools.Genesis        (createGenesisJson)
 import           QuorumTools.Observing
 import           QuorumTools.Types
 import           QuorumTools.Util           (HexPrefix (..), bytes20P,
+                                             inshellDroppingErr,
                                              inshellWithJoinedErr, matchOnce,
                                              printHex, tee, textDecode,
                                              textEncode)
@@ -130,6 +132,13 @@ setupCommand gid = format ("geth --datadir "%fp%
                       <$> fmap dataDirPath (gidDataDir gid)
                       <*> httpPort gid
 
+bootnodeCommand :: Text
+bootnodeCommand = "bootnode --nodekeyhex 77bd02ffa26e3fb8f324bda24ae588066f1873d95680104de5bc2db9e7b2e510 --addr='127.0.0.1:33445'"
+
+
+bootnodeEnode :: EnodeId
+bootnodeEnode = EnodeId "enode://61077a284f5ba7607ab04f33cfde2750d659ad9af962516e159cf6ce708646066cd927a900944ce393b98b95c914e4d6c54b099f568342647a1cd4a262cc0423@[127.0.0.1]:33445"
+
 gethCommand :: Geth -> Text -> Text
 gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --port "%d                        %
@@ -141,7 +150,9 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                        " --rpccorsdomain '*'"              %
                                        " --rpcaddr localhost"              %
                                        " --rpcapi eth,net,web3,raft,admin" %
+                                       " --emitcheckpoints"                %
                                        " --unlock 0"                       %
+                                       " --password /dev/null"             %
                                        " "%s%
                                        " "%s)
                           envVar
@@ -150,7 +161,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                           (gethRpcPort geth)
                           (gethNetworkId geth)
                           (gethVerbosity geth)
-                          consensusOptions
+                          (consensusOptions (gethConsensusPeer geth))
                           more
   where
     envVar :: Text
@@ -158,20 +169,26 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
       Just conf -> "PRIVATE_CONFIG=" <> format fp conf
       Nothing   -> ""
 
-    consensusOptions :: Text
-    consensusOptions = case gethConsensusPeer geth of
-      RaftPeer port -> case gethJoinMode geth of
+    consensusOptions :: ConsensusPeer -> Text
+    consensusOptions (RaftPeer port) = case gethJoinMode geth of
         JoinExisting -> format ("--raft --raftjoinexisting "%d%" --raftport "%d)
                                (gId $ gethId geth)
                                port
         JoinNewCluster -> format ("--raft --raftport "%d) port
-      QuorumChainPeer acctId mRole -> case mRole of
-        Nothing -> ""
-        Just BlockMaker ->
-          format ("--blockmakeraccount \""%s%"\" --blockmakerpassword \"\"")
-                 (accountIdToText acctId)
-        Just Voter -> format ("--voteaccount \""%s%"\" --votepassword \"\"")
-                             (accountIdToText acctId)
+    consensusOptions (QuorumChainPeer (EnodeId bootnode) acctId mRole) =
+      let roleSpecificText = case mRole of
+            Nothing -> ""
+            Just BlockMaker -> format
+              ("--blockmakeraccount '"%s%"' --blockmakerpassword ''"
+              %" --voteaccount '"%s%"' --votepassword ''"
+              )
+              (accountIdToText acctId)
+              (accountIdToText acctId)
+            Just Voter -> format
+              ("--voteaccount '"%s%"' --votepassword ''")
+              (accountIdToText acctId)
+
+      in format ("--bootnodes '"%s%"' --networkid 84234 "%s) bootnode roleSpecificText
 
 initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
          => FilePath
@@ -222,25 +239,27 @@ readAccountKey (DataDir ddPath) gid = do
 
 createAccount :: MonadIO m => Password -> DataDir -> m AccountKey
 createAccount (CleartextPassword pw) dir = do
-    let cmd = rawCommand dir "account new"
-    -- Enter pw twice in response to "Passphrase:" and "Repeat passphrase:"
-    let acctShell = inshell cmd (select $ textToLines pw <> textToLines pw)
-                  & grep (begins "Address: ")
-                  & sed (chars *> between (char '{') (char '}') chars)
-    let mkAccountId = forceAcctId -- force head
-          >>> lineToText
-          -- expect this line to be 20 hex bytes
-          >>> matchOnce (bytes20P WithoutPrefix) >>> forceAcctBytes
-          -- an account id is an Addr, is 20 bytes
-          >>> Addr >>> AccountId
     aid <- mkAccountId <$> fold acctShell Fold.head
     mKey <- findAccountKey dir aid
     return $ forceKey mKey
 
   where
-    forceAcctId    = fromMaybe $ error "unable to extract account ID"
+    forceAcctId    = fromMaybe $ error "unable to extract account ID (createAccount)"
     forceAcctBytes = fromMaybe $ error "unable to convert account ID to bytes"
     forceKey       = fromMaybe $ error "unable to find key in keystore"
+
+    cmd = rawCommand dir "account new"
+    -- To respond to "Passphrase:" and "Repeat passphrase:"
+    passwordTwice = select (textToLines pw <> textToLines pw)
+    acctShell = inshellDroppingErr cmd passwordTwice
+              & grep (begins "Address: ")
+              & sed (chars *> between (char '{') (char '}') chars)
+    mkAccountId = forceAcctId -- force head
+              >>> lineToText
+              -- expect this line to be 20 hex bytes
+              >>> matchOnce (bytes20P WithoutPrefix) >>> forceAcctBytes
+              -- an account id is an Addr, is 20 bytes
+              >>> Addr >>> AccountId
 
 fileContaining :: Shell Line -> Managed FilePath
 fileContaining contents = do
@@ -261,7 +280,7 @@ gidIp gid = force . Map.lookup gid <$> view clusterIps
 requestEnodeId :: (MonadIO m, HasEnv m) => GethId -> m EnodeId
 requestEnodeId gid = do
     mkCmd <- setupCommand gid
-    (Ip ip) <- gidIp gid
+    Ip ip <- gidIp gid
 
     let enodeIdShell = do
                          jsPath <- using $ fileContaining jsPayload
@@ -276,7 +295,7 @@ requestEnodeId gid = do
 
   where
     jsPayload = return "console.log(admin.nodeInfo.enode)"
-    forceNodeId = fromMaybe $ error "unable to extract enode ID"
+    forceNodeId = fromMaybe $ error "unable to extract enode ID (requestEnodeId)"
 
 addRaftPort :: Port -> EnodeId -> EnodeId
 addRaftPort (Port port) (EnodeId url) = EnodeId
@@ -299,10 +318,10 @@ addRaftPort (Port port) (EnodeId url) = EnodeId
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
 mkConsensusPeer gid _   (Raft basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
-mkConsensusPeer gid aid (QuorumChain bmGid voterGids) =
-  QuorumChainPeer aid $ if | gid == bmGid ->           Just BlockMaker
-                           | gid `member` voterGids -> Just Voter
-                           | otherwise ->              Nothing
+mkConsensusPeer gid aid (QuorumChain bootnode bmGid voterGids) =
+  QuorumChainPeer bootnode aid $ if | gid == bmGid ->           Just BlockMaker
+                                    | gid `member` voterGids -> Just Voter
+                                    | otherwise ->              Nothing
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do
@@ -401,17 +420,16 @@ readEnodeId gid = do
     forceEnodeId = fromMaybe $ error $
       "enode ID not found in list for " <> show gid
 
--- TODO: probably refactor this to take a Geth, not GethId?
+-- TODO: probably refactor this to take a Geth, not GethId? (don't use HasEnv)
+-- TODO: then move the function to QuorumTools.Constellation
 mkConstellationConfig :: HasEnv m => GethId -> m ConstellationConfig
 mkConstellationConfig thisGid = do
-    -- Everyone connects to all the nodes spun up before them
-    let priorPeers :: [GethId]
-        priorPeers = enumFromTo 1 (pred thisGid)
+    otherPeers <- filter (/= thisGid) . toList <$> view clusterInitialMembers
 
     ConstellationConfig <$> constellationUrl thisGid
                         <*> gidDataDir thisGid
                         <*> constellationPort thisGid
-                        <*> traverse constellationUrl priorPeers
+                        <*> traverse constellationUrl otherPeers
   where
     constellationUrl :: HasEnv m => GethId -> m Text
     constellationUrl gid = do
@@ -430,7 +448,7 @@ setupNodes deployDatadir gids = do
 
   geths <- for eGeths $ \case
     Left (GethInitFailed exitCode stdErr) -> do
-      stderr $ select $ ["", "`geth init` failed! stderr output:", ""]
+      stderr $ select ["", "`geth init` failed! stderr output:", ""]
       stderr $ select $ textToLines stdErr
       exit exitCode
     Right geth -> return geth

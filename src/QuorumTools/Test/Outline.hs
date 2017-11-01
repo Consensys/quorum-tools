@@ -14,11 +14,12 @@ import           Control.Monad.Except
 import           Control.Monad.Managed     (MonadManaged)
 import           Control.Monad.Reader      (ReaderT (runReaderT), MonadReader,
                                             ask)
+import           Data.Foldable             (toList)
 import           Data.Monoid               (Last (Last))
 import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
-import           Data.Text                 (Text, pack)
+import           Data.Text                 (Text, pack, unpack)
 import qualified Data.Text                 as T
 import qualified Data.Text.IO              as T
 import           Data.Time                 (defaultTimeLocale, formatTime,
@@ -28,6 +29,7 @@ import           Data.Vector               (Vector)
 import qualified QuorumTools.IpTables      as IPT
 import qualified QuorumTools.PacketFilter  as PF
 import           Prelude                   hiding (FilePath)
+import           System.Console.ANSI
 import           System.Info
 import           Turtle
 
@@ -37,7 +39,7 @@ import           QuorumTools.Constellation
 import           QuorumTools.Control       (Behavior, awaitAll, convergence,
                                             observe, timeLimit)
 import           QuorumTools.Types
-import           QuorumTools.Util          (lastOrEmpty)
+import           QuorumTools.Util          (lastOrEmpty, inshellWithJoinedErr)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -47,18 +49,46 @@ data FailureReason
   | NoBlockFound
   | TerminatedUnexpectedly
   | LostTxes (Set TxId)
-  -- Expected @Int@, received @Either Text Int@
-  | WrongValue Int (Either Text Int)
   | AddNodeFailure
   | RemoveNodeFailure
+  -- For each @GethId@, Expected @Int@, received @Either Text Int@
+  | WrongValue [(GethId, Int, Either Text Int)]
   | BlockDivergence (Vector (Last Block))
   | BlockConvergenceTimeout
+  | RpcFailure Text
   deriving Show
 
 data Validity
   = Verified
   | Falsified FailureReason
   deriving Show
+
+withColor :: Color -> IO () -> IO ()
+withColor color action = do
+  setSGR [SetColor Foreground Vivid color]
+  action
+  setSGR []
+
+printFailureReason :: FailureReason -> IO ()
+printFailureReason reason = withColor Red $ case reason of
+  WrongValue vals -> do
+    putStrLn "Received at least one wrong value:"
+    forM_ vals $ \(GethId n, expected, actual) -> do
+      let actual' = case actual of
+            Left msg -> "error \"" ++ unpack msg ++ "\""
+            Right val -> show val
+      putStrLn $ "Geth " ++ show n ++ ": received " ++ actual' ++ ", expected "
+        ++ show expected
+  NoBlockFound -> putStrLn "No block produced on any node"
+  WrongOrder (Last b1) (Last b2) -> putStrLn $
+    "Two blocks were found in the wrong order: " ++ show b1 ++ ", " ++ show b2
+  TerminatedUnexpectedly -> putStrLn "A node panicked"
+  LostTxes txes -> putStrLn $ "some transactions were lost: " ++ show txes
+  AddNodeFailure -> putStrLn "Failed to add a node"
+  RemoveNodeFailure -> putStrLn "Failed to remove a node"
+  BlockDivergence blocks -> putStrLn $ "different last blocks on each node: " ++ show (toList blocks)
+  BlockConvergenceTimeout -> putStrLn "blocks failed to converge before timeout"
+  RpcFailure msg -> putStrLn $ "rpc failure: " <> unpack msg
 
 instance Monoid Validity where
   mempty = Verified
@@ -109,14 +139,20 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
       keys <- generateClusterKeys gids password
 
-      let cEnv = mkLocalEnv keys
+      let -- blockMaker:voters = gids
+          cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
                & clusterPassword       .~ password
+               -- & clusterConsensus      .~ QuorumChain
+               --   bootnodeEnode
+               --   blockMaker
+               --   (Set.fromList voters)
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
       result <- runTestM cEnv $ do
         _ <- when (os == "darwin") PF.acquirePf
+        _ <- fork $ sh $ inshellWithJoinedErr bootnodeCommand empty
 
         geths <- wipeAndSetupNodes Nothing "gdata" gids
         when (privacySupport == PrivacyEnabled) (startConstellationNodes geths)
@@ -145,9 +181,8 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
 
         verifier
 
-      print result
       case result of
-        Left reason -> print reason >> pure DoTerminateFailure
+        Left reason -> printFailureReason reason >> pure DoTerminateFailure
         Right ()    -> case p testNum of
           DontTerminate -> runMoreTests
           term          -> pure term

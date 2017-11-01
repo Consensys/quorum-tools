@@ -10,7 +10,7 @@ library
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs
   build-depends:
-    base                  == 4.9.*,
+    base                  == 4.9.* || == 4.10.*,
     text                  == 1.2.*,
     mtl                   == 2.2.*,
     async                 == 2.1.*,
@@ -44,17 +44,6 @@ library
     uri-bytestring        == 0.2.*
   exposed-modules:
     QuorumTools
-    QuorumTools.Mains.LocalNew
-    QuorumTools.Mains.LocalSpam
-    QuorumTools.Mains.LocalStart
-    QuorumTools.Test.Raft.CycleTest
-    QuorumTools.Test.Raft.LeaderPartitionTest
-    QuorumTools.Test.Raft.LeaveJoinTest
-    QuorumTools.Test.Raft.NewcomerRejoinTest
-    QuorumTools.Test.Raft.PrivateStateTest
-    QuorumTools.Test.Raft.PublicStateTest
-    QuorumTools.Test.Raft.RestartNodeTest
-  other-modules:
     QuorumTools.Checkpoint
     QuorumTools.Client
     QuorumTools.Cluster
@@ -63,11 +52,21 @@ library
     QuorumTools.Genesis
     QuorumTools.Genesis.Contract
     QuorumTools.IpTables
+    QuorumTools.Mains.LocalNew
+    QuorumTools.Mains.LocalSpam
+    QuorumTools.Mains.LocalStart
     QuorumTools.NetworkInfo
     QuorumTools.Observing
     QuorumTools.PacketFilter
     QuorumTools.Spam
     QuorumTools.Test.Outline
+    QuorumTools.Test.Raft.CycleTest
+    QuorumTools.Test.Raft.LeaderPartitionTest
+    QuorumTools.Test.Raft.LeaveJoinTest
+    QuorumTools.Test.Raft.NewcomerRejoinTest
+    QuorumTools.Test.Raft.PrivateStateTest
+    QuorumTools.Test.Raft.PublicStateTest
+    QuorumTools.Test.Raft.RestartNodeTest
     QuorumTools.Test.State
     QuorumTools.Types
     QuorumTools.Util

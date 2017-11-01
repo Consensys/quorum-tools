@@ -13,22 +13,29 @@ import           QuorumTools.Types
 publicStateTestMain :: IO ()
 publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
-      geths = fst <$> iNodes
-      sendTo = cycle geths
+      (geths, instruments) = unzip iNodes
+      -- sendTo = cycle geths
+      sendTo = repeat geth1
       contract = simpleStorage Public
-      instruments = snd <$> iNodes
+
+  td 1
 
   storageAddr <- createContract geth1 contract (txAddrs geth1Instruments)
 
   let increments = 10
 
   forM_ (take increments sendTo) $ \geth ->
-    incrementStorage geth contract storageAddr
+    incrementStorage geth Sync contract storageAddr
 
   awaitBlockConvergence instruments
 
-  let expectedValue = 42 + increments
+  [i1, i2, i3] <- traverse (getStorage contract storageAddr) geths
 
-  forM_ geths $ \geth -> do
-    i <- getStorage geth contract storageAddr
-    expectEq i expectedValue
+  let expectedValue = 42 + increments
+      [id1, id2, id3] = gethId <$> geths
+
+  expectEq
+    [ (id1, expectedValue, i1)
+    , (id2, expectedValue, i2)
+    , (id3, expectedValue, i3)
+    ]

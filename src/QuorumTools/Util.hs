@@ -11,8 +11,9 @@ import           Data.ByteString         (ByteString)
 import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Base16  as B16
 import qualified Data.ByteString.Char8   as B8
+import           Data.Foldable           (toList)
 import           Data.Maybe              (fromMaybe)
-import           Data.Monoid             (Last, (<>), getLast)
+import           Data.Monoid             (Last, getLast, (<>))
 import           Data.Text               (Text)
 import qualified Data.Text               as T
 import qualified Data.Text.Encoding      as T
@@ -31,6 +32,12 @@ inshellWithJoinedErr cmd inputShell = do
   case line of
     Left txt  -> return txt
     Right txt -> return txt
+
+inshellDroppingErr :: Text -> Shell Line -> Shell Line
+inshellDroppingErr cmd = droppingLefts . inshellWithErr cmd
+  where
+    droppingLefts :: Shell (Either Line Line) -> Shell Line
+    droppingLefts = (>>= select . toList)
 
 tee :: FilePath -> Shell Line -> Shell Line
 tee filepath lines = do
@@ -75,6 +82,9 @@ bytes20P parsePre = prefixP parsePre >> (Bytes20 . B8.pack <$> count 40 hexDigit
 bytes32P :: HexPrefix -> Pattern Bytes32
 bytes32P parsePre = prefixP parsePre >> (Bytes32 . B8.pack <$> count 64 hexDigit)
 
+bytesP :: HexPrefix -> Pattern ByteString
+bytesP parsePre = prefixP parsePre >> (B8.pack <$> many hexDigit)
+
 instance Show Bytes20 where
   show = T.unpack . hexPrefixed
 
@@ -102,6 +112,10 @@ instance FromJSON Bytes32 where
     , Just bytes <- textToBytes32 text
     = pure bytes
     | otherwise = typeMismatch "Bytes32" jsonVal
+
+textToBytes :: Text -> Maybe ByteString
+textToBytes t = matchOnce (bytesP WithPrefix) t
+            <|> matchOnce (bytesP WithoutPrefix) t
 
 class Hex a where
   toHex :: ByteString -> a
@@ -152,6 +166,7 @@ intToBytes20 = toHex . intToHexBS where
 
 toInt :: Hex a => a -> Maybe Int
 toInt h = case readHex (B8.unpack (fromHex h)) of
+  [] -> Just 0
   [(i, "")] -> Just i
   _ -> Nothing
 

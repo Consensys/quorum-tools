@@ -20,10 +20,16 @@ import           QuorumTools.Util
 
 createStorage :: [AccountId] -> [AccountId] -> Value
 createStorage voters makers = Object $ meta <> votersBlock <> makersBlock
-  where threshold = 2 -- of 3
-        voterIx = 3
-        makerIx = 5
+  where
+        -- Indexes of data fields in voting smart contract
+        -- periodIx     = 0
+        thresholdIx  = 1
+        voterCountIx = 2
+        voterIx      = 3
+        makerCountIx = 4
+        makerIx      = 5
 
+        threshold = 2 -- of 3
         numVoters = length voters
         numMakers = length makers
 
@@ -34,9 +40,9 @@ createStorage voters makers = Object $ meta <> votersBlock <> makersBlock
         hexPadKey = hexPrefixed . intToBytes32
 
         meta = HashMap.fromList
-          [ (hexPadKey 1, numToHexValue threshold)
-          , (hexPadKey 2, numToHexValue numVoters)
-          , (hexPadKey 4, numToHexValue numMakers)
+          [ (hexPadKey thresholdIx, numToHexValue threshold)
+          , (hexPadKey voterCountIx, numToHexValue numVoters)
+          , (hexPadKey makerCountIx, numToHexValue numMakers)
           ]
 
         votersBlock = mapAddresses voterIx voters
@@ -47,7 +53,7 @@ mapAddresses index addresses =
   let v = V.fromList addresses
       addrToStorage (AccountId (Addr addrBytes)) =
         let Bytes32 key = storageKey index addrBytes
-        in (T.decodeUtf8 key, "0x01")
+        in ("0x" <> T.decodeUtf8 key, "0x0000000000000000000000000000000000000000000000000000000000000001")
       mapped = addrToStorage <$> v
   in HashMap.fromList (V.toList mapped)
 
@@ -69,7 +75,8 @@ createGenesisJson acctIds = do
     return jsonPath
 
   where
-    voter:makers = acctIds
+    maker = head acctIds
+    voters = acctIds
 
     balances :: [Aeson.Pair]
     balances = fmap
@@ -78,7 +85,9 @@ createGenesisJson acctIds = do
 
     header = "0x0000000000000000000000000000000000000020" .= object
       [ "code"    .= qcContractCode
-      , "storage" .= createStorage [voter] makers
+      , "storage" .= createStorage voters [maker]
+      , "storage" .= createStorage acctIds [maker]
+      , "balance" .= t "0"
       ]
 
     contents :: Shell Line
@@ -86,15 +95,20 @@ createGenesisJson acctIds = do
       [ "alloc"      .= object (header:balances)
       , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
       , "config"     .= object
-        [ "homesteadBlock" .= (0 :: Int) ]
+        [ "homesteadBlock" .= i 100000000
+        , "chainId"        .= i 1
+        , "eip155Block"    .= i 100000000
+        , "eip158Block"    .= i 100000000
+        , "isQuorum"       .= True
+        ]
       , "difficulty" .= t "0x0"
-      , "extraData"  .= t "0x0"
+      , "extraData"  .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
       , "gasLimit"   .= t "0xE0000000"
       , "mixhash"    .= t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
       , "nonce"      .= t "0x0"
       , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
-      , "timestamp"  .= t "0x0"
+      , "timestamp"  .= t "0x00"
       ]
 
     t = id :: Text -> Text
-
+    i = id :: Int -> Int
