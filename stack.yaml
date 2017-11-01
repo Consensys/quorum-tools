@@ -10,7 +10,7 @@ packages:
 - '.'
 - location:
     git: https://github.com/jpmorganchase/constellation.git
-    commit: 67707bb2ad82e58390a279b77f6e23a7a05a7f97
+    commit: e268b075f5fb8fe8e485ff05cdf567216d76e7d8
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
@@ -27,6 +27,7 @@ extra-deps:
 - logging-3.0.4           # constellation
 - saltine-0.0.0.5         # constellation
 - cryptonite-0.22         # constellation
+- leveldb-haskell-0.6.5   # constellation
 
 # Override default flag values for local packages and extra-deps
 flags: {}
