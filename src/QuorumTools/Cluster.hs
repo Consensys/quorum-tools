@@ -32,7 +32,6 @@ import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                (First (..))
 import           Data.Semigroup             ((<>))
-import           Data.Set                   (member)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, replace)
 import qualified Data.Text                  as T
@@ -175,20 +174,6 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                (gId $ gethId geth)
                                port
         JoinNewCluster -> format ("--raft --raftport "%d) port
-    consensusOptions (QuorumChainPeer (EnodeId bootnode) acctId mRole) =
-      let roleSpecificText = case mRole of
-            Nothing -> ""
-            Just BlockMaker -> format
-              ("--blockmakeraccount '"%s%"' --blockmakerpassword ''"
-              %" --voteaccount '"%s%"' --votepassword ''"
-              )
-              (accountIdToText acctId)
-              (accountIdToText acctId)
-            Just Voter -> format
-              ("--voteaccount '"%s%"' --votepassword ''")
-              (accountIdToText acctId)
-
-      in format ("--bootnodes '"%s%"' --networkid 84234 "%s) bootnode roleSpecificText
 
 initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
          => FilePath
@@ -316,12 +301,8 @@ addRaftPort (Port port) (EnodeId url) = EnodeId
     removeMissingPassword = T.replace ":@" "@"
 
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
-mkConsensusPeer gid _   (Raft basePort) =
+mkConsensusPeer gid _ (Raft basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
-mkConsensusPeer gid aid (QuorumChain bootnode bmGid voterGids) =
-  QuorumChainPeer bootnode aid $ if | gid == bmGid ->           Just BlockMaker
-                                    | gid `member` voterGids -> Just Voter
-                                    | otherwise ->              Nothing
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do
@@ -439,8 +420,7 @@ mkConstellationConfig thisGid = do
 
 setupNodes :: (MonadIO m, HasEnv m) => Maybe DataDir -> [GethId] -> m [Geth]
 setupNodes deployDatadir gids = do
-  acctKeys <- view clusterAccountKeys
-  genesisJsonPath <- createGenesisJson $ _akAccountId <$> Map.elems acctKeys
+  genesisJsonPath <- createGenesisJson
 
   clusterEnv <- ask
   eGeths <- liftIO $ forConcurrently gids $ \gid ->

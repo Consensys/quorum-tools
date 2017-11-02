@@ -143,10 +143,6 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
           cEnv = mkLocalEnv keys
                & clusterPrivacySupport .~ privacySupport
                & clusterPassword       .~ password
-               -- & clusterConsensus      .~ QuorumChain
-               --   bootnodeEnode
-               --   blockMaker
-               --   (Set.fromList voters)
 
       putStrLn $ "test #" ++ show (unTestNum testNum)
 
