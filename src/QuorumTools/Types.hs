@@ -64,21 +64,10 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
                              }
   deriving (Show, Eq)
 
-data Consensus
-  = Raft        { _raftBasePort :: Port }
-  | QuorumChain { qcBootEnode     :: EnodeId
-                , qcBlockMaker    :: GethId
-                , qcVoterAccounts :: Set GethId }
+data Consensus = Raft { _raftBasePort :: Port }
   deriving (Eq, Show)
 
-data QuorumChainRole
-  = BlockMaker
-  | Voter
-  deriving (Eq, Show)
-
-data ConsensusPeer
-  = RaftPeer Port
-  | QuorumChainPeer EnodeId AccountId (Maybe QuorumChainRole)
+data ConsensusPeer = RaftPeer Port
   deriving (Eq, Show)
 
 data PrivacySupport
