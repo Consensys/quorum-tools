@@ -50,7 +50,6 @@ library
     QuorumTools.Constellation
     QuorumTools.Control
     QuorumTools.Genesis
-    QuorumTools.Genesis.Contract
     QuorumTools.IpTables
     QuorumTools.Mains.LocalNew
     QuorumTools.Mains.LocalSpam
