@@ -20,6 +20,8 @@ import qualified Data.Text.Encoding      as T
 import qualified Data.Text.IO            as T
 import           Data.Text.Lazy          (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding as LT
+import           Data.Time               (defaultTimeLocale, formatTime,
+                                          getZonedTime)
 import           Numeric                 (readHex, showHex)
 import           Prelude                 hiding (FilePath, lines)
 import           System.IO               (BufferMode (..), hSetBuffering)
@@ -175,3 +177,11 @@ hexPrefixed = printHex WithPrefix
 
 lastOrEmpty :: Monoid a => Last a -> a
 lastOrEmpty = fromMaybe mempty . getLast
+
+timestampedMessage :: MonadIO m => Text -> m ()
+timestampedMessage msg = liftIO $ do
+  zonedTime <- getZonedTime
+  let locale = defaultTimeLocale
+      formattedTime = T.pack $ formatTime locale "%I:%M:%S.%q" zonedTime
+  T.putStrLn $ formattedTime <> ": " <> msg
+

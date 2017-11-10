@@ -19,11 +19,8 @@ import           Data.Monoid               (Last (Last))
 import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
-import           Data.Text                 (Text, pack, unpack)
+import           Data.Text                 (Text)
 import qualified Data.Text                 as T
-import qualified Data.Text.IO              as T
-import           Data.Time                 (defaultTimeLocale, formatTime,
-                                            getZonedTime)
 import           Data.Time.Units           (Second)
 import           Data.Vector               (Vector)
 import qualified QuorumTools.IpTables      as IPT
@@ -39,7 +36,8 @@ import           QuorumTools.Constellation
 import           QuorumTools.Control       (Behavior, awaitAll, convergence,
                                             observe, timeLimit)
 import           QuorumTools.Types
-import           QuorumTools.Util          (lastOrEmpty, inshellWithJoinedErr)
+import           QuorumTools.Util          (lastOrEmpty, inshellWithJoinedErr,
+                                            timestampedMessage)
 
 newtype TestNum = TestNum { unTestNum :: Int } deriving (Enum, Num)
 newtype NumNodes = NumNodes { unNumNodes :: Int }
@@ -75,7 +73,7 @@ printFailureReason reason = withColor Red $ case reason of
     putStrLn "Received at least one wrong value:"
     forM_ vals $ \(GethId n, expected, actual) -> do
       let actual' = case actual of
-            Left msg -> "error \"" ++ unpack msg ++ "\""
+            Left msg -> "error \"" ++ T.unpack msg ++ "\""
             Right val -> show val
       putStrLn $ "Geth " ++ show n ++ ": received " ++ actual' ++ ", expected "
         ++ show expected
@@ -88,7 +86,7 @@ printFailureReason reason = withColor Red $ case reason of
   RemoveNodeFailure -> putStrLn "Failed to remove a node"
   BlockDivergence blocks -> putStrLn $ "different last blocks on each node: " ++ show (toList blocks)
   BlockConvergenceTimeout -> putStrLn "blocks failed to converge before timeout"
-  RpcFailure msg -> putStrLn $ "rpc failure: " <> unpack msg
+  RpcFailure msg -> putStrLn $ "rpc failure: " <> T.unpack msg
 
 instance Monoid Validity where
   mempty = Verified
@@ -279,13 +277,6 @@ withSpammer geths action = do
 
 td :: MonadIO m => Int -> m ()
 td = liftIO . threadDelay . (* second)
-
-timestampedMessage :: MonadIO m => Text -> m ()
-timestampedMessage msg = liftIO $ do
-  zonedTime <- getZonedTime
-  let locale = defaultTimeLocale
-      formattedTime = pack $ formatTime locale "%I:%M:%S.%q" zonedTime
-  T.putStrLn $ formattedTime <> ": " <> msg
 
 addsNode :: Geth -> Geth -> TestM ()
 existingMember `addsNode` newcomer = do

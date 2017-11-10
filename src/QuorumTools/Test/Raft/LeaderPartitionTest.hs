@@ -5,6 +5,7 @@ module QuorumTools.Test.Raft.LeaderPartitionTest where
 
 import           QuorumTools.Test.Outline
 import           QuorumTools.Types
+import           QuorumTools.Util         (timestampedMessage)
 
 leaderPartitionTestMain :: IO ()
 leaderPartitionTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $

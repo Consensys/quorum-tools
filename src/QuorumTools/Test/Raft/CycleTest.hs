@@ -13,6 +13,7 @@ import           QuorumTools.Cluster
 import           QuorumTools.Control
 import           QuorumTools.Test.Outline
 import           QuorumTools.Types
+import           QuorumTools.Util         (timestampedMessage)
 
 cycleTestMain :: IO ()
 cycleTestMain = do

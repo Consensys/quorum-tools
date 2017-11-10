@@ -12,7 +12,7 @@ import           QuorumTools.Cluster
 import           QuorumTools.Control
 import           QuorumTools.Test.Outline
 import           QuorumTools.Types
-import           QuorumTools.Util         (lastOrEmpty)
+import           QuorumTools.Util         (lastOrEmpty, timestampedMessage)
 
 numNodes :: Int
 numNodes = 3
