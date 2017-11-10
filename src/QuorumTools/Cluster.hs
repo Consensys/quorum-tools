@@ -12,12 +12,14 @@
 module QuorumTools.Cluster where
 
 import           Control.Arrow              ((>>>))
-import           Control.Concurrent.Async   (cancel, forConcurrently, waitCatch)
+import           Control.Concurrent.Async   (cancel, forConcurrently,
+                                             waitCatch)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, has, ix, over, to, view, (^.),
                                              (^?))
 import           Control.Monad              (replicateM)
-import           Control.Monad.Except       (MonadError, throwError, runExceptT)
+import           Control.Monad.Except       (MonadError, throwError,
+                                             runExceptT)
 import           Control.Monad.Managed      (MonadManaged)
 import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Reader.Class (MonadReader (ask))
@@ -188,7 +190,7 @@ initNode genesisJsonPath gid = do
 
 generateClusterKeys :: MonadIO m => [GethId] -> Password -> m (Map GethId AccountKey)
 generateClusterKeys gids pw = liftIO $ with mkDataDirs $ \dirs ->
-    Map.fromList . zip gids <$> forConcurrently dirs (createAccount pw)
+    Map.fromList . zip gids <$> forConcurrentlyB 4 dirs (createAccount pw)
 
   where
     mkDataDirs :: Managed [DataDir]

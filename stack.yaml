@@ -23,6 +23,7 @@ extra-deps:
 - rate-limit-1.1.1
 - time-units-1.0.0
 - aeson-1.1.2.0
+- async-pool-0.9.0.2
 - BerkeleyDB-0.8.7        # constellation
 - logging-3.0.4           # constellation
 - saltine-0.1.0.0         # constellation

@@ -4,28 +4,30 @@
 
 module QuorumTools.Control where
 
-import           Control.Concurrent           (threadDelay)
-import           Control.Concurrent.Async     (Async, async, waitEitherCancel)
-import           Control.Concurrent.MVar      (newEmptyMVar, takeMVar,
-                                               tryPutMVar)
-import           Control.Concurrent.STM       (STM, atomically)
-import           Control.Concurrent.STM.TChan (TChan, dupTChan, newTChan,
-                                               readTChan, writeTChan)
-import           Control.Concurrent.STM.TMVar (TMVar, newTMVar, putTMVar,
-                                               readTMVar, swapTMVar, takeTMVar)
-import           Control.Exception            (bracket)
-import           Control.Monad                (forever, (<$!>))
-import           Control.Monad.Loops          (untilJust)
-import           Control.Monad.Managed        (Managed, MonadManaged, with)
-import           Data.Foldable                (for_, toList, traverse_)
-import           Data.Maybe                   (fromJust)
-import           Data.Monoid                  (Last (Last), getLast)
-import           Data.Monoid.Same             (Same (..), allSame)
-import           Data.Time.Units              (TimeUnit, toMicroseconds)
-import           Data.Vector                  (Vector)
-import qualified Data.Vector                  as V
-import           Turtle                       (Fold (..), MonadIO, fork, liftIO,
-                                               void, wait)
+import           Control.Concurrent            (threadDelay)
+import           Control.Concurrent.Async      (Async, async, waitEitherCancel)
+import qualified Control.Concurrent.Async.Pool as Pool
+import           Control.Concurrent.MVar       (newEmptyMVar, takeMVar,
+                                                tryPutMVar)
+import           Control.Concurrent.STM        (STM, atomically)
+import           Control.Concurrent.STM.TChan  (TChan, dupTChan, newTChan,
+                                                readTChan, writeTChan)
+import           Control.Concurrent.STM.TMVar  (TMVar, newTMVar, putTMVar,
+                                                readTMVar, swapTMVar,
+                                                takeTMVar)
+import           Control.Exception             (bracket)
+import           Control.Monad                 (forever, (<$!>))
+import           Control.Monad.Loops           (untilJust)
+import           Control.Monad.Managed         (Managed, MonadManaged, with)
+import           Data.Foldable                 (for_, toList, traverse_)
+import           Data.Maybe                    (fromJust)
+import           Data.Monoid                   (Last (Last), getLast)
+import           Data.Monoid.Same              (Same (..), allSame)
+import           Data.Time.Units               (TimeUnit, toMicroseconds)
+import           Data.Vector                   (Vector)
+import qualified Data.Vector                   as V
+import           Turtle                        (Fold (..), MonadIO, fork,
+                                                liftIO, void, wait)
 
 data Behavior a = Behavior (TChan a) (TMVar (Last a))
 
@@ -176,3 +178,14 @@ timeLimit :: (MonadManaged m, TimeUnit t) => t -> Async a -> m (Async (Maybe a))
 timeLimit duration future = do
   timeout <- timer duration
   fork $ either (const Nothing) Just <$> waitEitherCancel timeout future
+
+--
+-- Bounded concurrency
+--
+
+mapConcurrentlyB :: Traversable t => Int -> (a -> IO b) -> t a -> IO (t b)
+mapConcurrentlyB n f args = Pool.withTaskGroup n $ \group -> do
+  Pool.mapTasks group (fmap f args)
+
+forConcurrentlyB :: Traversable t => Int -> t a -> (a -> IO b) -> IO (t b)
+forConcurrentlyB bound = flip (mapConcurrentlyB bound)

@@ -41,7 +41,8 @@ library
     ansi-terminal         == 0.6.*,
     constellation         == 0.1.*,
     stm                   == 2.4.*,
-    uri-bytestring        == 0.2.*
+    uri-bytestring        == 0.2.*,
+    async-pool            == 0.9.0.*
   exposed-modules:
     QuorumTools
     QuorumTools.Checkpoint
