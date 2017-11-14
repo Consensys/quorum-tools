@@ -11,6 +11,7 @@ import           Data.ByteString         (ByteString)
 import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Base16  as B16
 import qualified Data.ByteString.Char8   as B8
+import           Data.Default            (Default (..))
 import           Data.Foldable           (toList)
 import           Data.Maybe              (fromMaybe)
 import           Data.Monoid             (Last, getLast, (<>))
@@ -62,13 +63,23 @@ textEncode = toStrict . LT.decodeUtf8 . encode
 textDecode :: FromJSON a => Text -> Maybe a
 textDecode = decode . LT.encodeUtf8 . fromStrict
 
+--
+-- TODO: we should switch from storing ASCII in bytestrings to the actual bytes
+--
+
 -- holds 20 bytes / 40 chars
 newtype Bytes20 = Bytes20 { unBytes20 :: ByteString }
   deriving (Eq, Ord)
 
+instance Default Bytes20 where
+  def = Bytes20 $ B8.replicate 40 '0'
+
 -- holds 32 bytes / 64 chars
 newtype Bytes32 = Bytes32 { unBytes32 :: ByteString }
   deriving (Eq, Ord)
+
+instance Default Bytes32 where
+  def = Bytes32 $ B8.replicate 64 '0'
 
 data HexPrefix
   = WithPrefix

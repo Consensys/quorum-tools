@@ -11,6 +11,7 @@ import           Control.Monad.Reader     (MonadReader)
 import           Data.Aeson               (FromJSON (parseJSON),
                                            ToJSON (toJSON), Value (String))
 import           Data.Aeson.Types         (typeMismatch)
+import           Data.Default             (Default (def))
 import           Data.Map.Strict          (Map)
 import           Data.Set                 (Set)
 import           Data.String
@@ -124,6 +125,9 @@ data Geth =
 
 newtype Addr = Addr { unAddr :: Bytes20 }
   deriving (Show, Eq)
+
+instance Default Addr where
+  def = Addr def
 
 addrToText :: Addr -> Text
 addrToText = hexPrefixed . unAddr

@@ -3,10 +3,11 @@
 
 module QuorumTools.Genesis where
 
-import           Control.Lens                 (view)
+import           Control.Lens      (view)
 import           Data.Aeson
-import           Turtle                       hiding (view)
-import           Prelude                      hiding (FilePath)
+import           Data.Default      (def)
+import           Turtle            hiding (view)
+import           Prelude           hiding (FilePath)
 
 import           QuorumTools.Types
 import           QuorumTools.Util
@@ -21,7 +22,7 @@ createGenesisJson = do
     contents :: Shell Line
     contents = select $ textToLines $ textEncode $ object
       [ "alloc"      .= object []
-      , "coinbase"   .= t "0x0000000000000000000000000000000000000000"
+      , "coinbase"   .= addrToText def
       , "config"     .= object
         [ "homesteadBlock" .= i 100000000
         , "chainId"        .= i 1
