@@ -41,7 +41,7 @@ createGenesisJson = do
       , "difficulty" .= t "0x0"
       , "extraData"  .=
         case consensus of
-          Raft _ -> hexPrefixed (def :: Bytes32)
+          Raft _ -> empty32
           Clique addrs ->
             t $ "0x48616c6c6f2077656c7400000000000000000000000000000000000000000000"
               <> foldMap (printHex WithoutPrefix . unAddr . accountId) addrs
@@ -50,11 +50,14 @@ createGenesisJson = do
       , "mixhash"    .=
         case consensus of
           Raft _ -> t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
-          Clique _ -> t "0x0000000000000000000000000000000000000000000000000000000000000000"
+          Clique _ -> empty32
       , "nonce"      .= t "0x0"
-      , "parentHash" .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
+      , "parentHash" .= empty32
       , "timestamp"  .= t "0x00"
       ]
 
     t = id :: Text -> Text
     i = id :: Int -> Int
+
+    empty32 :: Text
+    empty32 = hexPrefixed (def :: Bytes32)
