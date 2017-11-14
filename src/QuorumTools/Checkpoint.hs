@@ -3,7 +3,6 @@
 
 module QuorumTools.Checkpoint where
 
-import           Data.Text (pack)
 import           Turtle
 
 import           QuorumTools.Types
@@ -51,7 +50,7 @@ mkCheckpointPattern TxCreated = do
 mkCheckpointPattern TxAccepted
   = spaces >> "tx=" >> TxId <$> bytes32P WithPrefix
 mkCheckpointPattern BlockCreated
-  = spaces >> "block=" >> Block . pack <$> count 64 hexDigit
+  = spaces >> "block=" >> Block <$> bytes32P WithoutPrefix
 
 bracketed :: Pattern a -> Pattern a
 bracketed pat = "[" *> pat <* "]"

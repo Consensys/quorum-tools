@@ -174,7 +174,7 @@ newtype UnencodedMethod = UnencodedMethod Text deriving IsString
 newtype TxId = TxId { txId :: Bytes32 }
   deriving (Show, Eq, Ord)
 
-newtype Block = Block Text
+newtype Block = Block Bytes32
   deriving (Eq, Show)
 
 newtype OutstandingTxes = OutstandingTxes { unOutstandingTxes :: Set TxId }
