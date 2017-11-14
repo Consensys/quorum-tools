@@ -176,6 +176,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                (gId $ gethId geth)
                                port
         JoinNewCluster -> format ("--raft --raftport "%d) port
+    consensusOptions CliquePeer = "--mine"
 
 initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
          => FilePath
@@ -305,6 +306,7 @@ addRaftPort (Port port) (EnodeId url) = EnodeId
 mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
 mkConsensusPeer gid _ (Raft basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
+mkConsensusPeer _ _ (Clique _) = CliquePeer
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do

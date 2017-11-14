@@ -65,10 +65,14 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
                              }
   deriving (Show, Eq)
 
-data Consensus = Raft { _raftBasePort :: Port }
+data Consensus
+  = Raft { _raftBasePort :: Port }
+  | Clique { _cliqueSigners :: [AccountId] }
   deriving (Eq, Show)
 
-data ConsensusPeer = RaftPeer Port
+data ConsensusPeer
+  = RaftPeer Port
+  | CliquePeer
   deriving (Eq, Show)
 
 data PrivacySupport
