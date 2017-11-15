@@ -58,7 +58,7 @@ data DataDir = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
 data AccountId = AccountId { accountId :: Addr }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data AccountKey = AccountKey { _akAccountId :: AccountId
                              , _akKey       :: Text
@@ -128,7 +128,7 @@ data Geth =
 -- Addresses, transactions and blocks
 
 newtype Addr = Addr { unAddr :: Bytes20 }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 instance Default Addr where
   def = Addr def
@@ -277,6 +277,7 @@ data ClusterEnv
                , _clusterConstellationConfs    :: Map GethId FilePath
                , _clusterAccountKeys           :: Map GethId AccountKey
                , _clusterInitialMembers        :: Set GethId
+               , _clusterInitialBalances       :: Map AccountId Integer
                , _clusterConsensus             :: Consensus
                , _clusterPrivacySupport        :: PrivacySupport
                }

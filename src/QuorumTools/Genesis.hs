@@ -6,6 +6,8 @@ module QuorumTools.Genesis where
 import           Control.Lens      (view)
 import           Data.Aeson
 import           Data.Default      (def)
+import qualified Data.Map.Strict   as Map
+import           Data.Map.Strict   (Map)
 import qualified Data.Text         as T
 import           Turtle            hiding (view)
 import           Prelude           hiding (FilePath)
@@ -17,13 +19,17 @@ createGenesisJson :: (MonadIO m, HasEnv m) => m FilePath
 createGenesisJson = do
     consensus <- view clusterConsensus
     jsonPath <- view clusterGenesisJson
-    output jsonPath (contents consensus)
+    balances <- view clusterInitialBalances
+    output jsonPath (contents balances consensus)
     return jsonPath
 
   where
-    contents :: Consensus -> Shell Line
-    contents consensus = select $ textToLines $ textEncode $ object
-      [ "alloc"      .= object []
+    contents :: Map AccountId Integer -> Consensus -> Shell Line
+    contents balances consensus = select $ textToLines $ textEncode $ object
+      [ "alloc"      .= (object $
+        map (\(ai, bal) ->
+              (accountIdToText ai) .= object ["balance" .= T.pack (show bal)])
+            (Map.toList balances) :: Value)
       , "coinbase"   .= addrToText def
       , "config"     .= object
         ([ "homesteadBlock" .= i 100000000
