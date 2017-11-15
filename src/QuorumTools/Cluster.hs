@@ -16,7 +16,7 @@ import           Control.Concurrent.Async   (cancel, forConcurrently,
                                              waitCatch)
 import qualified Control.Foldl              as Fold
 import           Control.Lens               (at, has, ix, over, to, view, (^.),
-                                             (^?))
+                                             (^?), (.~))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Except       (MonadError, throwError,
                                              runExceptT)
@@ -96,6 +96,17 @@ mkLocalEnv = mkClusterEnv mkIp mkDataDir
   where
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
+
+usingClique :: ClusterEnv -> ClusterEnv
+usingClique env = env
+    & clusterConsensus       .~ Clique accts
+    -- NOTE: For now clique only works with vanilla geth, not quorum:
+    & clusterPrivacySupport  .~ PrivacyDisabled
+    & clusterInitialBalances .~ Map.fromList [(a, lotsOfEther) | a <- accts]
+
+  where
+    accts = _akAccountId <$> toList (_clusterAccountKeys env)
+    lotsOfEther = 10000000000000000 :: Integer
 
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
