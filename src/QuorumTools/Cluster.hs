@@ -75,6 +75,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterInitialMembers        = Set.empty
   , _clusterInitialBalances       = Map.empty
   , _clusterConsensus             = Raft { _raftBasePort = 50400 }
+  , _clusterMode                  = QuorumMode
   , _clusterPrivacySupport        = PrivacyDisabled
   }
 
@@ -110,6 +111,7 @@ usingClique env = env
     & clusterConsensus      .~ Clique accts
     -- NOTE: For now clique only works with vanilla geth, not quorum:
     & clusterPrivacySupport .~ PrivacyDisabled
+    & clusterMode           .~ EthereumMode
     & withInitialBalances
 
  where
@@ -117,7 +119,8 @@ usingClique env = env
 
 usingPow :: ClusterEnv -> ClusterEnv
 usingPow env = env
-  & clusterConsensus    .~ ProofOfWork
+  & clusterConsensus .~ ProofOfWork
+  & clusterMode      .~ EthereumMode
   & withInitialBalances
 
 nodeName :: GethId -> Text

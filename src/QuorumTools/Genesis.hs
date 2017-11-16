@@ -20,23 +20,24 @@ createGenesisJson = do
     consensus <- view clusterConsensus
     jsonPath <- view clusterGenesisJson
     balances <- view clusterInitialBalances
-    output jsonPath (contents balances consensus)
+    mode <- view clusterMode
+    output jsonPath (contents balances consensus mode)
     return jsonPath
 
   where
-    contents :: Map AccountId Integer -> Consensus -> Shell Line
-    contents balances consensus = select $ textToLines $ textEncode $ object
+    contents :: Map AccountId Integer -> Consensus -> ClusterMode -> Shell Line
+    contents bals consensus mode = select $ textToLines $ textEncode $ object
       [ "alloc"      .= (object $
         map (\(ai, bal) ->
               (accountIdToText ai) .= object ["balance" .= T.pack (show bal)])
-            (Map.toList balances) :: Value)
+            (Map.toList bals) :: Value)
       , "coinbase"   .= addrToText def
       , "config"     .= object
         ([ "homesteadBlock" .= i 100000000
          , "chainId"        .= i 1
          , "eip155Block"    .= i 100000000
          , "eip158Block"    .= i 100000000
-         , "isQuorum"       .= True
+         , "isQuorum"       .= (mode == QuorumMode)
          ] <> case consensus of
                 Raft _ -> []
                 Clique _ -> [ "clique" .= object

@@ -82,6 +82,11 @@ data PrivacySupport
   | PrivacyDisabled
   deriving (Eq, Show)
 
+data ClusterMode
+  = QuorumMode
+  | EthereumMode
+  deriving (Eq, Show)
+
 data JoinMode
   = JoinExisting
   | JoinNewCluster
@@ -281,6 +286,7 @@ data ClusterEnv
                , _clusterInitialMembers        :: Set GethId
                , _clusterInitialBalances       :: Map AccountId Integer
                , _clusterConsensus             :: Consensus
+               , _clusterMode                  :: ClusterMode
                , _clusterPrivacySupport        :: PrivacySupport
                }
   deriving (Eq, Show)
