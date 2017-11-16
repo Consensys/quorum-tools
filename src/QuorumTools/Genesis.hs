@@ -55,11 +55,7 @@ createGenesisJson = do
               <> T.replicate (65 * 2) "0"
           ProofOfWork -> empty32
       , "gasLimit"   .= t "0xE0000000"
-      , "mixhash"    .=
-        case consensus of
-          Raft _ -> t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
-          Clique _ -> empty32
-          ProofOfWork -> empty32
+      , "mixhash"    .= empty32
       , "nonce"      .= t "0x0"
       , "parentHash" .= empty32
       , "timestamp"  .= t "0x00"
