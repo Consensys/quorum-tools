@@ -97,16 +97,28 @@ mkLocalEnv = mkClusterEnv mkIp mkDataDir
     mkIp = const $ Ip "127.0.0.1"
     mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
 
-usingClique :: ClusterEnv -> ClusterEnv
-usingClique env = env
-    & clusterConsensus       .~ Clique accts
-    -- NOTE: For now clique only works with vanilla geth, not quorum:
-    & clusterPrivacySupport  .~ PrivacyDisabled
+withInitialBalances :: ClusterEnv -> ClusterEnv
+withInitialBalances env = env
     & clusterInitialBalances .~ Map.fromList [(a, lotsOfEther) | a <- accts]
 
   where
     accts = _akAccountId <$> toList (_clusterAccountKeys env)
     lotsOfEther = 10000000000000000 :: Integer
+
+usingClique :: ClusterEnv -> ClusterEnv
+usingClique env = env
+    & clusterConsensus      .~ Clique accts
+    -- NOTE: For now clique only works with vanilla geth, not quorum:
+    & clusterPrivacySupport .~ PrivacyDisabled
+    & withInitialBalances
+
+ where
+   accts = _akAccountId <$> toList (_clusterAccountKeys env)
+
+usingPow :: ClusterEnv -> ClusterEnv
+usingPow env = env
+  & clusterConsensus    .~ ProofOfWork
+  & withInitialBalances
 
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)
@@ -189,6 +201,7 @@ gethCommand geth more = format (s%" geth --datadir "%fp                    %
                                port
         JoinNewCluster -> format ("--raft --raftport "%d) port
     consensusOptions CliquePeer = "--mine"
+    consensusOptions PowPeer = "--mine"
 
 initNode :: (MonadIO m, MonadError ProvisionError m, HasEnv m)
          => FilePath
@@ -319,6 +332,7 @@ mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
 mkConsensusPeer gid _ (Raft basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
 mkConsensusPeer _ _ (Clique _) = CliquePeer
+mkConsensusPeer _ _  ProofOfWork = PowPeer
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do

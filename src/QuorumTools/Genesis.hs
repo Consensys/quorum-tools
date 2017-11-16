@@ -43,7 +43,8 @@ createGenesisJson = do
                               [ "period" .= i 1
                               , "epoch"  .= i 30000
                               ]
-                            ])
+                            ]
+                ProofOfWork -> [])
       , "difficulty" .= t "0x0"
       , "extraData"  .=
         case consensus of
@@ -52,11 +53,13 @@ createGenesisJson = do
             t $ "0x48616c6c6f2077656c7400000000000000000000000000000000000000000000"
               <> foldMap (printHex WithoutPrefix . unAddr . accountId) addrs
               <> T.replicate (65 * 2) "0"
+          ProofOfWork -> empty32
       , "gasLimit"   .= t "0xE0000000"
       , "mixhash"    .=
         case consensus of
           Raft _ -> t "0x00000000000000000000000000000000000000647572616c65787365646c6578"
           Clique _ -> empty32
+          ProofOfWork -> empty32
       , "nonce"      .= t "0x0"
       , "parentHash" .= empty32
       , "timestamp"  .= t "0x00"
