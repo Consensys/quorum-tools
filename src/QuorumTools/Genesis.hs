@@ -29,7 +29,7 @@ createGenesisJson = do
     contents bals consensus mode = select $ textToLines $ textEncode $ object
       [ "alloc"      .= (object $
         map (\(ai, bal) ->
-              (accountIdToText ai) .= object ["balance" .= T.pack (show bal)])
+              accountIdToText ai .= object ["balance" .= T.pack (show bal)])
             (Map.toList bals) :: Value)
       , "coinbase"   .= addrToText def
       , "config"     .= object
