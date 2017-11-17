@@ -17,16 +17,19 @@ import           QuorumTools.Util
 
 createGenesisJson :: (MonadIO m, HasEnv m) => m FilePath
 createGenesisJson = do
-    consensus <- view clusterConsensus
+    consensusCfg <- view clusterConsensusConfig
     jsonPath <- view clusterGenesisJson
     balances <- view clusterInitialBalances
     mode <- view clusterMode
-    output jsonPath (contents balances consensus mode)
+    output jsonPath (contents balances consensusCfg mode)
     return jsonPath
 
   where
-    contents :: Map AccountId Integer -> Consensus -> ClusterMode -> Shell Line
-    contents bals consensus mode = select $ textToLines $ textEncode $ object
+    contents :: Map AccountId Integer
+             -> ConsensusConfig
+             -> ClusterMode
+             -> Shell Line
+    contents bals consenCfg mode = select $ textToLines $ textEncode $ object
       [ "alloc"      .= (object $
         map (\(ai, bal) ->
               accountIdToText ai .= object ["balance" .= T.pack (show bal)])
@@ -38,23 +41,23 @@ createGenesisJson = do
          , "eip155Block"    .= i 100000000
          , "eip158Block"    .= i 100000000
          , "isQuorum"       .= (mode == QuorumMode)
-         ] <> case consensus of
-                Raft _ -> []
-                Clique _ -> [ "clique" .= object
-                              [ "period" .= i 1
-                              , "epoch"  .= i 30000
-                              ]
-                            ]
-                ProofOfWork -> [])
+         ] <> case consenCfg of
+                RaftConfig _ -> []
+                CliqueConfig _ -> [ "clique" .= object
+                                    [ "period" .= i 1
+                                    , "epoch"  .= i 30000
+                                    ]
+                                  ]
+                PowConfig -> [])
       , "difficulty" .= t "0x0"
       , "extraData"  .=
-        case consensus of
-          Raft _ -> empty32
-          Clique addrs ->
+        case consenCfg of
+          RaftConfig _ -> empty32
+          CliqueConfig addrs ->
             t $ "0x48616c6c6f2077656c7400000000000000000000000000000000000000000000"
               <> foldMap (printHex WithoutPrefix . unAddr . accountId) addrs
               <> T.replicate (65 * 2) "0"
-          ProofOfWork -> empty32
+          PowConfig -> empty32
       , "gasLimit"   .= t "0xE0000000"
       , "mixhash"    .= empty32
       , "nonce"      .= t "0x0"

@@ -66,9 +66,15 @@ data AccountKey = AccountKey { _akAccountId :: AccountId
   deriving (Show, Eq)
 
 data Consensus
-  = Raft { _raftBasePort :: Port }
-  | Clique { _cliqueSigners :: [AccountId] }
+  = Raft
+  | Clique
   | ProofOfWork
+  deriving (Eq, Show)
+
+data ConsensusConfig
+  = RaftConfig { _raftBasePort :: Port }
+  | CliqueConfig { _cliqueSigners :: [AccountId] }
+  | PowConfig
   deriving (Eq, Show)
 
 data ConsensusPeer
@@ -285,7 +291,7 @@ data ClusterEnv
                , _clusterAccountKeys           :: Map GethId AccountKey
                , _clusterInitialMembers        :: Set GethId
                , _clusterInitialBalances       :: Map AccountId Integer
-               , _clusterConsensus             :: Consensus
+               , _clusterConsensusConfig       :: ConsensusConfig
                , _clusterMode                  :: ClusterMode
                , _clusterPrivacySupport        :: PrivacySupport
                }
@@ -295,4 +301,4 @@ data ClusterEnv
 
 makeLenses ''AccountKey
 makeLenses ''ClusterEnv
-makeLenses ''Consensus
+makeLenses ''ConsensusConfig

@@ -73,7 +73,7 @@ emptyClusterEnv = ClusterEnv
   , _clusterAccountKeys           = Map.empty
   , _clusterInitialMembers        = Set.empty
   , _clusterInitialBalances       = Map.empty
-  , _clusterConsensus             = Raft { _raftBasePort = 50400 }
+  , _clusterConsensusConfig       = RaftConfig { _raftBasePort = 50400 }
   , _clusterMode                  = QuorumMode
   , _clusterPrivacySupport        = PrivacyDisabled
   }
@@ -107,10 +107,10 @@ withInitialBalances env = env
 
 usingClique :: ClusterEnv -> ClusterEnv
 usingClique env = env
-    & clusterConsensus      .~ Clique accts
+    & clusterConsensusConfig .~ CliqueConfig accts
     -- NOTE: For now clique only works with vanilla geth, not quorum:
-    & clusterPrivacySupport .~ PrivacyDisabled
-    & clusterMode           .~ EthereumMode
+    & clusterPrivacySupport  .~ PrivacyDisabled
+    & clusterMode            .~ EthereumMode
     & withInitialBalances
 
  where
@@ -118,8 +118,8 @@ usingClique env = env
 
 usingPow :: ClusterEnv -> ClusterEnv
 usingPow env = env
-  & clusterConsensus .~ ProofOfWork
-  & clusterMode      .~ EthereumMode
+  & clusterConsensusConfig .~ PowConfig
+  & clusterMode            .~ EthereumMode
   & withInitialBalances
 
 nodeName :: GethId -> Text
@@ -141,7 +141,7 @@ rpcPort (GethId gid) = (fromIntegral gid +) <$> view clusterBaseRpcPort
 
 raftPort :: HasEnv m => GethId -> m (Maybe Port)
 raftPort (GethId gid) = do
-  firstPort <- view $ clusterConsensus.raftBasePort.to (First . Just)
+  firstPort <- view $ clusterConsensusConfig.raftBasePort.to (First . Just)
   return $ (fromIntegral gid +) <$> getFirst firstPort
 
 constellationPort :: HasEnv m => GethId -> m Port
@@ -330,11 +330,11 @@ addRaftPort (Port port) (EnodeId url) = EnodeId
     removeMissingPassword :: Text -> Text
     removeMissingPassword = T.replace ":@" "@"
 
-mkConsensusPeer :: GethId -> AccountId -> Consensus -> ConsensusPeer
-mkConsensusPeer gid _ (Raft basePort) =
+mkConsensusPeer :: GethId -> AccountId -> ConsensusConfig -> ConsensusPeer
+mkConsensusPeer gid _ (RaftConfig basePort) =
   RaftPeer $ basePort + fromIntegral (gId gid)
-mkConsensusPeer _ _ (Clique _) = CliquePeer
-mkConsensusPeer _ _  ProofOfWork = PowPeer
+mkConsensusPeer _ _ (CliqueConfig _) = CliquePeer
+mkConsensusPeer _ _  PowConfig = PowPeer
 
 mkGeth :: (MonadIO m, HasEnv m) => GethId -> EnodeId -> m Geth
 mkGeth gid eid = do
@@ -356,7 +356,7 @@ mkGeth gid eid = do
        <*> view clusterNetworkId
        <*> view clusterVerbosity
        <*> pure datadir
-       <*> fmap (mkConsensusPeer gid aid) (view clusterConsensus)
+       <*> fmap (mkConsensusPeer gid aid) (view clusterConsensusConfig)
        <*> pure (bool JoinExisting JoinNewCluster isInitialMember)
        <*> gidIp gid
        <*> pure (format ("http://"%s%":"%d) (getIp ip) rpcPort')
