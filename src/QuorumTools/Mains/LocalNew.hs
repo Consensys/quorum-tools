@@ -21,21 +21,36 @@ import           QuorumTools.Types
 data LocalNewConfig
   = LocalNewConfig { totalPeers   :: Int
                    , initialPeers :: Maybe Int
+                   , consensus :: Consensus
                    }
 
 defaultClusterSize :: Int
 defaultClusterSize = 3
 
+defaultConsensus :: Consensus
+defaultConsensus = Raft
+
 cliParser :: Parser LocalNewConfig
 cliParser = LocalNewConfig
-    <$> (optInt "nodes" 'n' nodesMessage <|> pure defaultClusterSize)
+    <$> (optInt "nodes" 'n' nodesMessage
+          <|> pure defaultClusterSize)
     <*> optional (optInt "initial" 'i' initialPeersMessage)
+    <*> (opt parseConsensus "consensus" 'c' consensusMessage
+          <|> pure defaultConsensus)
 
   where
     nodesMessage = Specific . HelpMessage $
       "The total number of peers. Default: " <> T.pack (show defaultClusterSize)
     initialPeersMessage =
       "The number of initial peers. Default: the total number of peers."
+    consensusMessage =
+      "The consensus mechanism. One of [raft clique pow]. Default: raft"
+
+    parseConsensus :: Text -> Maybe Consensus
+    parseConsensus "raft"   = Just Raft
+    parseConsensus "clique" = Just Clique
+    parseConsensus "pow"    = Just ProofOfWork
+    parseConsensus _        = Nothing
 
 localNewMain :: IO ()
 localNewMain = do
@@ -49,7 +64,7 @@ localNewMain = do
       error "initial peers can not be greater than total peers"
 
     keys <- generateClusterKeys gids password
-    let cEnv = mkLocalEnv keys Raft
+    let cEnv = mkLocalEnv keys (consensus config)
              & clusterPrivacySupport .~ PrivacyEnabled
              & clusterInitialMembers .~ Set.fromList (take initialSize gids)
              & clusterPassword       .~ password
