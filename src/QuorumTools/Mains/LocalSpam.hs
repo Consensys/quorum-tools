@@ -35,7 +35,7 @@ cliParser = LocalSpamConfig
 localSpam :: LocalSpamConfig -> IO ()
 localSpam (LocalSpamConfig gid rateLimit' contractM privateForM) = do
     keys <- Map.singleton gid <$> readAccountKey dataDir gid
-    geth <- runReaderT (loadNode gid) (mkLocalEnv keys)
+    geth <- runReaderT (loadNode gid) (mkLocalEnv keys Raft)
 
     spamGeth benchTx geth rateLimit'
 

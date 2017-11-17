@@ -22,7 +22,7 @@ cycleTestMain = do
 
   keys <- generateClusterKeys gids password
 
-  let cEnv = mkLocalEnv keys
+  let cEnv = mkLocalEnv keys Raft
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterInitialMembers .~ Set.fromList (take 3 gids)
            & clusterPassword       .~ password

@@ -120,10 +120,11 @@ type TestM = ExceptT FailureReason (ReaderT ClusterEnv Shell)
 tester
   :: TestPredicate
   -> PrivacySupport
+  -> Consensus
   -> NumNodes
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()
-tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
+tester p privacySupport consensus numNodes cb = foldr go mempty [0..] >>= \case
   DoTerminateSuccess -> return ()
   DoTerminateFailure -> exit failedTestCode
   DontTerminate      -> putStrLn "all successful!"
@@ -138,7 +139,7 @@ tester p privacySupport numNodes cb = foldr go mempty [0..] >>= \case
       keys <- generateClusterKeys gids password
 
       let -- blockMaker:voters = gids
-          cEnv = mkLocalEnv keys
+          cEnv = mkLocalEnv keys consensus
                & clusterPrivacySupport .~ privacySupport
                & clusterPassword       .~ password
 
@@ -193,6 +194,7 @@ runTestM cEnv action = do
 testNTimes
   :: Int
   -> PrivacySupport
+  -> Consensus
   -> NumNodes
   -> ([(Geth, NodeInstrumentation)] -> TestM ())
   -> IO ()

@@ -22,7 +22,7 @@ leaveJoinTestMain = do
       password = CleartextPassword "abcd"
 
   keys <- generateClusterKeys gids password
-  let cEnv = mkLocalEnv keys
+  let cEnv = mkLocalEnv keys Raft
            & clusterPrivacySupport .~ PrivacyDisabled
            & clusterPassword       .~ password
 

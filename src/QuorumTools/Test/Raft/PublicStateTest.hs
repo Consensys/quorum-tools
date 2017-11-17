@@ -11,7 +11,7 @@ import           QuorumTools.Test.State
 import           QuorumTools.Types
 
 publicStateTestMain :: IO ()
-publicStateTestMain = testNTimes 1 PrivacyDisabled (NumNodes 3) $ \iNodes -> do
+publicStateTestMain = testNTimes 1 PrivacyDisabled Raft (NumNodes 3) $ \iNodes -> do
   let (geth1, geth1Instruments) = head iNodes
       (geths, instruments) = unzip iNodes
       -- sendTo = cycle geths

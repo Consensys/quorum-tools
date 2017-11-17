@@ -19,7 +19,7 @@ import           QuorumTools.Types
 localStartMain :: IO ()
 localStartMain = do
   keys <- traverseWithKey (flip readAccountKey) dataDirs
-  let cEnv = mkLocalEnv keys
+  let cEnv = mkLocalEnv keys Raft
            & clusterPrivacySupport .~ PrivacyEnabled
            & clusterPassword       .~ password
 

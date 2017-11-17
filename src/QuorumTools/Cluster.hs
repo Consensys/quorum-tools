@@ -14,8 +14,8 @@ import           Control.Arrow              ((>>>))
 import           Control.Concurrent.Async   (cancel, forConcurrently,
                                              waitCatch)
 import qualified Control.Foldl              as Fold
-import           Control.Lens               (at, has, ix, over, to, view, (^.),
-                                             (^?), (.~))
+import           Control.Lens               (at, has, ix, over, to, toListOf,
+                                             view, (^.), (^?), (.~))
 import           Control.Monad              (replicateM)
 import           Control.Monad.Except       (MonadError, throwError,
                                              runExceptT)
@@ -78,49 +78,50 @@ emptyClusterEnv = ClusterEnv
   , _clusterPrivacySupport        = PrivacyDisabled
   }
 
-mkClusterEnv :: (GethId -> Ip)
-             -> (GethId -> DataDir)
-             -> Map GethId AccountKey
-             -> ClusterEnv
-mkClusterEnv mkIp mkDataDir keys = emptyClusterEnv
-    { _clusterIps            = Map.fromList [(gid, mkIp gid)      | gid <- gids]
-    , _clusterDataDirs       = Map.fromList [(gid, mkDataDir gid) | gid <- gids]
-    , _clusterAccountKeys    = keys
-    , _clusterInitialMembers = Set.fromList gids
-    }
-  where
-    gids = Map.keys keys
-
-mkLocalEnv :: Map GethId AccountKey -> ClusterEnv
-mkLocalEnv = mkClusterEnv mkIp mkDataDir
-  where
-    mkIp = const $ Ip "127.0.0.1"
-    mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
+envAccountKeys :: ClusterEnv -> [AccountId]
+envAccountKeys = toListOf $ clusterAccountKeys.traverse.akAccountId
 
 withInitialBalances :: ClusterEnv -> ClusterEnv
 withInitialBalances env = env
     & clusterInitialBalances .~ Map.fromList [(a, lotsOfEther) | a <- accts]
 
   where
-    accts = _akAccountId <$> toList (_clusterAccountKeys env)
+    accts = envAccountKeys env
     lotsOfEther = 10000000000000000 :: Integer
 
-usingClique :: ClusterEnv -> ClusterEnv
-usingClique env = env
-    & clusterConsensusConfig .~ CliqueConfig accts
-    -- NOTE: For now clique only works with vanilla geth, not quorum:
-    & clusterPrivacySupport  .~ PrivacyDisabled
-    & clusterMode            .~ EthereumMode
-    & withInitialBalances
-
- where
-   accts = _akAccountId <$> toList (_clusterAccountKeys env)
-
-usingPow :: ClusterEnv -> ClusterEnv
-usingPow env = env
+usingConsensus :: Consensus -> ClusterEnv -> ClusterEnv
+usingConsensus Raft env = env & clusterConsensusConfig .~ RaftConfig 50400
+usingConsensus ProofOfWork env = env
   & clusterConsensusConfig .~ PowConfig
   & clusterMode            .~ EthereumMode
   & withInitialBalances
+usingConsensus Clique env = env
+  & clusterConsensusConfig .~ CliqueConfig (envAccountKeys env)
+  -- NOTE: For now clique only works with vanilla geth, not quorum:
+  & clusterPrivacySupport  .~ PrivacyDisabled
+  & clusterMode            .~ EthereumMode
+  & withInitialBalances
+
+mkClusterEnv :: (GethId -> Ip)
+             -> (GethId -> DataDir)
+             -> Map GethId AccountKey
+             -> Consensus
+             -> ClusterEnv
+mkClusterEnv mkIp mkDataDir keys consensus = emptyClusterEnv
+    & clusterIps      .~ Map.fromList [(gid, mkIp gid)      | gid <- gids]
+    & clusterDataDirs .~ Map.fromList [(gid, mkDataDir gid) | gid <- gids]
+    & clusterAccountKeys .~ keys
+    & clusterInitialMembers .~ Set.fromList gids
+    & usingConsensus consensus
+
+  where
+    gids = Map.keys keys
+
+mkLocalEnv :: Map GethId AccountKey -> Consensus -> ClusterEnv
+mkLocalEnv = mkClusterEnv mkIp mkDataDir
+  where
+    mkIp = const $ Ip "127.0.0.1"
+    mkDataDir gid = DataDir $ "gdata" </> fromText (nodeName gid)
 
 nodeName :: GethId -> Text
 nodeName gid = format ("geth"%d) (gId gid)

@@ -84,7 +84,7 @@ restartNodeTestMain = do
 
   keys <- generateClusterKeys gids password
 
-  let cEnv = mkLocalEnv keys
+  let cEnv = mkLocalEnv keys Raft
            & clusterPassword .~ password
 
   nodes <- runTestM cEnv $ wipeAndSetupNodes Nothing "gdata" gids

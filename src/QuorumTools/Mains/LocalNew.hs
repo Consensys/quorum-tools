@@ -49,7 +49,7 @@ localNewMain = do
       error "initial peers can not be greater than total peers"
 
     keys <- generateClusterKeys gids password
-    let cEnv = mkLocalEnv keys
+    let cEnv = mkLocalEnv keys Raft
              & clusterPrivacySupport .~ PrivacyEnabled
              & clusterInitialMembers .~ Set.fromList (take initialSize gids)
              & clusterPassword       .~ password
