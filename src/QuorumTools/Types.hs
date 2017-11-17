@@ -54,10 +54,10 @@ newtype Port = Port { getPort :: Int }
 newtype Ip = Ip { getIp :: Text }
   deriving (Eq, Show)
 
-data DataDir = DataDir { dataDirPath :: FilePath }
+newtype DataDir = DataDir { dataDirPath :: FilePath }
   deriving (Show, Eq)
 
-data AccountId = AccountId { accountId :: Addr }
+newtype AccountId = AccountId { accountId :: Addr }
   deriving (Show, Eq, Ord)
 
 data AccountKey = AccountKey { _akAccountId :: AccountId
@@ -94,7 +94,7 @@ data JoinMode
 
 type HasEnv = MonadReader ClusterEnv
 
-data EnodeId = EnodeId Text
+newtype EnodeId = EnodeId Text
   deriving (Show, Eq)
 
 instance ToJSON EnodeId where
