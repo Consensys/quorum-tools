@@ -16,41 +16,30 @@ import           QuorumTools.Cluster       (generateClusterKeys, mkLocalEnv,
                                             runNode, wipeAndSetupNodes)
 import           QuorumTools.Constellation
 import           QuorumTools.Control       (awaitAll)
+import           QuorumTools.Options       (consensusParser)
 import           QuorumTools.Types
 
 data LocalNewConfig
   = LocalNewConfig { totalPeers   :: Int
                    , initialPeers :: Maybe Int
-                   , consensus :: Consensus
+                   , consensus    :: Consensus
                    }
 
 defaultClusterSize :: Int
 defaultClusterSize = 3
-
-defaultConsensus :: Consensus
-defaultConsensus = Raft
 
 cliParser :: Parser LocalNewConfig
 cliParser = LocalNewConfig
     <$> (optInt "nodes" 'n' nodesMessage
           <|> pure defaultClusterSize)
     <*> optional (optInt "initial" 'i' initialPeersMessage)
-    <*> (opt parseConsensus "consensus" 'c' consensusMessage
-          <|> pure defaultConsensus)
+    <*> consensusParser
 
   where
     nodesMessage = Specific . HelpMessage $
       "The total number of peers. Default: " <> T.pack (show defaultClusterSize)
     initialPeersMessage =
       "The number of initial peers. Default: the total number of peers."
-    consensusMessage =
-      "The consensus mechanism. One of [raft clique pow]. Default: raft"
-
-    parseConsensus :: Text -> Maybe Consensus
-    parseConsensus "raft"   = Just Raft
-    parseConsensus "clique" = Just Clique
-    parseConsensus "pow"    = Just ProofOfWork
-    parseConsensus _        = Nothing
 
 localNewMain :: IO ()
 localNewMain = do

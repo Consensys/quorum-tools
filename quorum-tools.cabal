@@ -58,6 +58,7 @@ library
     QuorumTools.Mains.LocalStart
     QuorumTools.NetworkInfo
     QuorumTools.Observing
+    QuorumTools.Options
     QuorumTools.PacketFilter
     QuorumTools.Spam
     QuorumTools.Test.Outline
