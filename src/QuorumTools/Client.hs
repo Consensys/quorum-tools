@@ -37,7 +37,6 @@ import           Data.Time.Units
 import qualified Data.Vector             as V
 import           Network.HTTP.Client     (defaultManagerSettings)
 import           Network.Wreq            (Response, post, responseBody)
-import           Network.Wreq.Session    (Session)
 import qualified Network.Wreq.Session    as Sess
 import           Prelude                 hiding (FilePath, lines)
 import           Turtle                  hiding (Fold)
@@ -225,19 +224,16 @@ perSecond :: Integer -> RateLimit Millisecond
 perSecond times = every $
   fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
 
-spam :: (MonadIO m, TimeUnit a) => SpamMode -> Session -> RateLimit a -> Geth -> m ()
-spam spamMode session rateLimit geth = do
-  let gUrl = T.unpack $ gethUrl geth
-      postBody = Sess.post session gUrl
-      txBody = spamBody spamMode geth
-  waitThenPost <- liftIO $
-    generateRateLimitedFunction rateLimit postBody dontCombine
-  forever $ liftIO $ waitThenPost txBody
-
 spamGeth :: (MonadIO m, TimeUnit a) => SpamMode -> Geth -> RateLimit a -> m ()
 spamGeth spamMode geth rateLimit =
-    liftIO $ Sess.withSessionControl Nothing mgrSettings $ \session ->
-      spam spamMode session rateLimit geth
+    liftIO $ Sess.withSessionControl Nothing mgrSettings $ \session -> do
+      let gUrl = T.unpack $ gethUrl geth
+          -- TODO: take timestamp before each post, or maybe use ekg
+          postBody = Sess.post session gUrl
+          txBody = spamBody spamMode geth
+      waitThenPost <- liftIO $
+        generateRateLimitedFunction rateLimit postBody dontCombine
+      forever $ liftIO $ waitThenPost txBody
 
   where
     mgrSettings = defaultManagerSettings
