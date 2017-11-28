@@ -224,16 +224,13 @@ perSecond :: Integer -> RateLimit Millisecond
 perSecond times = every $
   fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
 
-spamGeth :: (MonadIO m, TimeUnit a) => SpamMode -> Geth -> RateLimit a -> m ()
-spamGeth spamMode geth rateLimit =
-    liftIO $ Sess.withSessionControl Nothing mgrSettings $ \session -> do
-      let gUrl = T.unpack $ gethUrl geth
-          -- TODO: take timestamp before each post, or maybe use ekg
-          postBody = Sess.post session gUrl
-          txBody = spamBody spamMode geth
-      waitThenPost <- liftIO $
-        generateRateLimitedFunction rateLimit postBody dontCombine
-      forever $ liftIO $ waitThenPost txBody
-
-  where
-    mgrSettings = defaultManagerSettings
+spamGeth :: (MonadIO m, TimeUnit a) => SpamMode -> RateLimit a -> Geth -> m ()
+spamGeth spamMode rateLimit geth =
+  liftIO $ Sess.withSessionControl Nothing defaultManagerSettings $ \sess -> do
+    let gUrl = T.unpack $ gethUrl geth
+        -- TODO: take timestamp before each post, or maybe use ekg
+        postBody = Sess.post sess gUrl
+        txBody = spamBody spamMode geth
+    waitThenPost <- liftIO $
+      generateRateLimitedFunction rateLimit postBody dontCombine
+    forever $ liftIO $ waitThenPost txBody

@@ -256,7 +256,7 @@ partition gdata millis node =
   else IPT.partition gdata millis node
 
 spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions = mapM_ $ \geth -> spamGeth BenchEmptyTx geth $ perSecond 10
+spamTransactions = mapM_ $ spamGeth BenchEmptyTx $ perSecond 10
 
 -- | Spawn an asynchronous cluster action.
 --
