@@ -9,7 +9,9 @@ import           Data.Time.Units      (Millisecond)
 import           Turtle
 
 import           QuorumTools.Client   (loadNode, perSecond, spamGeth)
-import           QuorumTools.Cluster  (mkLocalEnv, nodeName, readAccountKey)
+import           QuorumTools.Cluster  (mkLocalEnv, nodeName,
+                                       readAccountKey)
+import qualified QuorumTools.Metrics  as Metrics
 import           QuorumTools.Spam
 import           QuorumTools.Types
 
@@ -36,8 +38,9 @@ localSpam :: LocalSpamConfig -> IO ()
 localSpam (LocalSpamConfig gid rateLimit' contractM privateForM) = do
     keys <- Map.singleton gid <$> readAccountKey dataDir gid
     geth <- runReaderT (loadNode gid) (mkLocalEnv keys Raft)
+    let store = Metrics.blackhole
 
-    spamGeth benchTx rateLimit' geth
+    spamGeth store benchTx rateLimit' geth
 
   where
     dataDir = DataDir $ "gdata" </> fromText (nodeName gid)

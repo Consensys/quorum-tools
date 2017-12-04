@@ -30,7 +30,7 @@ privateForPattern :: Pattern [PublicKey]
 privateForPattern = pubKeyP `sepBy` ","
 
 processContractArgs :: Maybe Text -> Maybe Text -> SpamMode
-processContractArgs contractT privateForT = maybe BenchEmptyTx SendTx $ do
+processContractArgs contractT privateForT = maybe SpamEmptyTx SpamTx $ do
   rawContract <- contractT
   rawPrivateFor <- privateForT
 

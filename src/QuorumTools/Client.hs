@@ -1,8 +1,9 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module QuorumTools.Client
   ( SpamMode(..)
@@ -19,10 +20,11 @@ module QuorumTools.Client
   ) where
 
 import           Control.Lens            (Fold, to, (^.), (^?))
-import           Control.RateLimit       (RateLimit (PerExecution), dontCombine,
+import           Control.RateLimit       (RateLimit (PerExecution),
+                                          dontCombine,
                                           generateRateLimitedFunction)
-import           Data.Aeson              (Value (Array, String), object, toJSON,
-                                          (.=))
+import           Data.Aeson              (Value (Array, String), object,
+                                          toJSON, (.=))
 import           Data.Aeson.Lens         (key, _Integral, _Null, _String)
 import           Data.Aeson.Types        (Pair)
 import qualified Data.ByteString         as BS
@@ -42,6 +44,7 @@ import           Prelude                 hiding (FilePath, lines)
 import           Turtle                  hiding (Fold)
 
 import           QuorumTools.Cluster
+import qualified QuorumTools.Metrics     as Metrics
 import           QuorumTools.Types
 import           QuorumTools.Util
 
@@ -145,12 +148,16 @@ call geth args =
   where
     extract = extractResult $ _String.to textToBytes.traverse
 
+extractTxId :: Response LSB.ByteString -> Either Text TxId
+extractTxId resp = extractResult subfield resp
+  where
+    subfield :: Fold Value TxId
+    subfield = _String . to textToBytes32 . traverse . to TxId
+
 extractTxResult :: TxSync -> Response LSB.ByteString -> Either Text TxResult
 extractTxResult mode resp =
   case mode of
-    Sync -> extractResult
-              (_String . to textToBytes32 . traverse . to (TxAck . TxId))
-              resp
+    Sync -> TxAck <$> extractTxId resp
     Async -> extractResult (_Null . to (const TxSent)) resp
 
 sendTransaction :: MonadIO m => Geth -> Tx -> m (Either Text TxResult)
@@ -194,8 +201,8 @@ sendEmptyTx geth = liftIO $ void $
 
 spamBody :: SpamMode -> Geth -> Value
 spamBody = \case
-  BenchEmptyTx -> emptyTxRpcBody
-  SendTx args -> sendBody args
+  SpamEmptyTx -> emptyTxRpcBody
+  SpamTx args -> sendBody args
 
 bench :: MonadIO m => SpamMode -> Geth -> Seconds -> m ()
 bench spamMode geth (Seconds seconds) = view benchShell
@@ -224,13 +231,17 @@ perSecond :: Integer -> RateLimit Millisecond
 perSecond times = every $
   fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
 
-spamGeth :: (MonadIO m, TimeUnit a) => SpamMode -> RateLimit a -> Geth -> m ()
-spamGeth spamMode rateLimit geth =
+spamGeth :: forall m a mon
+          . (MonadIO m, TimeUnit a, Metrics.Store IO mon)
+         => mon -> SpamMode -> RateLimit a -> Geth -> m ()
+spamGeth monitor spamMode rateLimit geth =
   liftIO $ Sess.withSessionControl Nothing defaultManagerSettings $ \sess -> do
     let gUrl = T.unpack $ gethUrl geth
-        -- TODO: take timestamp before each post, or maybe use ekg
-        postBody = Sess.post sess gUrl
+
+        postBody :: Value -> IO (Either Text TxId)
+        postBody val = Metrics.log monitor Metrics.SendTx $
+          extractTxId <$> Sess.post sess gUrl val
+
         txBody = spamBody spamMode geth
-    waitThenPost <- liftIO $
-      generateRateLimitedFunction rateLimit postBody dontCombine
-    forever $ liftIO $ waitThenPost txBody
+    waitThenPost <- generateRateLimitedFunction rateLimit postBody dontCombine
+    forever $ waitThenPost txBody

@@ -16,11 +16,11 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
+- rate-limit-1.2.0
 - uri-bytestring-0.2.3.3
 - foldl-1.2.5
 - turtle-1.3.6
 - symmetric-properties-0.1.0.0
-- rate-limit-1.1.1
 - time-units-1.0.0
 - aeson-1.1.2.0
 - async-pool-0.9.0.2

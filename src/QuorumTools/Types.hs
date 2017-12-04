@@ -179,8 +179,8 @@ data Tx = Tx
 data CreateArgs = CreateArgs Contract Bytes32 TxSync
 
 data SpamMode
-  = BenchEmptyTx
-  | SendTx Tx
+  = SpamEmptyTx
+  | SpamTx Tx
 
 newtype UnencodedMethod = UnencodedMethod Text deriving IsString
 

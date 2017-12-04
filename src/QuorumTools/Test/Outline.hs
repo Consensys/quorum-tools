@@ -12,9 +12,8 @@ import           Control.Lens
 import           Control.Monad             (forM_)
 import           Control.Monad.Except
 import           Control.Monad.Managed     (MonadManaged)
-import           Control.Monad.Reader      (ReaderT (runReaderT), MonadReader,
-                                            ask)
-import           Data.Foldable             (toList)
+import           Control.Monad.Reader      (ReaderT (runReaderT), ask)
+import           Data.Foldable             (for_, toList)
 import           Data.Monoid               (Last (Last))
 import           Data.Monoid.Same          (Same (NotSame, Same), allSame)
 import           Data.Set                  (Set)
@@ -35,6 +34,7 @@ import           QuorumTools.Cluster
 import           QuorumTools.Constellation
 import           QuorumTools.Control       (Behavior, awaitAll, convergence,
                                             observe, timeLimit)
+import qualified QuorumTools.Metrics       as Metrics
 import           QuorumTools.Types
 import           QuorumTools.Util          (lastOrEmpty, inshellWithJoinedErr,
                                             timestampedMessage)
@@ -255,9 +255,6 @@ partition gdata millis node =
   then PF.partition gdata millis node >> PF.flushPf
   else IPT.partition gdata millis node
 
-spamTransactions :: MonadIO m => [Geth] -> m ()
-spamTransactions = mapM_ $ spamGeth BenchEmptyTx $ perSecond 10
-
 -- | Spawn an asynchronous cluster action.
 --
 -- Note: We force a return type of @()@ so we can use @sh@, discarding any
@@ -271,9 +268,10 @@ clusterAsync m = do
   clusterEnv <- ask
   liftIO $ async $ sh (runReaderT m clusterEnv)
 
-withSpammer :: (MonadIO m, MonadReader ClusterEnv m) => [Geth] -> m () -> m ()
+withSpammer :: (MonadIO m, HasEnv m) => [Geth] -> m () -> m ()
 withSpammer geths action = do
-  spammer <- clusterAsync $ spamTransactions geths
+  spammer <- clusterAsync $
+    for_ geths $ spamGeth Metrics.blackhole SpamEmptyTx (perSecond 10)
   action
   liftIO $ cancel spammer
 
