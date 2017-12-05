@@ -16,10 +16,11 @@ module QuorumTools.Metrics
   ) where
 
 import           Control.Concurrent          (MVar, modifyMVar, newMVar)
-import           Control.Lens                ((^.), makeLenses)
+import           Control.Lens                ((^.), (<&>), makeLenses)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
 import           Data.Text                   (Text)
-import           Data.Time.Units             (Microsecond, getCPUTimeWithUnit,
+import           Data.Time.Units             (Microsecond, Second,
+                                              getCPUTimeWithUnit,
                                               toMicroseconds)
 import qualified System.Metrics              as EKG
 import qualified System.Remote.Monitoring    as EKG
@@ -30,7 +31,10 @@ import           QuorumTools.Types
 
 data SendTxState
   = SendTxState
-    { _stsVar :: MVar (Maybe (Int, Int)) -- before * after, in microseconds
+    --
+    -- TODO: change these to UTCTime
+    --
+    { _stsLastSend :: MVar (Maybe (Microsecond, Microsecond)) -- before & after
     }
 makeLenses ''SendTxState
 
@@ -77,9 +81,11 @@ data LocalEkg m
 mkLocalEkgServer :: MonadIO m => Int -> m EKG.Server
 mkLocalEkgServer = liftIO . EKG.forkServer "localhost"
 
-currentMicros :: MonadIO m => m Int
-currentMicros = liftIO $
-  fromIntegral . toMicroseconds <$> (getCPUTimeWithUnit :: IO Microsecond)
+--
+-- FIXME: This is not current system time:
+--
+currentMicros :: MonadIO m => m Microsecond
+currentMicros = liftIO $ (getCPUTimeWithUnit :: IO Microsecond)
 
 -- We separate logger- from server creation so we have the option of easily
 -- using other ekg backends (e.g. prometheus)
@@ -91,6 +97,7 @@ mkEkgLogger store = liftIO $ do
   sendTxRtt      <- EKG.createDistribution "cluster.tx.submit.rtt_μs" store
   sendTxPeriod   <- EKG.createDistribution "cluster.tx.submit.period_μs" store
   sendTxCooldown <- EKG.createDistribution "cluster.tx.submit.cooldown_μs" store
+  sendTxPerSec   <- EKG.createDistribution "cluster.tx.submit.per_second" store
 
   return $ MetricLogger $ \metric act ->
     case metric of
@@ -101,21 +108,29 @@ mkEkgLogger store = liftIO $ do
         --
         -- NOTE: json decoding is currently captured in rtt time
         --
-        let rtt = fromIntegral $ after - before
+        let rtt = fromIntegral $ toMicroseconds $ after - before
 
         liftIO $ do
-          mDeltas <- modifyMVar (state ^. stsVar) $ \case
-            Nothing ->
-              pure ( Just (before, after)
-                   , Nothing)
-            Just (lastBefore, lastAfter) ->
-              pure ( Just (before, after)
-                   , Just (before - lastBefore, before - lastAfter))
+          mDeltas <- modifyMVar (state ^. stsLastSend) $ \mLastSend ->
+            let thisSend = (before, after)
+            in  pure ( Just thisSend
+                     , mLastSend <&> \(lastBefore, lastAfter) ->
+                         (before - lastBefore, before - lastAfter)
+                     )
 
           case mDeltas of
             Just (sendPeriod, sendCooldown) -> do
-              Dist.add sendTxPeriod $ fromIntegral sendPeriod
-              Dist.add sendTxCooldown $ fromIntegral sendCooldown
+              let sendPeriodMicros = toMicroseconds sendPeriod
+                  perSec :: Double
+                  perSec = (fromIntegral $ toMicroseconds $ (1 :: Second))
+                         / (fromIntegral sendPeriodMicros)
+              --
+              -- FIXME: these are currently off, because currentMicros is only
+              -- measuring *CPU* time.
+              --
+              Dist.add sendTxPerSec perSec
+              Dist.add sendTxPeriod $ fromIntegral sendPeriodMicros
+              Dist.add sendTxCooldown $ fromIntegral $ toMicroseconds sendCooldown
             Nothing -> pure ()
           Counter.inc sendTxTotal
           case val of
