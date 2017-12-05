@@ -234,12 +234,13 @@ perSecond times = every $
 spamGeth :: forall m a mon
           . (MonadIO m, TimeUnit a, Metrics.Store IO mon)
          => mon -> SpamMode -> RateLimit a -> Geth -> m ()
-spamGeth monitor spamMode rateLimit geth =
+spamGeth monitor spamMode rateLimit geth = do
+  sendState <- Metrics.mkSendTxState
   liftIO $ Sess.withSessionControl Nothing defaultManagerSettings $ \sess -> do
     let gUrl = T.unpack $ gethUrl geth
 
         postBody :: Value -> IO (Either Text TxId)
-        postBody val = Metrics.log monitor Metrics.SendTx $
+        postBody val = Metrics.log monitor (Metrics.SendTx sendState) $
           extractTxId <$> Sess.post sess gUrl val
 
         txBody = spamBody spamMode geth
