@@ -5,7 +5,7 @@ module QuorumTools.Mains.LocalSpam where
 import           Control.Monad.Reader (runReaderT)
 import           Control.RateLimit    (RateLimit)
 import qualified Data.Map.Strict      as Map
-import           Data.Time.Units      (Millisecond)
+import           Data.Time.Units      (Microsecond)
 import           Turtle
 
 import           QuorumTools.Client   (loadNode, perSecond, spamGeth)
@@ -17,7 +17,7 @@ import           QuorumTools.Types
 
 data LocalSpamConfig = LocalSpamConfig
   { gethId       :: GethId
-  , rateLimit    :: RateLimit Millisecond
+  , rateLimit    :: RateLimit Microsecond
   , contractAddr :: Maybe Text
   , privateFor   :: Maybe Text
   }

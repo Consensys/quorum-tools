@@ -227,7 +227,7 @@ loadNode gid = mkGeth gid =<< readEnodeId gid
 every :: TimeUnit a => a -> RateLimit a
 every = PerExecution
 
-perSecond :: Integer -> RateLimit Millisecond
+perSecond :: Integer -> RateLimit Microsecond
 perSecond times = every $
   fromMicroseconds $ toMicroseconds (1 :: Second) `div` times
 
