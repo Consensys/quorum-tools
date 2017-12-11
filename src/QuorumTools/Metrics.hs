@@ -22,8 +22,7 @@ import           Data.AffineSpace            ((.-.))
 import           Data.Text                   (Text)
 import           Data.Thyme.Clock            (UTCTime, getCurrentTime,
                                               microseconds)
-import           Data.Time.Units             (Microsecond, Second,
-                                              toMicroseconds)
+import           Data.Time.Units             (Microsecond, toMicroseconds)
 import qualified System.Metrics              as EKG
 import qualified System.Remote.Monitoring    as EKG
 import qualified System.Metrics.Counter      as Counter
@@ -93,7 +92,6 @@ mkEkgLogger store = liftIO $ do
   sendTxRtt      <- EKG.createDistribution "cluster.tx.submit.rtt_μs" store
   sendTxPeriod   <- EKG.createDistribution "cluster.tx.submit.period_μs" store
   sendTxCooldown <- EKG.createDistribution "cluster.tx.submit.cooldown_μs" store
-  sendTxPerSec   <- EKG.createDistribution "cluster.tx.submit.per_second" store
 
   return $ MetricLogger $ \metric act ->
     case metric of
@@ -118,12 +116,7 @@ mkEkgLogger store = liftIO $ do
 
           case mDeltas of
             Just (sendPeriod, sendCooldown) -> do
-              let sendPeriodMicros = toMicroseconds sendPeriod
-                  perSec :: Double
-                  perSec = (fromIntegral $ toMicroseconds $ (1 :: Second))
-                         / (fromIntegral sendPeriodMicros)
-              Dist.add sendTxPerSec perSec
-              Dist.add sendTxPeriod $ fromIntegral sendPeriodMicros
+              Dist.add sendTxPeriod $ fromIntegral $ toMicroseconds sendPeriod
               Dist.add sendTxCooldown $ fromIntegral $ toMicroseconds sendCooldown
             Nothing -> pure ()
           Counter.inc sendTxTotal
