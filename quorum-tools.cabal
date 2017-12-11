@@ -45,7 +45,7 @@ library
     data-default          == 0.7.*,
     ekg                   == 0.4.*,
     ekg-core              == 0.1.*,
-    rate-limit            == 1.2.*,
+    rate-limit            == 1.4.*,
     thyme                 == 0.3.*,
     vector-space          == 0.12.*
   exposed-modules:
