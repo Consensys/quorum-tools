@@ -73,6 +73,7 @@ library
     QuorumTools.Test.Raft.NewcomerRejoinTest
     QuorumTools.Test.Raft.PrivateStateTest
     QuorumTools.Test.Raft.PublicStateTest
+    QuorumTools.Test.Raft.Regression428
     QuorumTools.Test.Raft.RestartNodeTest
     QuorumTools.Test.State
     QuorumTools.Types

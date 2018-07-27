@@ -8,6 +8,7 @@ import QuorumTools.Test.Raft.LeaveJoinTest
 import QuorumTools.Test.Raft.NewcomerRejoinTest
 import QuorumTools.Test.Raft.PrivateStateTest
 import QuorumTools.Test.Raft.PublicStateTest
+import QuorumTools.Test.Raft.Regression428
 import QuorumTools.Test.Raft.RestartNodeTest
 
 run :: String -> IO () -> IO ()
@@ -22,5 +23,6 @@ main = do
   run "initial member leave/rejoin" leaveJoinTestMain
   run "newcomer leave/rejoin"       newcomerRejoinTestMain
   run "private state"               privateStateTestMain
+  run "428 regression"              regression428TestMain
   run "public state"                publicStateTestMain
   run "restart node"                restartNodeTestMain
