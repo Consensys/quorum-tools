@@ -36,10 +36,12 @@ createGenesisJson = do
             (Map.toList bals) :: Value)
       , "coinbase"   .= addrToText def
       , "config"     .= object
-        ([ "homesteadBlock" .= i 100000000
+        ([ "byzantiumBlock" .= i 1
          , "chainId"        .= i 1
-         , "eip155Block"    .= i 100000000
-         , "eip158Block"    .= i 100000000
+         , "eip150Block"    .= i 1
+         , "eip150Hash"     .= t "0x0000000000000000000000000000000000000000000000000000000000000000"
+         , "eip155Block"    .= i 0
+         , "eip158Block"    .= i 1
          , "isQuorum"       .= (mode == QuorumMode)
          ] <> case consenCfg of
                 RaftConfig _ -> []
