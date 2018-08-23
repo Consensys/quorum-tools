@@ -61,7 +61,7 @@ import           QuorumTools.Util           (HexPrefix (..), bytes20P,
 emptyClusterEnv :: ClusterEnv
 emptyClusterEnv = ClusterEnv
   { _clusterPassword              = CleartextPassword "abcd"
-  , _clusterNetworkId             = 1418
+  , _clusterNetworkId             = 1337
   , _clusterBaseHttpPort          = 30400
   , _clusterBaseRpcPort           = 40400
   , _clusterBaseConstellationPort = 9000
