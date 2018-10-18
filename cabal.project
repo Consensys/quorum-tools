@@ -1,3 +1,0 @@
-packages:
-  ./quorum-tools.cabal
-  ./constellation/constellation.cabal

@@ -1,3 +1,0 @@
-let colorize str = "\ESC[34m" ++ str ++ "\ESC[m"
-putStrLn $ colorize "Welcome to quorum-tools-flavored GHCi!"
-putStrLn $ colorize "Try :browse QuorumTools"
