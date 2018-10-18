@@ -1,0 +1,17 @@
+name: my-7nodes-example
+genesis: auto
+consensus:
+  name: istanbul
+  config:
+    blocktime: 1
+nodes:
+- quorum:
+    image: quorumengineering/quorum:latest
+    config:
+      mine: true
+      minerthread: 1
+      verbosity: 5
+      debug: true
+  tx_manager:
+    image: quorumengineering/tessera:latest
+    config:
