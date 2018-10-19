@@ -20,13 +20,20 @@
 package docker
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
+	"strings"
 
 	"github.com/docker/docker/client"
 
 	"gopkg.in/yaml.v2"
 )
+
+type Container interface {
+	Start() error
+	Stop() error
+}
 
 type QuorumBuilderConsensus struct {
 	Name   string            `yaml:"name"`
@@ -51,7 +58,6 @@ type QuorumBuilder struct {
 
 	dockerClient  *client.Client
 	dockerNetwork *Network
-	txManager     *TxManager
 }
 
 func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
@@ -71,32 +77,81 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 }
 
 // 1. Build Docker Network
-// 2. Build Tx Manager
-// 3. Build Quorum
-func (q *QuorumBuilder) Build() error {
-	if err := q.buildDockerNetwork(); err != nil {
+// 2. Start Tx Manager
+// 3. Start Quorum
+func (qb *QuorumBuilder) Build() error {
+	if err := qb.buildDockerNetwork(); err != nil {
 		return err
 	}
-	if err := q.buildTxManager(); err != nil {
+	if err := qb.startTxManagers(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (q *QuorumBuilder) buildTxManager() error {
-	tm, err := NewTesseraTxManager()
-	if err != nil {
-		return err
+func (qb *QuorumBuilder) startTxManagers() error {
+	return qb.startContainers(func(node QuorumBuilderNode) (Container, error) {
+		return NewTesseraTxManager(
+			ConfigureDockerClient(qb.dockerClient),
+			ConfigureNetwork(qb.dockerNetwork),
+			ConfigureDockerImage(node.TxManager.Image),
+			ConfigureConfig(node.TxManager.Config),
+		)
+	})
+}
+
+func (qb *QuorumBuilder) startQuorums() error {
+	return qb.startContainers(func(node QuorumBuilderNode) (Container, error) {
+		return NewQuorum(
+			ConfigureDockerClient(qb.dockerClient),
+			ConfigureNetwork(qb.dockerNetwork),
+			ConfigureDockerImage(node.Quorum.Image),
+			ConfigureConfig(node.Quorum.Config),
+		)
+	})
+}
+
+func (qb *QuorumBuilder) startContainers(containerFn func(node QuorumBuilderNode) (Container, error)) error {
+	readyChan := make(chan struct{})
+	errChan := make(chan error)
+	for idx, node := range qb.Nodes {
+		c, err := containerFn(node)
+		if err != nil {
+			errChan <- fmt.Errorf("%d: %s", idx, err)
+			continue
+		}
+		go func(_c Container) {
+			if err := _c.Start(); err != nil {
+				errChan <- fmt.Errorf("%d: %s", idx, err)
+			} else {
+				readyChan <- struct{}{}
+			}
+		}(c)
 	}
-	q.txManager = tm
+	readyCount := 0
+	allErr := make([]string, 0)
+	for {
+		select {
+		case <-readyChan:
+			readyCount++
+		case err := <-errChan:
+			allErr = append(allErr, err.Error())
+		}
+		if len(allErr)+readyCount >= len(qb.Nodes) {
+			break
+		}
+	}
+	if len(allErr) > 0 {
+		return fmt.Errorf("%d/%d ready\n%s", readyCount, len(qb.Nodes), strings.Join(allErr, "\n"))
+	}
 	return nil
 }
 
-func (q *QuorumBuilder) buildDockerNetwork() error {
-	network, err := NewDockerNetwork(q.dockerClient, q.Name)
+func (qb *QuorumBuilder) buildDockerNetwork() error {
+	network, err := NewDockerNetwork(qb.dockerClient, qb.Name)
 	if err != nil {
 		return err
 	}
-	q.dockerNetwork = network
+	qb.dockerNetwork = network
 	return nil
 }

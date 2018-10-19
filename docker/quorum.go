@@ -19,8 +19,24 @@
 
 package docker
 
-func DockerImage(image string) ConfigureFn {
-	return func(c Configurable) {
-		c.Set("dockerImage", image)
+type Quorum struct {
+	*DefaultConfigurable
+}
+
+func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
+	q := &Quorum{
+		&DefaultConfigurable{},
 	}
+	for _, cfgFn := range configureFns {
+		cfgFn(q)
+	}
+	return nil, nil
+}
+
+func (q *Quorum) Start() error {
+	return nil
+}
+
+func (q *Quorum) Stop() error {
+	return nil
 }

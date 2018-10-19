@@ -19,20 +19,12 @@
 
 package docker
 
-type ConfigureFn func(c Configurable)
-
-type Configurable interface {
-	Set(key string, value string)
-}
-
 type TxManager interface {
-	Start() error
-	Stop() error
 	GenerateKeys() ([]byte, []byte, error)
 }
 
 type TesseraTxManager struct {
-	configuration map[string]string
+	*DefaultConfigurable
 }
 
 func (t *TesseraTxManager) Start() error {
@@ -47,12 +39,10 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, err er
 	return nil, nil, nil
 }
 
-func (t *TesseraTxManager) Set(key string, value string) {
-	t.configuration[key] = value
-}
-
-func NewTesseraTxManager(configureFns...ConfigureFn) (TxManager, error) {
-	tm := &TesseraTxManager{}
+func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
+	tm := &TesseraTxManager{
+		&DefaultConfigurable{},
+	}
 	for _, cfgFn := range configureFns {
 		cfgFn(tm)
 	}
