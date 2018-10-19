@@ -19,13 +19,18 @@
 
 package docker
 
-import "github.com/docker/docker/client"
+import (
+	"github.com/docker/docker/client"
+)
 
 const (
-	CfgKeyDockerClient  = "DockerClient"
-	CfgKeyDockerImage   = "DockerImage"
-	CfgKeyDockerNetwork = "DockerNetwork"
-	CfgKeyConfig        = "Config"
+	CfgKeyDockerClient         = "DockerClient"
+	CfgKeyDockerImage          = "DockerImage"
+	CfgKeyDockerNetwork        = "DockerNetwork"
+	CfgKeyConfig               = "Config"
+	CfgKeyNodeIndex            = "NodeIndex"
+	CfgKeyTxManagerPublicKeys  = "TxManagerPublicKeys"
+	CfgKeyTxManagerPrivateKeys = "TxManagerPrivateKeys"
 )
 
 type ConfigureFn func(c Configurable)
@@ -40,6 +45,20 @@ type DefaultConfigurable struct {
 
 func (dc *DefaultConfigurable) Set(key string, value interface{}) {
 	dc.configuration[key] = value
+}
+
+func (dc *DefaultConfigurable) DockerClient() *client.Client {
+	return dc.configuration[CfgKeyDockerClient].(*client.Client)
+}
+
+func (dc *DefaultConfigurable) DockerImage() string {
+	return dc.configuration[CfgKeyDockerImage].(string)
+}
+
+func ConfigureNodeIndex(idx int) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyNodeIndex, idx)
+	}
 }
 
 func ConfigureDockerClient(client *client.Client) ConfigureFn {

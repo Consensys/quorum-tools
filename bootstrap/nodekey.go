@@ -17,26 +17,13 @@
  * under the License.
  */
 
-package docker
+package bootstrap
 
-type Quorum struct {
-	*DefaultConfigurable
-}
+import (
+	"crypto/ecdsa"
+	"github.com/ethereum/go-ethereum/crypto"
+)
 
-func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
-	q := &Quorum{
-		&DefaultConfigurable{},
-	}
-	for _, cfgFn := range configureFns {
-		cfgFn(q)
-	}
-	return q, nil
-}
-
-func (q *Quorum) Start() error {
-	return nil
-}
-
-func (q *Quorum) Stop() error {
-	return nil
+func NewNodeKey() (*ecdsa.PrivateKey, error) {
+	return crypto.GenerateKey()
 }

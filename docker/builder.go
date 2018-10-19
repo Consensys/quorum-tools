@@ -20,10 +20,14 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
 
 	"github.com/docker/docker/client"
 
@@ -90,8 +94,12 @@ func (qb *QuorumBuilder) Build() error {
 }
 
 func (qb *QuorumBuilder) startTxManagers() error {
-	return qb.startContainers(func(node QuorumBuilderNode) (Container, error) {
+	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
+		if err := qb.pullImage(node.TxManager.Image); err != nil {
+			return nil, err
+		}
 		return NewTesseraTxManager(
+			ConfigureNodeIndex(idx),
 			ConfigureDockerClient(qb.dockerClient),
 			ConfigureNetwork(qb.dockerNetwork),
 			ConfigureDockerImage(node.TxManager.Image),
@@ -101,8 +109,12 @@ func (qb *QuorumBuilder) startTxManagers() error {
 }
 
 func (qb *QuorumBuilder) startQuorums() error {
-	return qb.startContainers(func(node QuorumBuilderNode) (Container, error) {
+	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
+		if err := qb.pullImage(node.Quorum.Image); err != nil {
+			return nil, err
+		}
 		return NewQuorum(
+			ConfigureNodeIndex(idx),
 			ConfigureDockerClient(qb.dockerClient),
 			ConfigureNetwork(qb.dockerNetwork),
 			ConfigureDockerImage(node.Quorum.Image),
@@ -111,11 +123,11 @@ func (qb *QuorumBuilder) startQuorums() error {
 	})
 }
 
-func (qb *QuorumBuilder) startContainers(containerFn func(node QuorumBuilderNode) (Container, error)) error {
+func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBuilderNode) (Container, error)) error {
 	readyChan := make(chan struct{})
 	errChan := make(chan error)
 	for idx, node := range qb.Nodes {
-		c, err := containerFn(node)
+		c, err := containerFn(idx, node)
 		if err != nil {
 			errChan <- fmt.Errorf("%d: %s", idx, err)
 			continue
@@ -153,5 +165,22 @@ func (qb *QuorumBuilder) buildDockerNetwork() error {
 		return err
 	}
 	qb.dockerNetwork = network
+	return nil
+}
+
+func (qb *QuorumBuilder) pullImage(image string) error {
+	filters := filters.NewArgs()
+	filters.Add("reference", image)
+
+	images, err := qb.dockerClient.ImageList(context.Background(), types.ImageListOptions{
+		Filters: filters,
+	})
+
+	if len(images) == 0 || err != nil {
+		_, err := qb.dockerClient.ImagePull(context.Background(), image, types.ImagePullOptions{})
+		if err != nil {
+			return fmt.Errorf("pullImage: %s - %s", image, err)
+		}
+	}
 	return nil
 }

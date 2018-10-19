@@ -17,26 +17,8 @@
  * under the License.
  */
 
-package docker
+package bootstrap
 
-type Quorum struct {
-	*DefaultConfigurable
-}
+func NewDataDir() {
 
-func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
-	q := &Quorum{
-		&DefaultConfigurable{},
-	}
-	for _, cfgFn := range configureFns {
-		cfgFn(q)
-	}
-	return q, nil
-}
-
-func (q *Quorum) Start() error {
-	return nil
-}
-
-func (q *Quorum) Stop() error {
-	return nil
 }
