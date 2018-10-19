@@ -37,7 +37,7 @@ type Account struct {
 
 // create a new account with empty passphrase in a new keystore
 func NewAccount() (*Account, error) {
-	tmp, err := ioutil.TempDir("", fmt.Sprintf("qctl-%d", time.Now().Unix()))
+	tmp, err := ioutil.TempDir("", fmt.Sprintf("qctl-ks-%d", time.Now().Unix()))
 	if err != nil {
 		return nil, fmt.Errorf("NewAccount: can't create tmp dir - %s", err)
 	}

@@ -73,7 +73,7 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 	if err := yaml.Unmarshal(data, b); err != nil {
 		return nil, err
 	}
-	b.dockerClient, err = client.NewClientWithOpts(client.FromEnv)
+	b.dockerClient, err = client.NewEnvClient()
 	if err != nil {
 		return nil, err
 	}

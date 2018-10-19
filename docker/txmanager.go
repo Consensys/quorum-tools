@@ -23,12 +23,12 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 )
 
 type TxManager interface {
@@ -52,16 +52,15 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create tmp dir - %s", err)
 	}
+	defer os.RemoveAll(tmpDataDir)
 	containerWorkingDir := "/tm"
 	resp, err := t.DockerClient().ContainerCreate(
 		context.Background(),
 		&container.Config{
 			Image:      t.DockerImage(),
 			WorkingDir: containerWorkingDir,
-			Entrypoint: strslice.StrSlice{
-				"/bin/sh",
-				"-c",
-				"echo \"\n\" | java -jar /tessera/tessera-app.jar -keygen",
+			Cmd: []string{
+				"-keygen",
 			},
 		},
 		&container.HostConfig{
@@ -80,9 +79,17 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 		return nil, nil, fmt.Errorf("GenerateKeys: can't start container %s - %s", containerId, err)
 	}
 	defer t.DockerClient().ContainerRemove(context.Background(), containerId, types.ContainerRemoveOptions{Force: true})
-	_, errChan := t.DockerClient().ContainerWait(context.Background(), containerId, container.WaitConditionNotRunning)
-	select {
-	case err := <-errChan:
+	// Attach container: for stdin interaction with the container.
+	attachResp, err := t.DockerClient().ContainerAttach(context.Background(), containerId, types.ContainerAttachOptions{Stream: true, Stdin: true})
+	if err != nil {
+		return nil, nil, fmt.Errorf("GenerateKeys: failed to attach to container %s - %s", containerId, err)
+	}
+	// - write empty string password to container stdin
+	attachResp.Conn.Write([]byte("")) //Empty password
+
+	timeoutCtx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelCtx()
+	if _, err := t.DockerClient().ContainerWait(timeoutCtx, containerId); err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: container %s is not running - %s", containerId, err)
 	}
 
