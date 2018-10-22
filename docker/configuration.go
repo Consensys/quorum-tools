@@ -27,12 +27,14 @@ const (
 	CfgKeyDockerClient         = "DockerClient"
 	CfgKeyDockerImage          = "DockerImage"
 	CfgKeyDockerNetwork        = "DockerNetwork"
+	CfgKeyMyIP                 = "MyIP"
 	CfgKeyConfig               = "Config"
 	CfgKeyNodeIndex            = "NodeIndex"
 	CfgKeyTxManagerPublicKeys  = "TxManagerPublicKeys"
 	CfgKeyTxManagerPrivateKeys = "TxManagerPrivateKeys"
 	CfgKeyLabels               = "Labels"
 	CfgKeyProvisionId          = "ProvisionId"
+	CfgKeyNodeCount            = "NodeCount"
 )
 
 type ConfigureFn func(c Configurable)
@@ -57,6 +59,10 @@ func (dc *DefaultConfigurable) DockerImage() string {
 	return dc.configuration[CfgKeyDockerImage].(string)
 }
 
+func (dc *DefaultConfigurable) DockerNetwork() *Network {
+	return dc.configuration[CfgKeyDockerNetwork].(*Network)
+}
+
 func (dc *DefaultConfigurable) Labels() map[string]string {
 	return dc.configuration[CfgKeyLabels].(map[string]string)
 }
@@ -67,6 +73,22 @@ func (dc *DefaultConfigurable) Index() int {
 
 func (dc *DefaultConfigurable) ProvisionId() string {
 	return dc.configuration[CfgKeyProvisionId].(string)
+}
+
+func (dc *DefaultConfigurable) TxManagerPublicKeys() [][]byte {
+	return dc.configuration[CfgKeyTxManagerPublicKeys].([][]byte)
+}
+
+func (dc *DefaultConfigurable) TxManagerPrivateKeys() [][]byte {
+	return dc.configuration[CfgKeyTxManagerPrivateKeys].([][]byte)
+}
+
+func (dc *DefaultConfigurable) MyIP() string {
+	return dc.configuration[CfgKeyMyIP].(string)
+}
+
+func (dc *DefaultConfigurable) NodeCount() int {
+	return dc.configuration[CfgKeyNodeCount].(int)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -108,5 +130,17 @@ func ConfigureLabels(labels map[string]string) ConfigureFn {
 func ConfigureProvisionId(id string) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyProvisionId, id)
+	}
+}
+
+func ConfigureMyIP(ip string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyMyIP, ip)
+	}
+}
+
+func ConfigureNodeCount(n int) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyNodeCount, n)
 	}
 }

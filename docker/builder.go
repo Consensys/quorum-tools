@@ -104,11 +104,17 @@ func (qb *QuorumBuilder) Build() error {
 
 func (qb *QuorumBuilder) startTxManagers() error {
 	log.Debug("Start Tx Managers")
+	ips, err := qb.dockerNetwork.GetFreeIPAddrs(len(qb.Nodes))
+	if err != nil {
+		return err
+	}
 	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.TxManager.Image); err != nil {
 			return nil, err
 		}
 		return NewTesseraTxManager(
+			ConfigureNodeCount(len(qb.Nodes)),
+			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
 			ConfigureProvisionId(qb.Name),
 			ConfigureDockerClient(qb.dockerClient),
@@ -121,11 +127,18 @@ func (qb *QuorumBuilder) startTxManagers() error {
 }
 
 func (qb *QuorumBuilder) startQuorums() error {
+	log.Debug("Start Quorum nodes")
+	ips, err := qb.dockerNetwork.GetFreeIPAddrs(len(qb.Nodes))
+	if err != nil {
+		return err
+	}
 	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.Quorum.Image); err != nil {
 			return nil, err
 		}
 		return NewQuorum(
+			ConfigureNodeCount(len(qb.Nodes)),
+			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
 			ConfigureProvisionId(qb.Name),
 			ConfigureDockerClient(qb.dockerClient),
