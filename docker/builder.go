@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/log"
 
@@ -65,6 +66,7 @@ type QuorumBuilder struct {
 	commonLabels  map[string]string
 	dockerClient  *client.Client
 	dockerNetwork *Network
+	pullMux       *sync.RWMutex
 }
 
 func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
@@ -83,6 +85,7 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 	b.commonLabels = map[string]string{
 		"com.quorum.quorum-tools.id": b.Name,
 	}
+	b.pullMux = new(sync.RWMutex)
 	return b, nil
 }
 
@@ -135,40 +138,15 @@ func (qb *QuorumBuilder) startQuorums() error {
 }
 
 func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBuilderNode) (Container, error)) error {
-	readyChan := make(chan struct{})
-	errChan := make(chan error)
-	for idx, node := range qb.Nodes {
-		go func(_idx int, _node QuorumBuilderNode) {
-			c, err := containerFn(_idx, _node)
-			if err != nil {
-				errChan <- fmt.Errorf("container %d: %s", _idx, err)
-				return
-			}
-			log.Debug("Start Container", "idx", _idx)
-			if err := c.Start(); err != nil {
-				errChan <- fmt.Errorf("container %d: %s", _idx, err)
-			} else {
-				readyChan <- struct{}{}
-			}
-		}(idx, node)
-	}
-	readyCount := 0
-	allErr := make([]string, 0)
-	for {
-		select {
-		case <-readyChan:
-			readyCount++
-		case err := <-errChan:
-			allErr = append(allErr, err.Error())
+	return doWorkInParallel("starting containers", quorumNodesToGeneric(qb.Nodes), func(idx int, el interface{}) error {
+		node := el.(QuorumBuilderNode)
+		c, err := containerFn(idx, node)
+		if err != nil {
+			return err
 		}
-		if len(allErr)+readyCount >= len(qb.Nodes) {
-			break
-		}
-	}
-	if len(allErr) > 0 {
-		return fmt.Errorf("%d/%d containers are ready\n%s", readyCount, len(qb.Nodes), strings.Join(allErr, "\n"))
-	}
-	return nil
+		log.Debug("Start Container", "idx", idx)
+		return c.Start()
+	})
 }
 
 func (qb *QuorumBuilder) buildDockerNetwork() error {
@@ -182,6 +160,8 @@ func (qb *QuorumBuilder) buildDockerNetwork() error {
 }
 
 func (qb *QuorumBuilder) pullImage(image string) error {
+	qb.pullMux.Lock()
+	defer qb.pullMux.Unlock()
 	log.Debug("Pull Docker Image", "name", image)
 	filters := filters.NewArgs()
 	filters.Add("reference", image)
@@ -209,7 +189,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	if err != nil {
 		return fmt.Errorf("destroy: %s", err)
 	}
-	if err := doWorkInParallel("removing containers", containersToGeneric(containers), func(el interface{}) error {
+	if err := doWorkInParallel("removing containers", containersToGeneric(containers), func(_ int, el interface{}) error {
 		c := el.(types.Container)
 		log.Debug("removing container", "id", c.ID[:6], "name", c.Names)
 		return qb.dockerClient.ContainerRemove(context.Background(), c.ID, types.ContainerRemoveOptions{Force: true})
@@ -222,7 +202,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	if err != nil {
 		return fmt.Errorf("destroy: %s", err)
 	}
-	if err := doWorkInParallel("removing network", networksToGeneric(networks), func(el interface{}) error {
+	if err := doWorkInParallel("removing network", networksToGeneric(networks), func(_ int, el interface{}) error {
 		c := el.(types.NetworkResource)
 		log.Debug("removing network", "id", c.ID[:6], "name", c.Name)
 		return qb.dockerClient.NetworkRemove(context.Background(), c.ID)
@@ -231,6 +211,14 @@ func (qb *QuorumBuilder) Destroy() error {
 	}
 
 	return nil
+}
+
+func quorumNodesToGeneric(n []QuorumBuilderNode) []interface{} {
+	g := make([]interface{}, len(n))
+	for i := range n {
+		g[i] = n[i]
+	}
+	return g
 }
 
 func containersToGeneric(n []types.Container) []interface{} {
@@ -249,21 +237,21 @@ func networksToGeneric(n []types.NetworkResource) []interface{} {
 	return g
 }
 
-func doWorkInParallel(title string, elements []interface{}, callback func(el interface{}) error) error {
+func doWorkInParallel(title string, elements []interface{}, callback func(idx int, el interface{}) error) error {
 	log.Debug(title)
 	if len(elements) == 0 {
 		return nil
 	}
 	doneChan := make(chan struct{})
 	errChan := make(chan error)
-	for _, el := range elements {
-		go func(_el interface{}) {
-			if err := callback(_el); err != nil {
+	for idx, el := range elements {
+		go func(_idx int, _el interface{}) {
+			if err := callback(_idx, _el); err != nil {
 				errChan <- err
 			} else {
 				doneChan <- struct{}{}
 			}
-		}(el)
+		}(idx, el)
 	}
 	doneCount := 0
 	allErr := make([]string, 0)
