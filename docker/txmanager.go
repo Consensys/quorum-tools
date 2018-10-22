@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 )
@@ -52,6 +54,8 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create tmp dir - %s", err)
 	}
+	tmpDataDir, _ = filepath.EvalSymlinks(tmpDataDir)
+	log.Debug("Create temp directory", "path", tmpDataDir)
 	defer os.RemoveAll(tmpDataDir)
 	containerWorkingDir := "/tm"
 	resp, err := t.DockerClient().ContainerCreate(
@@ -62,6 +66,9 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 			Cmd: []string{
 				"-keygen",
 			},
+			Labels:    t.Labels(),
+			Tty:       true,
+			OpenStdin: true,
 		},
 		&container.HostConfig{
 			Binds: []string{
@@ -69,26 +76,28 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 			},
 		},
 		nil,
-		"",
+		fmt.Sprintf("%s_TxManager_KeyGen_%d", t.ProvisionId(), t.Index()),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create container - %s", err)
 	}
 	containerId := resp.ID
+	log.Debug("Start Container", "id", containerId)
 	if err := t.DockerClient().ContainerStart(context.Background(), containerId, types.ContainerStartOptions{}); err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't start container %s - %s", containerId, err)
 	}
 	defer t.DockerClient().ContainerRemove(context.Background(), containerId, types.ContainerRemoveOptions{Force: true})
 	// Attach container: for stdin interaction with the container.
-	attachResp, err := t.DockerClient().ContainerAttach(context.Background(), containerId, types.ContainerAttachOptions{Stream: true, Stdin: true})
+	attachResp, err := t.DockerClient().ContainerAttach(context.Background(), containerId, types.ContainerAttachOptions{Stream: true, Stdin: true, Stderr: true})
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: failed to attach to container %s - %s", containerId, err)
 	}
 	// - write empty string password to container stdin
-	attachResp.Conn.Write([]byte("")) //Empty password
+	attachResp.Conn.Write([]byte{10, 13, 10, 13}) //Empty password
 
 	timeoutCtx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelCtx()
+	log.Debug("Wait for container to be up", "id", containerId)
 	if _, err := t.DockerClient().ContainerWait(timeoutCtx, containerId); err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: container %s is not running - %s", containerId, err)
 	}
@@ -104,7 +113,9 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 
 func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
 	tm := &TesseraTxManager{
-		&DefaultConfigurable{},
+		&DefaultConfigurable{
+			configuration: make(map[string]interface{}),
+		},
 	}
 	for _, cfgFn := range configureFns {
 		cfgFn(tm)

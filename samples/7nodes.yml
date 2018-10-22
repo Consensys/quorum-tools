@@ -16,3 +16,14 @@ nodes:
     image: quorumengineering/tessera:latest
     config:
       xyz: 1
+- quorum:
+    image: quorumengineering/quorum:latest
+    config:
+      mine: true
+      minerthread: 1
+      verbosity: 5
+      debug: true
+  tx_manager:
+    image: quorumengineering/tessera:latest
+    config:
+      xyz: 1

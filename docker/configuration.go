@@ -31,6 +31,8 @@ const (
 	CfgKeyNodeIndex            = "NodeIndex"
 	CfgKeyTxManagerPublicKeys  = "TxManagerPublicKeys"
 	CfgKeyTxManagerPrivateKeys = "TxManagerPrivateKeys"
+	CfgKeyLabels               = "Labels"
+	CfgKeyProvisionId          = "ProvisionId"
 )
 
 type ConfigureFn func(c Configurable)
@@ -53,6 +55,18 @@ func (dc *DefaultConfigurable) DockerClient() *client.Client {
 
 func (dc *DefaultConfigurable) DockerImage() string {
 	return dc.configuration[CfgKeyDockerImage].(string)
+}
+
+func (dc *DefaultConfigurable) Labels() map[string]string {
+	return dc.configuration[CfgKeyLabels].(map[string]string)
+}
+
+func (dc *DefaultConfigurable) Index() int {
+	return dc.configuration[CfgKeyNodeIndex].(int)
+}
+
+func (dc *DefaultConfigurable) ProvisionId() string {
+	return dc.configuration[CfgKeyProvisionId].(string)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -82,5 +96,17 @@ func ConfigureNetwork(n *Network) ConfigureFn {
 func ConfigureConfig(cfg map[string]string) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyConfig, cfg)
+	}
+}
+
+func ConfigureLabels(labels map[string]string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyLabels, labels)
+	}
+}
+
+func ConfigureProvisionId(id string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyProvisionId, id)
 	}
 }

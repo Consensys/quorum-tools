@@ -23,13 +23,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/jpmorganchase/quorum-tools/cmd/quorum"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	Verbose = false
+	Verbosity int
 )
 
 var rootCmd = &cobra.Command{
@@ -37,10 +39,21 @@ var rootCmd = &cobra.Command{
 	Short: "qctl provides a set of tools for Quorum",
 	Long: `Quorum is a permissioned implementation of Ethereum supporting data privacy.
 qctl provides a set of tools to work with Quorum.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if log.Lvl(Verbosity) == log.LvlTrace {
+			log.PrintOrigins(true)
+		}
+		glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
+		glogger.Verbosity(log.Lvl(Verbosity))
+		glogger.BacktraceAt("")
+		glogger.Vmodule("")
+		log.Root().SetHandler(glogger)
+		return nil
+	},
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().IntVarP(&Verbosity, "verbosity", "v", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
 	rootCmd.AddCommand(quorum.Cmd)
 }
 

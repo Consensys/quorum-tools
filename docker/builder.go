@@ -26,6 +26,8 @@ import (
 	"io/ioutil"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 
@@ -51,15 +53,16 @@ type QuorumBuilderNodeDocker struct {
 
 type QuorumBuilderNode struct {
 	Quorum    QuorumBuilderNodeDocker `yaml:"quorum"`
-	TxManager QuorumBuilderNodeDocker
+	TxManager QuorumBuilderNodeDocker `yaml:"tx_manager"`
 }
 
 type QuorumBuilder struct {
 	Name      string                 `yaml:"name"`
 	Genesis   string                 `yaml:"genesis"`
 	Consensus QuorumBuilderConsensus `yaml:"consensus"`
-	Nodes     []QuorumBuilderNode    `yaml:"nodes"`
+	Nodes     []QuorumBuilderNode    `yaml:",flow"`
 
+	commonLabels  map[string]string
 	dockerClient  *client.Client
 	dockerNetwork *Network
 }
@@ -76,6 +79,9 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 	b.dockerClient, err = client.NewEnvClient()
 	if err != nil {
 		return nil, err
+	}
+	b.commonLabels = map[string]string{
+		"com.quorum.quorum-tools.id": b.Name,
 	}
 	return b, nil
 }
@@ -94,16 +100,19 @@ func (qb *QuorumBuilder) Build() error {
 }
 
 func (qb *QuorumBuilder) startTxManagers() error {
+	log.Debug("Start Tx Managers")
 	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.TxManager.Image); err != nil {
 			return nil, err
 		}
 		return NewTesseraTxManager(
 			ConfigureNodeIndex(idx),
+			ConfigureProvisionId(qb.Name),
 			ConfigureDockerClient(qb.dockerClient),
 			ConfigureNetwork(qb.dockerNetwork),
 			ConfigureDockerImage(node.TxManager.Image),
 			ConfigureConfig(node.TxManager.Config),
+			ConfigureLabels(qb.commonLabels),
 		)
 	})
 }
@@ -115,10 +124,12 @@ func (qb *QuorumBuilder) startQuorums() error {
 		}
 		return NewQuorum(
 			ConfigureNodeIndex(idx),
+			ConfigureProvisionId(qb.Name),
 			ConfigureDockerClient(qb.dockerClient),
 			ConfigureNetwork(qb.dockerNetwork),
 			ConfigureDockerImage(node.Quorum.Image),
 			ConfigureConfig(node.Quorum.Config),
+			ConfigureLabels(qb.commonLabels),
 		)
 	})
 }
@@ -129,16 +140,19 @@ func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBu
 	for idx, node := range qb.Nodes {
 		c, err := containerFn(idx, node)
 		if err != nil {
-			errChan <- fmt.Errorf("%d: %s", idx, err)
+			go func(_err error, _idx int) {
+				errChan <- fmt.Errorf("container %d: %s", _idx, _err)
+			}(err, idx)
 			continue
 		}
-		go func(_c Container) {
+		go func(_c Container, _idx int) {
+			log.Debug("Start Container", "idx", _idx)
 			if err := _c.Start(); err != nil {
-				errChan <- fmt.Errorf("%d: %s", idx, err)
+				errChan <- fmt.Errorf("container %d: %s", _idx, err)
 			} else {
 				readyChan <- struct{}{}
 			}
-		}(c)
+		}(c, idx)
 	}
 	readyCount := 0
 	allErr := make([]string, 0)
@@ -154,13 +168,14 @@ func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBu
 		}
 	}
 	if len(allErr) > 0 {
-		return fmt.Errorf("%d/%d ready\n%s", readyCount, len(qb.Nodes), strings.Join(allErr, "\n"))
+		return fmt.Errorf("%d/%d containers are ready\n%s", readyCount, len(qb.Nodes), strings.Join(allErr, "\n"))
 	}
 	return nil
 }
 
 func (qb *QuorumBuilder) buildDockerNetwork() error {
-	network, err := NewDockerNetwork(qb.dockerClient, qb.Name)
+	log.Debug("Create Docker network", "name", qb.Name)
+	network, err := NewDockerNetwork(qb.dockerClient, qb.Name, qb.commonLabels)
 	if err != nil {
 		return err
 	}
@@ -169,6 +184,7 @@ func (qb *QuorumBuilder) buildDockerNetwork() error {
 }
 
 func (qb *QuorumBuilder) pullImage(image string) error {
+	log.Debug("Pull Docker Image", "name", image)
 	filters := filters.NewArgs()
 	filters.Add("reference", image)
 
@@ -182,5 +198,9 @@ func (qb *QuorumBuilder) pullImage(image string) error {
 			return fmt.Errorf("pullImage: %s - %s", image, err)
 		}
 	}
+	return nil
+}
+
+func (qb *QuorumBuilder) Destroy() error {
 	return nil
 }

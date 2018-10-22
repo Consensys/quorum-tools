@@ -70,12 +70,12 @@ type Network struct {
 	ipIndex net.IP
 }
 
-func NewDockerNetwork(c *client.Client, networkName string) (*Network, error) {
+func NewDockerNetwork(c *client.Client, networkName string, labels map[string]string) (*Network, error) {
 	network := &Network{
 		client: c,
 	}
 
-	if err := network.create(networkName); err != nil {
+	if err := network.create(networkName, labels); err != nil {
 		return nil, err
 	}
 
@@ -83,7 +83,7 @@ func NewDockerNetwork(c *client.Client, networkName string) (*Network, error) {
 }
 
 // create creates a user-defined docker network
-func (n *Network) create(networkName string) error {
+func (n *Network) create(networkName string, labels map[string]string) error {
 	n.name = networkName
 
 	var maxTryCount = 15
@@ -100,7 +100,8 @@ func (n *Network) create(networkName string) error {
 			},
 		}
 		cResp, err = n.client.NetworkCreate(context.Background(), n.name, types.NetworkCreate{
-			IPAM: ipam,
+			IPAM:   ipam,
+			Labels: labels,
 		})
 		if err == nil {
 			break

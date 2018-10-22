@@ -23,13 +23,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var upCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Build a network",
-	Long:  `Build a network with specified configuration`,
-	RunE:  executeUpCmd,
+var downCmd = &cobra.Command{
+	Use:   "down",
+	Short: "Destroy a network",
+	Long:  `Destroy a network from specified configuration`,
+	RunE:  executeDestroyCmd,
 }
 
-func executeUpCmd(cmd *cobra.Command, args []string) error {
-	return builder.Build()
+func executeDestroyCmd(_ *cobra.Command, _ []string) error {
+	return builder.Destroy()
 }

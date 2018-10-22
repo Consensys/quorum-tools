@@ -25,7 +25,9 @@ type Quorum struct {
 
 func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
 	q := &Quorum{
-		&DefaultConfigurable{},
+		&DefaultConfigurable{
+			configuration: make(map[string]interface{}),
+		},
 	}
 	for _, cfgFn := range configureFns {
 		cfgFn(q)

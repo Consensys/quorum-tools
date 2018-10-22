@@ -20,8 +20,20 @@
 package quorum
 
 import (
+	"github.com/ethereum/go-ethereum/log"
+	"os"
+
+	"github.com/jpmorganchase/quorum-tools/docker"
 	"github.com/spf13/cobra"
 )
+
+type cmdArgs struct {
+	configFile string
+}
+
+var cmdCfg = new(cmdArgs)
+
+var builder *docker.QuorumBuilder
 
 var supportedConsensus = map[string]struct{}{
 	"raft":     {},
@@ -29,12 +41,32 @@ var supportedConsensus = map[string]struct{}{
 }
 
 var Cmd = &cobra.Command{
-	Use:   "quorum",
-	Short: "Create a local Quorum Network using Docker",
-	Long:  ``,
+	Use:               "quorum",
+	Short:             "Create a local Quorum Network using Docker",
+	Long:              ``,
+	PersistentPreRunE: cmdCfg.validate,
 }
 
 func init() {
+	Cmd.PersistentFlags().StringVarP(&(cmdCfg.configFile), "file", "f", "quorum.yml", "Config file describing the network")
+
 	Cmd.AddCommand(upCmd)
-	// Cmd.AddCommand(downCmd)
+	Cmd.AddCommand(downCmd)
+}
+
+func (cfg *cmdArgs) validate(cmd *cobra.Command, args []string) error {
+	if err := cmd.Parent().PersistentPreRunE(cmd.Parent(), args); err != nil {
+		return err
+	}
+	f, err := os.Open(cfg.configFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	builder, err = docker.NewQuorumBuilder(f)
+	if err != nil {
+		return err
+	}
+	log.Debug("Configuration", "cfg", builder)
+	return nil
 }
