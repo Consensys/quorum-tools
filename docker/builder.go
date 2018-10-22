@@ -138,21 +138,19 @@ func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBu
 	readyChan := make(chan struct{})
 	errChan := make(chan error)
 	for idx, node := range qb.Nodes {
-		c, err := containerFn(idx, node)
-		if err != nil {
-			go func(_err error, _idx int) {
-				errChan <- fmt.Errorf("container %d: %s", _idx, _err)
-			}(err, idx)
-			continue
-		}
-		go func(_c Container, _idx int) {
+		go func(_idx int, _node QuorumBuilderNode) {
+			c, err := containerFn(_idx, _node)
+			if err != nil {
+				errChan <- fmt.Errorf("container %d: %s", _idx, err)
+				return
+			}
 			log.Debug("Start Container", "idx", _idx)
-			if err := _c.Start(); err != nil {
+			if err := c.Start(); err != nil {
 				errChan <- fmt.Errorf("container %d: %s", _idx, err)
 			} else {
 				readyChan <- struct{}{}
 			}
-		}(c, idx)
+		}(idx, node)
 	}
 	readyCount := 0
 	allErr := make([]string, 0)
@@ -202,5 +200,86 @@ func (qb *QuorumBuilder) pullImage(image string) error {
 }
 
 func (qb *QuorumBuilder) Destroy() error {
+	filters := filters.NewArgs()
+	for k, v := range qb.commonLabels {
+		filters.Add("label", fmt.Sprintf("%s=%s", k, v))
+	}
+	// find all containers
+	containers, err := qb.dockerClient.ContainerList(context.Background(), types.ContainerListOptions{Filters: filters})
+	if err != nil {
+		return fmt.Errorf("destroy: %s", err)
+	}
+	if err := doWorkInParallel("removing containers", containersToGeneric(containers), func(el interface{}) error {
+		c := el.(types.Container)
+		log.Debug("removing container", "id", c.ID[:6], "name", c.Names)
+		return qb.dockerClient.ContainerRemove(context.Background(), c.ID, types.ContainerRemoveOptions{Force: true})
+	}); err != nil {
+		return fmt.Errorf("destroy: %s", err)
+	}
+
+	// find networks
+	networks, err := qb.dockerClient.NetworkList(context.Background(), types.NetworkListOptions{Filters: filters})
+	if err != nil {
+		return fmt.Errorf("destroy: %s", err)
+	}
+	if err := doWorkInParallel("removing network", networksToGeneric(networks), func(el interface{}) error {
+		c := el.(types.NetworkResource)
+		log.Debug("removing network", "id", c.ID[:6], "name", c.Name)
+		return qb.dockerClient.NetworkRemove(context.Background(), c.ID)
+	}); err != nil {
+		return fmt.Errorf("destroy: %s", err)
+	}
+
+	return nil
+}
+
+func containersToGeneric(n []types.Container) []interface{} {
+	g := make([]interface{}, len(n))
+	for i := range n {
+		g[i] = n[i]
+	}
+	return g
+}
+
+func networksToGeneric(n []types.NetworkResource) []interface{} {
+	g := make([]interface{}, len(n))
+	for i := range n {
+		g[i] = n[i]
+	}
+	return g
+}
+
+func doWorkInParallel(title string, elements []interface{}, callback func(el interface{}) error) error {
+	log.Debug(title)
+	if len(elements) == 0 {
+		return nil
+	}
+	doneChan := make(chan struct{})
+	errChan := make(chan error)
+	for _, el := range elements {
+		go func(_el interface{}) {
+			if err := callback(_el); err != nil {
+				errChan <- err
+			} else {
+				doneChan <- struct{}{}
+			}
+		}(el)
+	}
+	doneCount := 0
+	allErr := make([]string, 0)
+	for {
+		select {
+		case <-doneChan:
+			doneCount++
+		case err := <-errChan:
+			allErr = append(allErr, err.Error())
+		}
+		if len(allErr)+doneCount >= len(elements) {
+			break
+		}
+	}
+	if len(allErr) > 0 {
+		return fmt.Errorf("%s: %d/%d\n%s", title, doneCount, len(elements), strings.Join(allErr, "\n"))
+	}
 	return nil
 }
