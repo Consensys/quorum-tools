@@ -91,6 +91,10 @@ func (dc *DefaultConfigurable) NodeCount() int {
 	return dc.configuration[CfgKeyNodeCount].(int)
 }
 
+func (dc *DefaultConfigurable) Config() map[string]string {
+	return dc.configuration[CfgKeyConfig].(map[string]string)
+}
+
 func ConfigureNodeIndex(idx int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeIndex, idx)

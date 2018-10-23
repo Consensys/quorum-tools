@@ -29,6 +29,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/jpmorganchase/quorum-tools/helper"
+
 	"github.com/docker/docker/api/types/network"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -37,7 +39,11 @@ import (
 	"github.com/docker/docker/api/types/container"
 )
 
-const defaultTesseraPort = 9000
+const (
+	defaultTesseraPort         = 9000
+	defaultContainerWorkingDir = "/tm"
+	defaultConfigFileName      = "tessera-config.json"
+)
 
 type TxManager interface {
 	GenerateKeys() ([]byte, []byte, error)
@@ -57,22 +63,20 @@ func (t *TesseraTxManager) Start() error {
 	}
 	tmpDataDir, _ = filepath.EvalSymlinks(tmpDataDir)
 	log.Debug("Create temp directory", "path", tmpDataDir)
-	containerWorkingDir := "/tm"
-	configFileName := "config.json"
 	// prepare config file
-	tmpl := template.Must(template.New("tesseraConfig").Parse(tesseraConfigTemplate))
+	tmpl := template.Must(template.New(defaultConfigFileName).Parse(tesseraConfigTemplate))
 	tmplData := tesseraTemplate{
-		DataDir:   containerWorkingDir,
+		DataDir:   defaultContainerWorkingDir,
 		IP:        t.MyIP(),
 		Port:      defaultTesseraPort,
 		Keys:      make([]tesseraTemplateKey, len(t.TxManagerPrivateKeys())),
 		PeerNames: make([]string, t.NodeCount()),
 	}
-	for i, k := range t.TxManagerPrivateKeys() {
-		tmplData.Keys[i].Private = string(k)
-	}
-	for i, k := range t.TxManagerPublicKeys() {
-		tmplData.Keys[i].Public = string(k)
+	for i := 1; i < len(tmplData.Keys); i++ {
+		tmplData.Keys[i] = tesseraTemplateKey{
+			Private: string(t.TxManagerPrivateKeys()[i]),
+			Public:  string(t.TxManagerPublicKeys()[i]),
+		}
 	}
 	for i := 1; i < t.NodeCount(); i++ {
 		tmplData.PeerNames[i] = hostname(i)
@@ -81,21 +85,18 @@ func (t *TesseraTxManager) Start() error {
 	if err := tmpl.Execute(&jsonData, tmplData); err != nil {
 		return fmt.Errorf("start: can't create config - %s", err)
 	}
-	log.Debug("Write Tessera Config", "content", string(jsonData.Bytes()))
-	if err := ioutil.WriteFile(filepath.Join(tmpDataDir, configFileName), jsonData.Bytes(), 0644); err != nil {
+	log.Trace("Write Tessera Config", "content", string(jsonData.Bytes()))
+	if err := ioutil.WriteFile(filepath.Join(tmpDataDir, defaultConfigFileName), jsonData.Bytes(), 0644); err != nil {
 		return err
 	}
 	resp, err := t.DockerClient().ContainerCreate(
 		context.Background(),
 		&container.Config{
 			Image:      t.DockerImage(),
-			WorkingDir: containerWorkingDir,
-			Cmd: []string{
-				"-configfile",
-				configFileName,
-			},
-			Labels:   t.Labels(),
-			Hostname: hostname(t.Index()),
+			WorkingDir: defaultContainerWorkingDir,
+			Cmd:        t.makeArgs(),
+			Labels:     t.Labels(),
+			Hostname:   hostname(t.Index()),
 			Healthcheck: &container.HealthConfig{
 				Interval:    3 * time.Second,
 				Retries:     5,
@@ -109,7 +110,7 @@ func (t *TesseraTxManager) Start() error {
 		},
 		&container.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", tmpDataDir, containerWorkingDir),
+				fmt.Sprintf("%s:%s", tmpDataDir, defaultContainerWorkingDir),
 			},
 		},
 		&network.NetworkingConfig{
@@ -133,6 +134,26 @@ func (t *TesseraTxManager) Start() error {
 		return fmt.Errorf("start: can't start container %s - %s", shortContainerId, err)
 	}
 
+	healthyContainer := &helper.StateChangeConfig{
+		Target:       []string{"healthy"},
+		PollInterval: 3 * time.Second,
+		Timeout:      60 * time.Second,
+		Refresh: func() (*helper.StateResult, error) {
+			c, err := t.DockerClient().ContainerInspect(context.Background(), containerId)
+			if err != nil {
+				return nil, err
+			}
+			return &helper.StateResult{
+				Result: c,
+				State:  c.State.Health.Status,
+			}, nil
+		},
+	}
+
+	if _, err := healthyContainer.Wait(); err != nil {
+		return err
+	}
+
 	t.containerId = containerId
 	t.hostDataDir = tmpDataDir
 	return nil
@@ -151,12 +172,11 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 	tmpDataDir, _ = filepath.EvalSymlinks(tmpDataDir)
 	log.Debug("Create temp directory", "path", tmpDataDir)
 	defer os.RemoveAll(tmpDataDir)
-	containerWorkingDir := "/tm"
 	resp, err := t.DockerClient().ContainerCreate(
 		context.Background(),
 		&container.Config{
 			Image:      t.DockerImage(),
-			WorkingDir: containerWorkingDir,
+			WorkingDir: defaultContainerWorkingDir,
 			Cmd: []string{
 				"-keygen",
 			},
@@ -166,7 +186,7 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 		},
 		&container.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", tmpDataDir, containerWorkingDir),
+				fmt.Sprintf("%s:%s", tmpDataDir, defaultContainerWorkingDir),
 			},
 		},
 		nil,
@@ -204,6 +224,21 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 	}
 	private, retErr = ioutil.ReadFile(filepath.Join(tmpDataDir, ".key"))
 	return
+}
+
+func (t *TesseraTxManager) makeArgs() []string {
+	args := make([]string, 0)
+	args = append(args, []string{
+		"-configfile",
+		defaultConfigFileName,
+	}...)
+	for k, v := range t.Config() {
+		args = append(args, []string{
+			fmt.Sprintf("--%s", k),
+			v,
+		}...)
+	}
+	return args
 }
 
 func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
@@ -279,7 +314,7 @@ const tesseraConfigTemplate = `
               "passwords": [],
               "keyData": [
 				{{ range $i, $k := .Keys }}
-					{{ if $i }}, {{ end }}
+				  {{ if $i }}, {{ end }}
                   {
                       "config": {{ $k.Private }},
                       "publicKey": "{{ $k.Public }}"
