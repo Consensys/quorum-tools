@@ -20,7 +20,6 @@
 package quorum
 
 import (
-	"github.com/ethereum/go-ethereum/log"
 	"os"
 
 	"github.com/jpmorganchase/quorum-tools/docker"
@@ -67,6 +66,5 @@ func (cfg *cmdArgs) validate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	log.Debug("Configuration", "cfg", builder)
 	return nil
 }

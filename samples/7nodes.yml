@@ -15,7 +15,6 @@ nodes:
   tx_manager:
     image: quorumengineering/tessera:latest
     config:
-      xyz: 1
 - quorum:
     image: quorumengineering/quorum:latest
     config:
@@ -26,4 +25,3 @@ nodes:
   tx_manager:
     image: quorumengineering/tessera:latest
     config:
-      xyz: 1

@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"text/template"
 	"time"
@@ -57,7 +56,7 @@ type TesseraTxManager struct {
 }
 
 func (t *TesseraTxManager) Start() error {
-	tmpDataDir, err := ioutil.TempDir("", fmt.Sprintf("qctl-%d", time.Now().Unix()))
+	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "")
 	if err != nil {
 		return fmt.Errorf("start: can't create tmp dir - %s", err)
 	}
@@ -72,7 +71,7 @@ func (t *TesseraTxManager) Start() error {
 		Keys:      make([]tesseraTemplateKey, len(t.TxManagerPrivateKeys())),
 		PeerNames: make([]string, t.NodeCount()),
 	}
-	for i := 1; i < len(tmplData.Keys); i++ {
+	for i := 0; i < len(tmplData.Keys); i++ {
 		tmplData.Keys[i] = tesseraTemplateKey{
 			Private: string(t.TxManagerPrivateKeys()[i]),
 			Public:  string(t.TxManagerPublicKeys()[i]),
@@ -120,6 +119,9 @@ func (t *TesseraTxManager) Start() error {
 					IPAMConfig: &network.EndpointIPAMConfig{
 						IPv4Address: t.MyIP(),
 					},
+					Aliases: []string {
+						hostname(t.Index()),
+					},
 				},
 			},
 		},
@@ -165,13 +167,12 @@ func (t *TesseraTxManager) Stop() error {
 }
 
 func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr error) {
-	tmpDataDir, err := ioutil.TempDir("", fmt.Sprintf("qctl-%d", time.Now().Unix()))
+	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create tmp dir - %s", err)
 	}
 	tmpDataDir, _ = filepath.EvalSymlinks(tmpDataDir)
 	log.Debug("Create temp directory", "path", tmpDataDir)
-	defer os.RemoveAll(tmpDataDir)
 	resp, err := t.DockerClient().ContainerCreate(
 		context.Background(),
 		&container.Config{
@@ -201,7 +202,6 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 	if err := t.DockerClient().ContainerStart(context.Background(), containerId, types.ContainerStartOptions{}); err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't start container %s - %s", shortContainerId, err)
 	}
-	defer t.DockerClient().ContainerRemove(context.Background(), containerId, types.ContainerRemoveOptions{Force: true})
 	// Attach container: for stdin interaction with the container.
 	attachResp, err := t.DockerClient().ContainerAttach(context.Background(), containerId, types.ContainerAttachOptions{Stream: true, Stdin: true, Stderr: true})
 	if err != nil {
@@ -212,7 +212,7 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 
 	timeoutCtx, cancelCtx := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelCtx()
-	log.Debug("Wait for container to be up", "id", shortContainerId)
+	log.Debug("Wait for container to exit", "id", shortContainerId)
 	if _, err := t.DockerClient().ContainerWait(timeoutCtx, containerId); err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: container %s is not running - %s", shortContainerId, err)
 	}

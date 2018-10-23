@@ -35,6 +35,7 @@ const (
 	CfgKeyLabels               = "Labels"
 	CfgKeyProvisionId          = "ProvisionId"
 	CfgKeyNodeCount            = "NodeCount"
+	CfgKeyTempDir              = "TempDir"
 )
 
 type ConfigureFn func(c Configurable)
@@ -95,6 +96,10 @@ func (dc *DefaultConfigurable) Config() map[string]string {
 	return dc.configuration[CfgKeyConfig].(map[string]string)
 }
 
+func (dc *DefaultConfigurable) TempDir() string {
+	return dc.configuration[CfgKeyTempDir].(string)
+}
+
 func ConfigureNodeIndex(idx int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeIndex, idx)
@@ -146,5 +151,11 @@ func ConfigureMyIP(ip string) ConfigureFn {
 func ConfigureNodeCount(n int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeCount, n)
+	}
+}
+
+func ConfigureTempDir(d string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyTempDir, d)
 	}
 }

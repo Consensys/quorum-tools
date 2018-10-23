@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 
@@ -67,6 +68,7 @@ type QuorumBuilder struct {
 	dockerClient  *client.Client
 	dockerNetwork *Network
 	pullMux       *sync.RWMutex
+	tmpDir        string
 }
 
 func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
@@ -93,6 +95,11 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 // 2. Start Tx Manager
 // 3. Start Quorum
 func (qb *QuorumBuilder) Build() error {
+	if t, err := ioutil.TempDir("", qb.Name); err != nil {
+		return err
+	} else {
+		qb.tmpDir = t
+	}
 	if err := qb.buildDockerNetwork(); err != nil {
 		return err
 	}
@@ -113,6 +120,7 @@ func (qb *QuorumBuilder) startTxManagers() error {
 			return nil, err
 		}
 		return NewTesseraTxManager(
+			ConfigureTempDir(qb.tmpDir),
 			ConfigureNodeCount(len(qb.Nodes)),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
@@ -137,6 +145,7 @@ func (qb *QuorumBuilder) startQuorums() error {
 			return nil, err
 		}
 		return NewQuorum(
+			ConfigureTempDir(qb.tmpDir),
 			ConfigureNodeCount(len(qb.Nodes)),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
@@ -193,12 +202,15 @@ func (qb *QuorumBuilder) pullImage(image string) error {
 }
 
 func (qb *QuorumBuilder) Destroy() error {
+	log.Debug("removing temp directory")
+	os.RemoveAll(qb.tmpDir)
+
 	filters := filters.NewArgs()
 	for k, v := range qb.commonLabels {
 		filters.Add("label", fmt.Sprintf("%s=%s", k, v))
 	}
 	// find all containers
-	containers, err := qb.dockerClient.ContainerList(context.Background(), types.ContainerListOptions{Filters: filters})
+	containers, err := qb.dockerClient.ContainerList(context.Background(), types.ContainerListOptions{Filters: filters, All: true})
 	if err != nil {
 		return fmt.Errorf("destroy: %s", err)
 	}
