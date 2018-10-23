@@ -164,6 +164,17 @@ func (qb *QuorumBuilder) startQuorums() error {
 	if err != nil {
 		return err
 	}
+	consensusGethArgs := make(map[string]string)
+	if a, ok := qb.Consensus.Config["geth_args"]; ok {
+		args := strings.Split(a, " ")
+		for _, arg := range args {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return fmt.Errorf("consensus config: invalid geth arg %s", arg)
+			}
+			consensusGethArgs[parts[0]] = parts[1]
+		}
+	}
 	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.Quorum.Image); err != nil {
 			return nil, err
@@ -173,6 +184,7 @@ func (qb *QuorumBuilder) startQuorums() error {
 			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
 			ConfigureGenesis(genesis),
 			ConfigureDataDir(nodes[idx].DataDir),
+			ConfigureConsensusGethArgs(consensusGethArgs),
 			ConfigureNodeCount(nodeCount),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),

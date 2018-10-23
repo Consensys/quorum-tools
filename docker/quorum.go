@@ -156,16 +156,20 @@ func (q *Quorum) Stop() error {
 }
 
 func (q *Quorum) makeArgs() []string {
-	args := make([]string, 0)
-	args = append(args, []string{
-		"-configfile",
-		defaultConfigFileName,
-	}...)
+	combinedConfig := make(map[string]string)
+	// first construct our config
+	combinedConfig["--rpc"] = ""
+	// now override with config from Node
 	for k, v := range q.Config() {
-		args = append(args, []string{
-			fmt.Sprintf("--%s", k),
-			v,
-		}...)
+		combinedConfig[fmt.Sprintf("--%s", k)] = v
+	}
+	// then add consensus config
+	for k, v := range q.ConsensusGethArgs() {
+		combinedConfig[k] = v
+	}
+	args := make([]string, 0)
+	for k, v := range combinedConfig {
+		args = append(args, []string{k, v}...)
 	}
 	return args
 }

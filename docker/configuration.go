@@ -41,6 +41,7 @@ const (
 	CfgKeyDefaultAccount       = "DefaultAccount"
 	CfgKeyDataDir              = "DataDir"
 	CfgKeyGenesis              = "Genesis"
+	CfgKeyConsensusGetArgs     = "ConsensusGethArgs"
 )
 
 type ConfigureFn func(c Configurable)
@@ -115,6 +116,10 @@ func (dc *DefaultConfigurable) DataDir() *bootstrap.DataDir {
 
 func (dc *DefaultConfigurable) Genesis() *core.Genesis {
 	return dc.configuration[CfgKeyGenesis].(*core.Genesis)
+}
+
+func (dc *DefaultConfigurable) ConsensusGethArgs() map[string]string {
+	return dc.configuration[CfgKeyConsensusGetArgs].(map[string]string)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -192,5 +197,11 @@ func ConfigureDataDir(dd *bootstrap.DataDir) ConfigureFn {
 func ConfigureGenesis(genesis *core.Genesis) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyGenesis, genesis)
+	}
+}
+
+func ConfigureConsensusGethArgs(cfg map[string]string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyConsensusGetArgs, cfg)
 	}
 }
