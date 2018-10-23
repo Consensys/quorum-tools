@@ -1,20 +1,14 @@
+XC_ARCH?=amd64
+XC_OS?=linux darwin windows
+ifeq (${TRAVIS}x, x)
+XC_OS := $(shell go env GOOS)
+XC_ARCH := $(shell go env GOARCH)
+endif
 
 default: build
 
 tools:
-	go get -u github.com/mitchellh/gox
+	@go get -u github.com/mitchellh/gox
 
 build: tools
-    XC_ARCH=${XC_ARCH:-"386 amd64 arm"}
-    XC_OS=${XC_OS:-linux darwin windows freebsd openbsd solaris}
-    XC_EXCLUDE_OSARCH="!darwin/arm !darwin/386"
-    ifeq (${TRAVIS}x, x)
-        XC_OS=$(go env GOOS)
-        XC_ARCH=$(go env GOARCH)
-    endif
-    gox \
-        -os="${XC_OS}" \
-        -arch="${XC_ARCH}" \
-        -osarch="${XC_EXCLUDE_OSARCH}" \
-        -output "build/{{.OS}}_{{.Arch}}/${PWD##*/}" \
-        .
+	@gox -os="${XC_OS}" -arch="${XC_ARCH}" -output "build/{{.OS}}_{{.Arch}}/qctl" .
