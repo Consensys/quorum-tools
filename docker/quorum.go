@@ -20,7 +20,10 @@
 package docker
 
 import (
-	"encoding/json"
+	"path/filepath"
+
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -42,17 +45,29 @@ func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
 	for _, cfgFn := range configureFns {
 		cfgFn(q)
 	}
-
 	// init datadir
+	config := &node.DefaultConfig
+	config.DataDir = q.DataDir().Base
+	config.Name = filepath.Base(q.DataDir().GethDir)
+	stack, err := node.New(config)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range []string{"chaindata", "lightchaindata"} {
+		chaindb, err := stack.OpenDatabase(name, 0, 0)
+		if err != nil {
+			return nil, err
+		}
+		_, hash, err := core.SetupGenesisBlock(chaindb, q.Genesis())
+		if err != nil {
+			return nil, err
+		}
+		log.Info("Successfully wrote genesis state", "node", q.Index(), "database", name, "hash", hash)
+	}
 	return q, nil
 }
 
 func (q *Quorum) Start() error {
-	data, err := json.Marshal(q.Genesis())
-	if err != nil {
-		return err
-	}
-	log.Debug("Genesis", "content", string(data))
 	return nil
 }
 

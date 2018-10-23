@@ -56,7 +56,7 @@ type TesseraTxManager struct {
 }
 
 func (t *TesseraTxManager) Start() error {
-	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "")
+	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "tm-")
 	if err != nil {
 		return fmt.Errorf("start: can't create tmp dir - %s", err)
 	}
@@ -167,7 +167,7 @@ func (t *TesseraTxManager) Stop() error {
 }
 
 func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr error) {
-	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "")
+	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "keygen-")
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create tmp dir - %s", err)
 	}

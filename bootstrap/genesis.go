@@ -21,13 +21,15 @@ package bootstrap
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"math/rand"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -106,5 +108,10 @@ func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]stri
 			return nil, err
 		}
 	}
+	data, err := json.Marshal(genesis)
+	if err != nil {
+		return nil, err
+	}
+	log.Debug("Create genesis", "content", string(data))
 	return genesis, nil
 }
