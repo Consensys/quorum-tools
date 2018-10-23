@@ -20,30 +20,39 @@
 package bootstrap
 
 import (
-	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/common"
+	"crypto/ecdsa"
+
+	"github.com/ethereum/go-ethereum/p2p/discover"
 )
 
-type Account struct {
-	KeystoreDir    *string
-	AccountAddress common.Address
-	Keystore       *keystore.KeyStore
-	Passphrase     *string
+type Node struct {
+	P2PPort        int
+	IP             string
+	DefaultAccount *Account
+	NodeKey        *ecdsa.PrivateKey
+	Enode          string
+	DataDir        *DataDir
 }
 
-// create a new account with empty passphrase in a new keystore
-func NewAccount(targetDir string) (*Account, error) {
-	ks := keystore.NewKeyStore(targetDir, keystore.StandardScryptN, keystore.StandardScryptP)
-	passphrase := ""
-	acc, err := ks.NewAccount(passphrase)
+func NewNode(tmpDir string, ip string, port int) (*Node, error) {
+	datadir, err := NewDataDir(tmpDir)
 	if err != nil {
-		return nil, fmt.Errorf("NewAccount: can't create new account - %s", err)
+		return nil, err
 	}
-	return &Account{
-		KeystoreDir:    &targetDir,
-		AccountAddress: acc.Address,
-		Keystore:       ks,
-		Passphrase:     &passphrase,
+	acc, err := NewAccount(datadir.KeystoreDir)
+	if err != nil {
+		return nil, err
+	}
+	nodeKey, err := NewNodeKey()
+	if err != nil {
+		return nil, err
+	}
+	return &Node{
+		Enode:          discover.PubkeyID(&nodeKey.PublicKey).String(),
+		P2PPort:        port,
+		IP:             ip,
+		DataDir:        datadir,
+		DefaultAccount: acc,
+		NodeKey:        nodeKey,
 	}, nil
 }

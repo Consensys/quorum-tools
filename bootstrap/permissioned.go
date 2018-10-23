@@ -20,30 +20,31 @@
 package bootstrap
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/common"
+	"io/ioutil"
+	"path/filepath"
 )
 
-type Account struct {
-	KeystoreDir    *string
-	AccountAddress common.Address
-	Keystore       *keystore.KeyStore
-	Passphrase     *string
-}
-
-// create a new account with empty passphrase in a new keystore
-func NewAccount(targetDir string) (*Account, error) {
-	ks := keystore.NewKeyStore(targetDir, keystore.StandardScryptN, keystore.StandardScryptP)
-	passphrase := ""
-	acc, err := ks.NewAccount(passphrase)
-	if err != nil {
-		return nil, fmt.Errorf("NewAccount: can't create new account - %s", err)
+func WritePermissionedNodes(nodes []*Node) error {
+	permissions := make([]string, len(nodes))
+	for idx, n := range nodes {
+		permissions[idx] = fmt.Sprintf("enode://%s@%s:%d?discport=0&raftport=%d", n.Enode, n.IP, n.P2PPort, 0)
 	}
-	return &Account{
-		KeystoreDir:    &targetDir,
-		AccountAddress: acc.Address,
-		Keystore:       ks,
-		Passphrase:     &passphrase,
-	}, nil
+	data := new(bytes.Buffer)
+	encoder := json.NewEncoder(data)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(permissions); err != nil {
+		return err
+	}
+	for _, n := range nodes {
+		if err := ioutil.WriteFile(filepath.Join(n.DataDir.GethDir, "static-nodes.json"), data.Bytes(), 0700); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(filepath.Join(n.DataDir.GethDir, "permissioned-nodes.json"), data.Bytes(), 0700); err != nil {
+			return err
+		}
+	}
+	return nil
 }

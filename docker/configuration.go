@@ -21,6 +21,8 @@ package docker
 
 import (
 	"github.com/docker/docker/client"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/jpmorganchase/quorum-tools/bootstrap"
 )
 
 const (
@@ -36,6 +38,9 @@ const (
 	CfgKeyProvisionId          = "ProvisionId"
 	CfgKeyNodeCount            = "NodeCount"
 	CfgKeyTempDir              = "TempDir"
+	CfgKeyDefaultAccount       = "DefaultAccount"
+	CfgKeyDataDir              = "DataDir"
+	CfgKeyGenesis              = "Genesis"
 )
 
 type ConfigureFn func(c Configurable)
@@ -100,6 +105,18 @@ func (dc *DefaultConfigurable) TempDir() string {
 	return dc.configuration[CfgKeyTempDir].(string)
 }
 
+func (dc *DefaultConfigurable) DefaultAccount() *bootstrap.Account {
+	return dc.configuration[CfgKeyDefaultAccount].(*bootstrap.Account)
+}
+
+func (dc *DefaultConfigurable) DataDir() *bootstrap.DataDir {
+	return dc.configuration[CfgKeyDataDir].(*bootstrap.DataDir)
+}
+
+func (dc *DefaultConfigurable) Genesis() *core.Genesis {
+	return dc.configuration[CfgKeyGenesis].(*core.Genesis)
+}
+
 func ConfigureNodeIndex(idx int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeIndex, idx)
@@ -157,5 +174,23 @@ func ConfigureNodeCount(n int) ConfigureFn {
 func ConfigureTempDir(d string) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyTempDir, d)
+	}
+}
+
+func ConfigureDefaultAccount(acc *bootstrap.Account) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyDefaultAccount, acc)
+	}
+}
+
+func ConfigureDataDir(dd *bootstrap.DataDir) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyDataDir, dd)
+	}
+}
+
+func ConfigureGenesis(genesis *core.Genesis) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyGenesis, genesis)
 	}
 }

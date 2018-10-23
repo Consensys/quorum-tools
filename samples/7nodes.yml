@@ -3,7 +3,8 @@ genesis: auto
 consensus:
   name: istanbul
   config:
-    blocktime: 1
+    validators: 0,1,2,3,4,5,6
+    geth_args: --istanbul.blocktime=1
 nodes:
 - quorum:
     image: quorumengineering/quorum:latest

@@ -19,23 +19,40 @@
 
 package docker
 
+import (
+	"encoding/json"
+
+	"github.com/ethereum/go-ethereum/log"
+)
+
+const (
+	defaultQuorumP2PPort = 22000
+)
+
 type Quorum struct {
 	*DefaultConfigurable
 }
 
 func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
 	q := &Quorum{
-		&DefaultConfigurable{
+		DefaultConfigurable: &DefaultConfigurable{
 			configuration: make(map[string]interface{}),
 		},
 	}
 	for _, cfgFn := range configureFns {
 		cfgFn(q)
 	}
+
+	// init datadir
 	return q, nil
 }
 
 func (q *Quorum) Start() error {
+	data, err := json.Marshal(q.Genesis())
+	if err != nil {
+		return err
+	}
+	log.Debug("Genesis", "content", string(data))
 	return nil
 }
 

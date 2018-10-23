@@ -19,6 +19,33 @@
 
 package bootstrap
 
-func NewDataDir() {
+import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
+)
 
+type DataDir struct {
+	Base        string
+	KeystoreDir string
+	GethDir     string
+}
+
+func NewDataDir(tmpDir string) (*DataDir, error) {
+	dir, err := ioutil.TempDir(tmpDir, "qdata-")
+	if err != nil {
+		return nil, err
+	}
+	dd := &DataDir{
+		Base:        dir,
+		KeystoreDir: filepath.Join(dir, "keystore"),
+		GethDir:     filepath.Join(dir, "geth"),
+	}
+	if err := os.MkdirAll(dd.KeystoreDir, 0700); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dd.GethDir, 0700); err != nil {
+		return nil, err
+	}
+	return dd, nil
 }

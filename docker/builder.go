@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jpmorganchase/quorum-tools/bootstrap"
+
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/docker/docker/api/types"
@@ -106,6 +108,9 @@ func (qb *QuorumBuilder) Build() error {
 	if err := qb.startTxManagers(); err != nil {
 		return err
 	}
+	if err := qb.startQuorums(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -136,7 +141,22 @@ func (qb *QuorumBuilder) startTxManagers() error {
 
 func (qb *QuorumBuilder) startQuorums() error {
 	log.Debug("Start Quorum nodes")
-	ips, err := qb.dockerNetwork.GetFreeIPAddrs(len(qb.Nodes))
+	nodeCount := len(qb.Nodes)
+	ips, err := qb.dockerNetwork.GetFreeIPAddrs(nodeCount)
+	if err != nil {
+		return err
+	}
+	nodes := make([]*bootstrap.Node, nodeCount)
+	for i := 0; i < nodeCount; i++ {
+		nodes[i], err = bootstrap.NewNode(qb.tmpDir, ips[i].String(), defaultQuorumP2PPort)
+		if err != nil {
+			return err
+		}
+	}
+	if err := bootstrap.WritePermissionedNodes(nodes); err != nil {
+		return err
+	}
+	genesis, err := bootstrap.NewGenesis(nodes, qb.Consensus.Name, qb.Consensus.Config)
 	if err != nil {
 		return err
 	}
@@ -146,7 +166,10 @@ func (qb *QuorumBuilder) startQuorums() error {
 		}
 		return NewQuorum(
 			ConfigureTempDir(qb.tmpDir),
-			ConfigureNodeCount(len(qb.Nodes)),
+			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
+			ConfigureGenesis(genesis),
+			ConfigureDataDir(nodes[idx].DataDir),
+			ConfigureNodeCount(nodeCount),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
 			ConfigureProvisionId(qb.Name),
