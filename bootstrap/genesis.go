@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"math/rand"
 	"strings"
@@ -64,7 +65,9 @@ var genesisConfigurerByConsensus = map[string]configureGenesisFn{
 			}
 			for idx, n := range nodes {
 				if strings.Contains(validatorIdx, fmt.Sprintf("%d", idx)) {
-					extraData.Validators = append(extraData.Validators, crypto.PubkeyToAddress(n.NodeKey.PublicKey))
+					address := crypto.PubkeyToAddress(n.NodeKey.PublicKey)
+					log.Debug("Add validator to extraData", "node", idx, "address", address)
+					extraData.Validators = append(extraData.Validators, address)
 				}
 			}
 			vanity := bytes.Repeat([]byte{0x00}, types.IstanbulExtraVanity)
@@ -87,7 +90,7 @@ func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]stri
 		Difficulty: big.NewInt(InitDifficulty),
 		Alloc:      make(core.GenesisAlloc),
 		Config: &params.ChainConfig{
-			ChainId:        big.NewInt(rand.Int63()),
+			ChainId:        big.NewInt(rand.Int63n(9999) + 100),
 			HomesteadBlock: big.NewInt(1),
 			EIP150Block:    big.NewInt(2),
 			EIP155Block:    big.NewInt(3),
