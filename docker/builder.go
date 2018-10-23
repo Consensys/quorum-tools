@@ -40,6 +40,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	defaultContainerWorkingDir = "/work"
+)
+
 type Container interface {
 	Start() error
 	Stop() error

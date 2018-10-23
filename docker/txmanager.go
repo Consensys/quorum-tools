@@ -40,7 +40,6 @@ import (
 
 const (
 	defaultTesseraPort         = 9000
-	defaultContainerWorkingDir = "/tm"
 	defaultConfigFileName      = "tessera-config.json"
 )
 
@@ -52,7 +51,6 @@ type TesseraTxManager struct {
 	*DefaultConfigurable
 
 	containerId string
-	hostDataDir string
 }
 
 func (t *TesseraTxManager) Start() error {
@@ -78,7 +76,7 @@ func (t *TesseraTxManager) Start() error {
 		}
 	}
 	for i := 1; i < t.NodeCount(); i++ {
-		tmplData.PeerNames[i] = hostname(i)
+		tmplData.PeerNames[i] = hostnameTxManager(i)
 	}
 	var jsonData bytes.Buffer
 	if err := tmpl.Execute(&jsonData, tmplData); err != nil {
@@ -95,7 +93,7 @@ func (t *TesseraTxManager) Start() error {
 			WorkingDir: defaultContainerWorkingDir,
 			Cmd:        t.makeArgs(),
 			Labels:     t.Labels(),
-			Hostname:   hostname(t.Index()),
+			Hostname:   hostnameTxManager(t.Index()),
 			Healthcheck: &container.HealthConfig{
 				Interval:    3 * time.Second,
 				Retries:     5,
@@ -120,7 +118,7 @@ func (t *TesseraTxManager) Start() error {
 						IPv4Address: t.MyIP(),
 					},
 					Aliases: []string {
-						hostname(t.Index()),
+						hostnameTxManager(t.Index()),
 					},
 				},
 			},
@@ -157,7 +155,6 @@ func (t *TesseraTxManager) Start() error {
 	}
 
 	t.containerId = containerId
-	t.hostDataDir = tmpDataDir
 	return nil
 }
 
@@ -327,6 +324,6 @@ const tesseraConfigTemplate = `
       }
 `
 
-func hostname(idx int) string {
-	return fmt.Sprintf("txmanager%d", idx+1)
+func hostnameTxManager(idx int) string {
+	return fmt.Sprintf("txmanager%d", idx)
 }
