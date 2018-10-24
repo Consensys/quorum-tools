@@ -57,10 +57,10 @@ type TxManager interface {
 type TesseraTxManager struct {
 	*DefaultConfigurable
 
-	address string
+	address       string
 	containerName string
-	containerId string
-	hostDataDir string
+	containerId   string
+	hostDataDir   string
 }
 
 func (t *TesseraTxManager) DataDir() string {
@@ -192,7 +192,7 @@ func (t *TesseraTxManager) Stop() error {
 
 func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr error) {
 	currentName := t.containerName
-	defer func() {t.containerName = currentName}()
+	defer func() { t.containerName = currentName }()
 	t.containerName = fmt.Sprintf("%s_TxManager_KeyGen_%d", t.ProvisionId(), t.Index())
 	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "keygen-")
 	if err != nil {
@@ -260,10 +260,17 @@ func (t *TesseraTxManager) makeArgs() []string {
 		defaultConfigFileName,
 	}...)
 	for k, v := range t.Config() {
-		args = append(args, []string{
-			fmt.Sprintf("--%s", k),
-			v,
-		}...)
+		if len(k) == 0 {
+			continue
+		}
+		if len(v) == 0 {
+			args = append(args, fmt.Sprintf("--%s", k))
+		} else {
+			args = append(args, []string{
+				fmt.Sprintf("--%s", k),
+				v,
+			}...)
+		}
 	}
 	return args
 }

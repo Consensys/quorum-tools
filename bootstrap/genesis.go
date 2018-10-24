@@ -82,6 +82,11 @@ var genesisConfigurerByConsensus = map[string]configureGenesisFn{
 		}
 		return nil
 	},
+	"raft": func(genesis *core.Genesis, nodes []*Node, consensusConfig map[string]string) error {
+		genesis.Mixhash = common.HexToHash("0x00000000000000000000000000000000000000647572616c65787365646c6578")
+		genesis.Difficulty = big.NewInt(0)
+		return nil
+	},
 }
 
 func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]string) (*core.Genesis, error) {
@@ -93,9 +98,9 @@ func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]stri
 		Config: &params.ChainConfig{
 			ChainId:        big.NewInt(rand.Int63n(9999) + 100),
 			HomesteadBlock: big.NewInt(1),
-			EIP150Block:    big.NewInt(2),
-			EIP155Block:    big.NewInt(3),
-			EIP158Block:    big.NewInt(3),
+			EIP150Block:    big.NewInt(1),
+			EIP155Block:    big.NewInt(0),
+			EIP158Block:    big.NewInt(1),
 			IsQuorum:       true,
 		},
 	}

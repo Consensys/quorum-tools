@@ -24,14 +24,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"io/ioutil"
 	"path/filepath"
 )
 
-func WritePermissionedNodes(nodes []*Node) error {
+func WritePermissionedNodes(nodes []*Node, raftPort int) error {
 	permissions := make([]string, len(nodes))
 	for idx, n := range nodes {
-		permissions[idx] = fmt.Sprintf("enode://%s@%s:%d?discport=0&raftport=%d", n.Enode, n.IP, n.P2PPort, 0)
+		enode := fmt.Sprintf("enode://%s@%s:%d?discport=0&raftport=%d", n.Enode, n.IP, n.P2PPort, raftPort)
+		log.Info("Build enode", "value", enode)
+		permissions[idx] = enode
 	}
 	data := new(bytes.Buffer)
 	encoder := json.NewEncoder(data)

@@ -1,0 +1,30 @@
+# templates
+template-quorum-default: &quorum-default
+  image: quorumengineering/quorum:latest
+  config:
+    verbosity: 5
+template-tessera-default: &tessera-default
+  image: quorumengineering/tessera:latest
+  config:
+
+# main configuration
+name: 7nodes-example
+consensus:
+  name: raft
+  config:
+    geth_args:
+nodes:
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default
+- quorum: *quorum-default
+  tx_manager: *tessera-default

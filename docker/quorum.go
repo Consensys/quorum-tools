@@ -41,6 +41,7 @@ import (
 const (
 	defaultQuorumRPCInitPort         = 22000
 	defaultQuorumContainerWorkingDir = "/qdata"
+	defaultRaftPort                  = 50400
 )
 
 type Quorum struct {
@@ -87,6 +88,10 @@ func (q *Quorum) Name() string {
 }
 
 func (q *Quorum) Start() error {
+	additionalExposedPorts := make(map[nat.Port]struct{})
+	if q.ConsensusAlgorithm() == "raft" {
+		additionalExposedPorts[nat.Port(fmt.Sprintf("%d", defaultRaftPort))] = struct{}{}
+	}
 	resp, err := q.DockerClient().ContainerCreate(
 		context.Background(),
 		&container.Config{
@@ -108,6 +113,7 @@ func (q *Quorum) Start() error {
 			Env: []string{
 				fmt.Sprintf("PRIVATE_CONFIG=%s", q.TxManager().SocketFile()),
 			},
+			ExposedPorts: additionalExposedPorts,
 		},
 		&container.HostConfig{
 			Binds: []string{
@@ -117,7 +123,7 @@ func (q *Quorum) Start() error {
 			PortBindings: map[nat.Port][]nat.PortBinding{
 				nat.Port(fmt.Sprintf("%d/tcp", node.DefaultHTTPPort)): {
 					nat.PortBinding{
-						HostIP: "0.0.0.0",
+						HostIP:   "0.0.0.0",
 						HostPort: fmt.Sprintf("%d", defaultQuorumRPCInitPort+q.Index()),
 					},
 				},
@@ -198,8 +204,16 @@ func (q *Quorum) makeArgs() []string {
 	for k, v := range q.ConsensusGethArgs() {
 		combinedConfig[k] = v
 	}
+	// don't allow to override some fundamental configs like raft
+	if q.ConsensusAlgorithm() == "raft" {
+		combinedConfig["--raft"] = ""
+		combinedConfig["--raftport"] = fmt.Sprintf("%d", defaultRaftPort)
+	}
 	args := make([]string, 0)
 	for k, v := range combinedConfig {
+		if len(k) == 0 {
+			continue
+		}
 		if len(v) == 0 {
 			args = append(args, k)
 		} else {

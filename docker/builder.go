@@ -191,7 +191,7 @@ func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) ([]*Quorum, error)
 			return nil, err
 		}
 	}
-	if err := bootstrap.WritePermissionedNodes(nodes); err != nil {
+	if err := bootstrap.WritePermissionedNodes(nodes, defaultRaftPort); err != nil {
 		return nil, err
 	}
 	genesis, err := bootstrap.NewGenesis(nodes, qb.Consensus.Name, qb.Consensus.Config)
