@@ -22,7 +22,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"path/filepath"
 	"time"
 
@@ -185,7 +184,7 @@ func (q *Quorum) makeArgs() []string {
 	combinedConfig["--unlock"] = "0"
 	combinedConfig["--password"] = filepath.Join(defaultQuorumContainerWorkingDir, "passwords.txt")
 	combinedConfig["--nodiscover"] = ""
-	combinedConfig["--networkid"] = fmt.Sprintf("%d", rand.Int31n(100))
+	combinedConfig["--networkid"] = "2018"
 	combinedConfig["--identity"] = hostnameQuorum(q.Index())
 	combinedConfig["--ipcdisable"] = ""
 	combinedConfig["--permissioned"] = ""

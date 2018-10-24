@@ -20,6 +20,8 @@
 package docker
 
 import (
+	"crypto/ecdsa"
+
 	"github.com/docker/docker/client"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/jpmorganchase/quorum-tools/bootstrap"
@@ -44,6 +46,7 @@ const (
 	CfgKeyConsensusGetArgs     = "ConsensusGethArgs"
 	CfgKeyConsensusAlgorithm   = "ConsensusAlgorithm"
 	CfgKeyTxManager            = "TxManager"
+	CfgKeyNodeKey              = "NodeKey"
 )
 
 type ConfigureFn func(c Configurable)
@@ -130,6 +133,10 @@ func (dc *DefaultConfigurable) ConsensusAlgorithm() string {
 
 func (dc *DefaultConfigurable) TxManager() TxManager {
 	return dc.configuration[CfgKeyTxManager].(TxManager)
+}
+
+func (dc *DefaultConfigurable) NodeKey() *ecdsa.PrivateKey {
+	return dc.configuration[CfgKeyNodeKey].(*ecdsa.PrivateKey)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -225,5 +232,11 @@ func ConfigureConsensusAlgorithm(algo string) ConfigureFn {
 func ConfigureTxManager(t TxManager) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyTxManager, t)
+	}
+}
+
+func ConfigureNodeKey(k *ecdsa.PrivateKey) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyNodeKey, k)
 	}
 }

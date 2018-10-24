@@ -196,6 +196,7 @@ func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) error {
 			ConfigureTxManager(txManagers[idx]),
 			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
 			ConfigureGenesis(genesis),
+			ConfigureNodeKey(nodes[idx].NodeKey),
 			ConfigureDataDir(nodes[idx].DataDir),
 			ConfigureConsensusGethArgs(consensusGethArgs),
 			ConfigureConsensusAlgorithm(qb.Consensus.Name),
@@ -269,7 +270,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	}
 	if err := doWorkInParallel("removing containers", containersToGeneric(containers), func(_ int, el interface{}) error {
 		c := el.(types.Container)
-		log.Debug("removing container", "id", c.ID[:6], "name", c.Names)
+		log.Info("removing container", "id", c.ID[:6], "name", c.Names)
 		return qb.dockerClient.ContainerRemove(context.Background(), c.ID, types.ContainerRemoveOptions{Force: true})
 	}); err != nil {
 		return fmt.Errorf("destroy: %s", err)
@@ -282,7 +283,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	}
 	if err := doWorkInParallel("removing network", networksToGeneric(networks), func(_ int, el interface{}) error {
 		c := el.(types.NetworkResource)
-		log.Debug("removing network", "id", c.ID[:6], "name", c.Name)
+		log.Info("removing network", "id", c.ID[:6], "name", c.Name)
 		return qb.dockerClient.NetworkRemove(context.Background(), c.ID)
 	}); err != nil {
 		return fmt.Errorf("destroy: %s", err)

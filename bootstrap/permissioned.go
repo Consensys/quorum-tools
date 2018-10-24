@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"io/ioutil"
 	"path/filepath"
 )
@@ -39,10 +40,13 @@ func WritePermissionedNodes(nodes []*Node) error {
 		return err
 	}
 	for _, n := range nodes {
-		if err := ioutil.WriteFile(filepath.Join(n.DataDir.GethDir, "static-nodes.json"), data.Bytes(), 0700); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(n.DataDir.Base, "static-nodes.json"), data.Bytes(), 0700); err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(filepath.Join(n.DataDir.GethDir, "permissioned-nodes.json"), data.Bytes(), 0700); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(n.DataDir.Base, "permissioned-nodes.json"), data.Bytes(), 0700); err != nil {
+			return err
+		}
+		if err := crypto.SaveECDSA(filepath.Join(n.DataDir.GethDir, "nodekey"), n.NodeKey); err != nil {
 			return err
 		}
 		if err := ioutil.WriteFile(filepath.Join(n.DataDir.Base, "passwords.txt"), []byte(""), 0700); err != nil {
