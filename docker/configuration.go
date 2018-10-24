@@ -42,6 +42,8 @@ const (
 	CfgKeyDataDir              = "DataDir"
 	CfgKeyGenesis              = "Genesis"
 	CfgKeyConsensusGetArgs     = "ConsensusGethArgs"
+	CfgKeyConsensusAlgorithm   = "ConsensusAlgorithm"
+	CfgKeyTxManager            = "TxManager"
 )
 
 type ConfigureFn func(c Configurable)
@@ -120,6 +122,14 @@ func (dc *DefaultConfigurable) Genesis() *core.Genesis {
 
 func (dc *DefaultConfigurable) ConsensusGethArgs() map[string]string {
 	return dc.configuration[CfgKeyConsensusGetArgs].(map[string]string)
+}
+
+func (dc *DefaultConfigurable) ConsensusAlgorithm() string {
+	return dc.configuration[CfgKeyConsensusAlgorithm].(string)
+}
+
+func (dc *DefaultConfigurable) TxManager() TxManager {
+	return dc.configuration[CfgKeyTxManager].(TxManager)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -203,5 +213,17 @@ func ConfigureGenesis(genesis *core.Genesis) ConfigureFn {
 func ConfigureConsensusGethArgs(cfg map[string]string) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyConsensusGetArgs, cfg)
+	}
+}
+
+func ConfigureConsensusAlgorithm(algo string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyConsensusAlgorithm, algo)
+	}
+}
+
+func ConfigureTxManager(t TxManager) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyTxManager, t)
 	}
 }

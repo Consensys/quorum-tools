@@ -9,7 +9,7 @@ require (
 	github.com/cespare/cp v1.0.0 // indirect
 	github.com/docker/distribution v2.7.0-rc.0+incompatible // indirect
 	github.com/docker/docker v0.0.0-20170504205632-89658bed64c2
-	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.3.3 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/edsrzf/mmap-go v0.0.0-20170320065105-0bce6a688712 // indirect

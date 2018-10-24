@@ -40,11 +40,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	defaultContainerWorkingDir = "/work"
-)
-
 type Container interface {
+	Name() string
 	Start() error
 	Stop() error
 }
@@ -101,7 +98,7 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 // 2. Start Tx Manager
 // 3. Start Quorum
 func (qb *QuorumBuilder) Build() error {
-	if t, err := ioutil.TempDir("", qb.Name); err != nil {
+	if t, err := ioutil.TempDir("", ""); err != nil {
 		return err
 	} else {
 		qb.tmpDir = t
@@ -109,28 +106,31 @@ func (qb *QuorumBuilder) Build() error {
 	if err := qb.buildDockerNetwork(); err != nil {
 		return err
 	}
-	if err := qb.startTxManagers(); err != nil {
+	txManagers, err := qb.startTxManagers()
+	if err != nil {
 		return err
 	}
-	if err := qb.startQuorums(); err != nil {
+	if err := qb.startQuorums(txManagers); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (qb *QuorumBuilder) startTxManagers() error {
-	log.Debug("Start Tx Managers")
-	ips, err := qb.dockerNetwork.GetFreeIPAddrs(len(qb.Nodes))
+func (qb *QuorumBuilder) startTxManagers() ([]TxManager, error) {
+	nodeCount := len(qb.Nodes)
+	log.Info("Start Tx Managers", "count", nodeCount)
+	ips, err := qb.dockerNetwork.GetFreeIPAddrs(nodeCount)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
+	txManagers := make([]TxManager, nodeCount)
+	if err := qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.TxManager.Image); err != nil {
 			return nil, err
 		}
-		return NewTesseraTxManager(
+		txManagerContainer, err := NewTesseraTxManager(
 			ConfigureTempDir(qb.tmpDir),
-			ConfigureNodeCount(len(qb.Nodes)),
+			ConfigureNodeCount(nodeCount),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
 			ConfigureProvisionId(qb.Name),
@@ -140,12 +140,20 @@ func (qb *QuorumBuilder) startTxManagers() error {
 			ConfigureConfig(node.TxManager.Config),
 			ConfigureLabels(qb.commonLabels),
 		)
-	})
+		if err != nil {
+			return nil, err
+		}
+		txManagers[idx] = txManagerContainer.(TxManager)
+		return txManagerContainer, nil
+	}); err != nil {
+		return nil, err
+	}
+	return txManagers, nil
 }
 
-func (qb *QuorumBuilder) startQuorums() error {
-	log.Debug("Start Quorum nodes")
+func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) error {
 	nodeCount := len(qb.Nodes)
+	log.Info("Start Quorum nodes", "count", nodeCount, "consensus", qb.Consensus.Name)
 	ips, err := qb.dockerNetwork.GetFreeIPAddrs(nodeCount)
 	if err != nil {
 		return err
@@ -166,13 +174,17 @@ func (qb *QuorumBuilder) startQuorums() error {
 	}
 	consensusGethArgs := make(map[string]string)
 	if a, ok := qb.Consensus.Config["geth_args"]; ok {
-		args := strings.Split(a, " ")
+		args := strings.Split(strings.TrimSpace(a), " ")
 		for _, arg := range args {
-			parts := strings.Split(arg, "=")
-			if len(parts) != 2 {
+			parts := strings.Split(strings.TrimSpace(arg), "=")
+			switch l := len(parts); l {
+			case 1:
+				consensusGethArgs[strings.TrimSpace(parts[0])] = ""
+			case 2:
+				consensusGethArgs[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			default:
 				return fmt.Errorf("consensus config: invalid geth arg %s", arg)
 			}
-			consensusGethArgs[parts[0]] = parts[1]
 		}
 	}
 	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
@@ -181,10 +193,12 @@ func (qb *QuorumBuilder) startQuorums() error {
 		}
 		return NewQuorum(
 			ConfigureTempDir(qb.tmpDir),
+			ConfigureTxManager(txManagers[idx]),
 			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
 			ConfigureGenesis(genesis),
 			ConfigureDataDir(nodes[idx].DataDir),
 			ConfigureConsensusGethArgs(consensusGethArgs),
+			ConfigureConsensusAlgorithm(qb.Consensus.Name),
 			ConfigureNodeCount(nodeCount),
 			ConfigureMyIP(ips[idx].String()),
 			ConfigureNodeIndex(idx),
@@ -205,13 +219,13 @@ func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBu
 		if err != nil {
 			return err
 		}
-		log.Debug("Start Container", "idx", idx)
+		log.Info("Start Container", "name", c.Name())
 		return c.Start()
 	})
 }
 
 func (qb *QuorumBuilder) buildDockerNetwork() error {
-	log.Debug("Create Docker network", "name", qb.Name)
+	log.Info("Create Docker network", "name", qb.Name)
 	network, err := NewDockerNetwork(qb.dockerClient, qb.Name, qb.commonLabels)
 	if err != nil {
 		return err

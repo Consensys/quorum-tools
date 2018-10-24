@@ -4,25 +4,25 @@ consensus:
   name: istanbul
   config:
     validators: 0,1,2,3,4,5,6
-    geth_args: --istanbul.blocktime=1
+    geth_args: --istanbul.blockperiod=1 --emitcheckpoints --syncmode=full
 nodes:
 - quorum:
     image: quorumengineering/quorum:latest
     config:
-      mine: true
-      minerthread: 1
+      mine:
+      minerthreads: 1
       verbosity: 5
-      debug: true
+      debug:
   tx_manager:
     image: quorumengineering/tessera:latest
     config:
 - quorum:
     image: quorumengineering/quorum:latest
     config:
-      mine: true
-      minerthread: 1
+      mine:
+      minerthreads: 1
       verbosity: 5
-      debug: true
+      debug:
   tx_manager:
     image: quorumengineering/tessera:latest
     config:

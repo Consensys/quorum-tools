@@ -36,6 +36,7 @@ func NewDataDir(tmpDir string) (*DataDir, error) {
 	if err != nil {
 		return nil, err
 	}
+	dir, _ = filepath.EvalSymlinks(dir)
 	dd := &DataDir{
 		Base:        dir,
 		KeystoreDir: filepath.Join(dir, "keystore"),

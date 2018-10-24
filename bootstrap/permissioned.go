@@ -45,6 +45,9 @@ func WritePermissionedNodes(nodes []*Node) error {
 		if err := ioutil.WriteFile(filepath.Join(n.DataDir.GethDir, "permissioned-nodes.json"), data.Bytes(), 0700); err != nil {
 			return err
 		}
+		if err := ioutil.WriteFile(filepath.Join(n.DataDir.Base, "passwords.txt"), []byte(""), 0700); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -28,6 +28,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/docker/go-connections/nat"
+
 	"github.com/jpmorganchase/quorum-tools/helper"
 
 	"github.com/docker/docker/api/types/network"
@@ -39,22 +41,40 @@ import (
 )
 
 const (
-	defaultTesseraPort         = 9000
-	defaultConfigFileName      = "tessera-config.json"
+	defaultTesseraPort                  = 9000
+	defaultConfigFileName               = "tessera-config.json"
+	defaultTxManagerContainerWorkingDir = "/tm"
+	defaultTxManagerSocketFile          = defaultTxManagerContainerWorkingDir + "/tm.ipc"
 )
 
 type TxManager interface {
 	GenerateKeys() ([]byte, []byte, error)
+	SocketFile() string
+	DataDir() string
 }
 
 type TesseraTxManager struct {
 	*DefaultConfigurable
 
+	containerName string
 	containerId string
+	hostDataDir string
+}
+
+func (t *TesseraTxManager) DataDir() string {
+	return t.hostDataDir
+}
+
+func (t *TesseraTxManager) SocketFile() string {
+	return defaultTxManagerSocketFile
+}
+
+func (t *TesseraTxManager) Name() string {
+	return t.containerName
 }
 
 func (t *TesseraTxManager) Start() error {
-	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "tm-")
+	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "")
 	if err != nil {
 		return fmt.Errorf("start: can't create tmp dir - %s", err)
 	}
@@ -63,11 +83,12 @@ func (t *TesseraTxManager) Start() error {
 	// prepare config file
 	tmpl := template.Must(template.New(defaultConfigFileName).Parse(tesseraConfigTemplate))
 	tmplData := tesseraTemplate{
-		DataDir:   defaultContainerWorkingDir,
-		IP:        t.MyIP(),
-		Port:      defaultTesseraPort,
-		Keys:      make([]tesseraTemplateKey, len(t.TxManagerPrivateKeys())),
-		PeerNames: make([]string, t.NodeCount()),
+		DataDir:    defaultTxManagerContainerWorkingDir,
+		IP:         t.MyIP(),
+		Port:       defaultTesseraPort,
+		Keys:       make([]tesseraTemplateKey, len(t.TxManagerPrivateKeys())),
+		PeerNames:  make([]string, t.NodeCount()),
+		SocketFile: t.SocketFile(),
 	}
 	for i := 0; i < len(tmplData.Keys); i++ {
 		tmplData.Keys[i] = tesseraTemplateKey{
@@ -90,7 +111,7 @@ func (t *TesseraTxManager) Start() error {
 		context.Background(),
 		&container.Config{
 			Image:      t.DockerImage(),
-			WorkingDir: defaultContainerWorkingDir,
+			WorkingDir: defaultTxManagerContainerWorkingDir,
 			Cmd:        t.makeArgs(),
 			Labels:     t.Labels(),
 			Hostname:   hostnameTxManager(t.Index()),
@@ -104,10 +125,13 @@ func (t *TesseraTxManager) Start() error {
 					"wget", "--spider", fmt.Sprintf("http://localhost:%d/upcheck", defaultTesseraPort),
 				},
 			},
+			ExposedPorts: map[nat.Port]struct{}{
+				nat.Port(fmt.Sprintf("%d", defaultTesseraPort)): {},
+			},
 		},
 		&container.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", tmpDataDir, defaultContainerWorkingDir),
+				fmt.Sprintf("%s:%s", tmpDataDir, defaultTxManagerContainerWorkingDir),
 			},
 		},
 		&network.NetworkingConfig{
@@ -117,13 +141,13 @@ func (t *TesseraTxManager) Start() error {
 					IPAMConfig: &network.EndpointIPAMConfig{
 						IPv4Address: t.MyIP(),
 					},
-					Aliases: []string {
+					Aliases: []string{
 						hostnameTxManager(t.Index()),
 					},
 				},
 			},
 		},
-		fmt.Sprintf("%s_TxManager_%d", t.ProvisionId(), t.Index()),
+		t.containerName,
 	)
 	if err != nil {
 		return fmt.Errorf("start: can't create container - %s", err)
@@ -155,6 +179,7 @@ func (t *TesseraTxManager) Start() error {
 	}
 
 	t.containerId = containerId
+	t.hostDataDir = tmpDataDir
 	return nil
 }
 
@@ -164,6 +189,9 @@ func (t *TesseraTxManager) Stop() error {
 }
 
 func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr error) {
+	currentName := t.containerName
+	defer func() {t.containerName = currentName}()
+	t.containerName = fmt.Sprintf("%s_TxManager_KeyGen_%d", t.ProvisionId(), t.Index())
 	tmpDataDir, err := ioutil.TempDir(t.TempDir(), "keygen-")
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create tmp dir - %s", err)
@@ -174,7 +202,7 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 		context.Background(),
 		&container.Config{
 			Image:      t.DockerImage(),
-			WorkingDir: defaultContainerWorkingDir,
+			WorkingDir: defaultTxManagerContainerWorkingDir,
 			Cmd: []string{
 				"-keygen",
 			},
@@ -184,11 +212,11 @@ func (t *TesseraTxManager) GenerateKeys() (public []byte, private []byte, retErr
 		},
 		&container.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", tmpDataDir, defaultContainerWorkingDir),
+				fmt.Sprintf("%s:%s", tmpDataDir, defaultTxManagerContainerWorkingDir),
 			},
 		},
 		nil,
-		fmt.Sprintf("%s_TxManager_KeyGen_%d", t.ProvisionId(), t.Index()),
+		t.containerName,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GenerateKeys: can't create container - %s", err)
@@ -247,6 +275,7 @@ func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
 	for _, cfgFn := range configureFns {
 		cfgFn(tm)
 	}
+	tm.containerName = fmt.Sprintf("%s_TxManager_%d", tm.ProvisionId(), tm.Index())
 	public, private, err := tm.GenerateKeys()
 	if err != nil {
 		return nil, err
@@ -262,11 +291,12 @@ type tesseraTemplateKey struct {
 }
 
 type tesseraTemplate struct {
-	DataDir   string
-	IP        string
-	Port      int
-	PeerNames []string
-	Keys      []tesseraTemplateKey
+	DataDir    string
+	IP         string
+	Port       int
+	PeerNames  []string
+	Keys       []tesseraTemplateKey
+	SocketFile string
 }
 
 const tesseraConfigTemplate = `
@@ -320,7 +350,7 @@ const tesseraConfigTemplate = `
               ]
           },
           "alwaysSendTo": [],
-          "unixSocketFile": "{{.DataDir}}/tm.ipc"
+          "unixSocketFile": "{{.SocketFile}}"
       }
 `
 

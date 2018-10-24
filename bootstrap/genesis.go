@@ -44,9 +44,8 @@ import (
 )
 
 const (
-	GenesisFileName = "genesis.json"
-	InitGasLimit    = 4700000
-	InitDifficulty  = 1
+	InitGasLimit   = 4700000
+	InitDifficulty = 1
 )
 
 type configureGenesisFn func(genesis *core.Genesis, nodes []*Node, consensusConfig map[string]string) error
@@ -60,7 +59,7 @@ var genesisConfigurerByConsensus = map[string]configureGenesisFn{
 			Epoch:          istanbul.DefaultConfig.Epoch,
 		}
 		if validatorIdx, ok := consensusConfig["validators"]; ok {
-			extraData := types.IstanbulExtra{
+			extraData := &types.IstanbulExtra{
 				Validators:    make([]common.Address, 0),
 				CommittedSeal: [][]byte{},
 				Seal:          make([]byte, types.IstanbulExtraSeal),
@@ -72,12 +71,12 @@ var genesisConfigurerByConsensus = map[string]configureGenesisFn{
 					extraData.Validators = append(extraData.Validators, address)
 				}
 			}
-			vanity := bytes.Repeat([]byte{0x00}, types.IstanbulExtraVanity)
+			vanity := bytes.Repeat([]byte{0}, types.IstanbulExtraVanity)
 			payload, err := rlp.EncodeToBytes(&extraData)
 			if err != nil {
 				return err
 			}
-			genesis.ExtraData = []byte(fmt.Sprintf("0x%s", common.Bytes2Hex(append(vanity, payload...))))
+			genesis.ExtraData = append(vanity, payload...)
 		} else {
 			return errors.New("istanbul requires config.validators to be configured")
 		}
@@ -112,6 +111,6 @@ func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]stri
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("Create genesis", "content", string(data))
+	log.Info("Create genesis", "content", string(data))
 	return genesis, nil
 }

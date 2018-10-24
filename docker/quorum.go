@@ -22,8 +22,11 @@ package docker
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"time"
+
+	"github.com/docker/go-connections/nat"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -37,12 +40,15 @@ import (
 )
 
 const (
-	defaultQuorumP2PPort = 22000
+	defaultQuorumP2PPort             = 21000
+	defaultQuorumRPCPort             = 22000
+	defaultQuorumContainerWorkingDir = "/qdata"
 )
 
 type Quorum struct {
 	*DefaultConfigurable
 
+	containerName string
 	containerId string
 }
 
@@ -74,7 +80,12 @@ func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
 		}
 		log.Info("Successfully wrote genesis state", "node", q.Index(), "database", name, "hash", hash)
 	}
+	q.containerName = fmt.Sprintf("%s_Node_%d", q.ProvisionId(), q.Index())
 	return q, nil
+}
+
+func (q *Quorum) Name() string {
+	return q.containerName
 }
 
 func (q *Quorum) Start() error {
@@ -82,7 +93,7 @@ func (q *Quorum) Start() error {
 		context.Background(),
 		&container.Config{
 			Image:      q.DockerImage(),
-			WorkingDir: defaultContainerWorkingDir,
+			WorkingDir: defaultQuorumContainerWorkingDir,
 			Cmd:        q.makeArgs(),
 			Labels:     q.Labels(),
 			Hostname:   hostnameQuorum(q.Index()),
@@ -93,13 +104,20 @@ func (q *Quorum) Start() error {
 				Timeout:     10 * time.Second,
 				Test: []string{
 					"CMD",
-					"wget", "--spider", fmt.Sprintf("http://localhost:%d", defaultQuorumP2PPort),
+					"wget", "--spider", fmt.Sprintf("http://localhost:%d", defaultQuorumRPCPort),
 				},
+			},
+			Env: []string{
+				fmt.Sprintf("PRIVATE_CONFIG=%s", q.TxManager().SocketFile()),
+			},
+			ExposedPorts: map[nat.Port]struct{}{
+				nat.Port(fmt.Sprintf("%d", defaultQuorumP2PPort)): {},
 			},
 		},
 		&container.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", q.DataDir().Base, defaultContainerWorkingDir),
+				fmt.Sprintf("%s:%s", q.DataDir().Base, defaultQuorumContainerWorkingDir),
+				fmt.Sprintf("%s:%s", q.TxManager().DataDir(), defaultTxManagerContainerWorkingDir),
 			},
 		},
 		&network.NetworkingConfig{
@@ -115,7 +133,7 @@ func (q *Quorum) Start() error {
 				},
 			},
 		},
-		fmt.Sprintf("%s_Node_%d", q.ProvisionId(), q.Index()),
+		q.containerName,
 	)
 	if err != nil {
 		return fmt.Errorf("start: can't create container - %s", err)
@@ -158,7 +176,19 @@ func (q *Quorum) Stop() error {
 func (q *Quorum) makeArgs() []string {
 	combinedConfig := make(map[string]string)
 	// first construct our config
+	combinedConfig["--datadir"] = defaultQuorumContainerWorkingDir
 	combinedConfig["--rpc"] = ""
+	combinedConfig["--rpcaddr"] = "0.0.0.0"
+	combinedConfig["--rpcapi"] = fmt.Sprintf("admin,db,eth,debug,miner,net,shh,txpool,personal,web3,quorum,%s", q.ConsensusAlgorithm())
+	combinedConfig["--rpcport"] = fmt.Sprintf("%d", defaultQuorumRPCPort)
+	combinedConfig["--port"] = fmt.Sprintf("%d", defaultQuorumP2PPort)
+	combinedConfig["--unlock"] = "0"
+	combinedConfig["--password"] = filepath.Join(defaultQuorumContainerWorkingDir, "passwords.txt")
+	combinedConfig["--nodiscover"] = ""
+	combinedConfig["--networkid"] = fmt.Sprintf("%d", rand.Int31n(100))
+	combinedConfig["--identity"] = hostnameQuorum(q.Index())
+	combinedConfig["--ipcdisable"] = ""
+	combinedConfig["--permissioned"] = ""
 	// now override with config from Node
 	for k, v := range q.Config() {
 		combinedConfig[fmt.Sprintf("--%s", k)] = v
@@ -169,7 +199,11 @@ func (q *Quorum) makeArgs() []string {
 	}
 	args := make([]string, 0)
 	for k, v := range combinedConfig {
-		args = append(args, []string{k, v}...)
+		if len(v) == 0 {
+			args = append(args, k)
+		} else {
+			args = append(args, []string{k, v}...)
+		}
 	}
 	return args
 }
