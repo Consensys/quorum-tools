@@ -20,6 +20,7 @@
 package quorum
 
 import (
+	"github.com/jpmorganchase/quorum-tools/operator"
 	"github.com/spf13/cobra"
 )
 
@@ -30,12 +31,29 @@ var upCmd = &cobra.Command{
 	RunE:  executeUpCmd,
 }
 
-var export string
+var (
+	export          string
+	enableOperator  bool
+	operatorPort    int
+	operatorAddress string
+)
 
 func init() {
 	upCmd.Flags().StringVarP(&export, "export", "e", "", "Export information about the network to a file or stdout (use hyphen)")
+	upCmd.Flags().BoolVarP(&enableOperator, "enable-operator", "", false, "Start Operator server")
+	upCmd.Flags().IntVarP(&operatorPort, "operator-port", "", 8800, "Operator server port")
+	upCmd.Flags().StringVarP(&operatorAddress, "operator-address", "", "0.0.0.0", "Operator server listen address")
 }
 
 func executeUpCmd(cmd *cobra.Command, args []string) error {
-	return builder.Build(export)
+	err := builder.Build(export)
+	if err != nil {
+		return err
+	}
+	if enableOperator {
+		if err := operator.Start(operatorAddress, operatorPort); err != nil {
+			return err
+		}
+	}
+	return err
 }

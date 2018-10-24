@@ -8,6 +8,9 @@ template-quorum-miner-default: &quorum-miner-default
 template-tessera-default: &tessera-default
   image: quorumengineering/tessera:latest
   config:
+template-node-default: &node-default
+  quorum: *quorum-miner-default
+  tx_manager: *tessera-default
 
 # main configuration
 name: 7nodes-example
@@ -17,17 +20,10 @@ consensus:
     validators: 0,1,2,3,4,5,6 # indices of nodes to be validators
     geth_args: --istanbul.blockperiod=1 --emitcheckpoints --syncmode=full
 nodes:
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
-- quorum: *quorum-miner-default
-  tx_manager: *tessera-default
+- *node-default
+- *node-default
+- *node-default
+- *node-default
+- *node-default
+- *node-default
+- *node-default
