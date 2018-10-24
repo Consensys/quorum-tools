@@ -25,8 +25,12 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"text/template"
+
+	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/jpmorganchase/quorum-tools/bootstrap"
 
@@ -67,6 +71,8 @@ type QuorumBuilder struct {
 	Consensus QuorumBuilderConsensus `yaml:"consensus"`
 	Nodes     []QuorumBuilderNode    `yaml:",flow"`
 
+	Export string
+
 	commonLabels  map[string]string
 	dockerClient  *client.Client
 	dockerNetwork *Network
@@ -97,7 +103,7 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 // 1. Build Docker Network
 // 2. Start Tx Manager
 // 3. Start Quorum
-func (qb *QuorumBuilder) Build() error {
+func (qb *QuorumBuilder) Build(export string) error {
 	if t, err := ioutil.TempDir("", ""); err != nil {
 		return err
 	} else {
@@ -110,8 +116,23 @@ func (qb *QuorumBuilder) Build() error {
 	if err != nil {
 		return err
 	}
-	if err := qb.startQuorums(txManagers); err != nil {
+	nodes, err := qb.startQuorums(txManagers)
+	if err != nil {
 		return err
+	}
+	switch export {
+	case "":
+		// don't do anything
+	case "-":
+		// output to stdout
+		qb.writeNetworkConfiguration(os.Stdout, nodes, txManagers)
+	default:
+		// write a file
+		f, err := os.Create(export)
+		if err != nil {
+			return err
+		}
+		qb.writeNetworkConfiguration(f, nodes, txManagers)
 	}
 	return nil
 }
@@ -151,26 +172,31 @@ func (qb *QuorumBuilder) startTxManagers() ([]TxManager, error) {
 	return txManagers, nil
 }
 
-func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) error {
+func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) ([]*Quorum, error) {
 	nodeCount := len(qb.Nodes)
 	log.Info("Start Quorum nodes", "count", nodeCount, "consensus", qb.Consensus.Name)
+	quorums := make([]*Quorum, nodeCount)
 	ips, err := qb.dockerNetwork.GetFreeIPAddrs(nodeCount)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	nodes := make([]*bootstrap.Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		nodes[i], err = bootstrap.NewNode(qb.tmpDir, ips[i].String(), defaultQuorumP2PPort)
+		port, err := strconv.Atoi(node.DefaultConfig.P2P.ListenAddr[1:])
 		if err != nil {
-			return err
+			return nil, err
+		}
+		nodes[i], err = bootstrap.NewNode(qb.tmpDir, ips[i].String(), port)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if err := bootstrap.WritePermissionedNodes(nodes); err != nil {
-		return err
+		return nil, err
 	}
 	genesis, err := bootstrap.NewGenesis(nodes, qb.Consensus.Name, qb.Consensus.Config)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	consensusGethArgs := make(map[string]string)
 	if a, ok := qb.Consensus.Config["geth_args"]; ok {
@@ -183,15 +209,15 @@ func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) error {
 			case 2:
 				consensusGethArgs[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 			default:
-				return fmt.Errorf("consensus config: invalid geth arg %s", arg)
+				return nil, fmt.Errorf("consensus config: invalid geth arg %s", arg)
 			}
 		}
 	}
-	return qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
+	if err := qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
 		if err := qb.pullImage(node.Quorum.Image); err != nil {
 			return nil, err
 		}
-		return NewQuorum(
+		q, err := NewQuorum(
 			ConfigureTempDir(qb.tmpDir),
 			ConfigureTxManager(txManagers[idx]),
 			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
@@ -210,7 +236,15 @@ func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) error {
 			ConfigureConfig(node.Quorum.Config),
 			ConfigureLabels(qb.commonLabels),
 		)
-	})
+		if err != nil {
+			return nil, err
+		}
+		quorums[idx] = q.(*Quorum)
+		return q, nil
+	}); err != nil {
+		return nil, err
+	}
+	return quorums, nil
 }
 
 func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBuilderNode) (Container, error)) error {
@@ -289,6 +323,36 @@ func (qb *QuorumBuilder) Destroy() error {
 		return fmt.Errorf("destroy: %s", err)
 	}
 
+	return nil
+}
+
+func (qb *QuorumBuilder) writeNetworkConfiguration(file *os.File, nodes []*Quorum, txManagers []TxManager) error {
+	tmpl := template.Must(template.New("networkConfiguration").Funcs(template.FuncMap{
+		"inc": func(i int) int {
+			return i + 1
+		},
+	}).Parse(`
+quorum:
+  nodes:
+    {{- range $index, $data := .Nodes }}
+    Node{{- inc $index }}:
+      privacy-address: {{- $data.PrivacyAddress }}
+      url: {{- $data.Url }}
+    {{- end }}
+`))
+	tmplData := make([]map[string]string, len(nodes))
+	for i := 0; i < len(nodes); i++ {
+		tmplData[i] = make(map[string]string)
+		tmplData[i]["PrivacyAddress"] = fmt.Sprintf(" %s", txManagers[i].Address())
+		tmplData[i]["Url"] = fmt.Sprintf(" http://localhost:%d", defaultQuorumRPCInitPort+i)
+	}
+	if err := tmpl.Execute(file, struct {
+		Nodes []map[string]string
+	}{
+		Nodes: tmplData,
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 

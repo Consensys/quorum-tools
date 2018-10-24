@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	InitGasLimit   = 4700000
+	InitGasLimit   = 0xE0000000
 	InitDifficulty = 1
 )
 

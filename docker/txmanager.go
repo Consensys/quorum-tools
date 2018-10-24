@@ -51,11 +51,13 @@ type TxManager interface {
 	GenerateKeys() ([]byte, []byte, error)
 	SocketFile() string
 	DataDir() string
+	Address() string
 }
 
 type TesseraTxManager struct {
 	*DefaultConfigurable
 
+	address string
 	containerName string
 	containerId string
 	hostDataDir string
@@ -266,6 +268,10 @@ func (t *TesseraTxManager) makeArgs() []string {
 	return args
 }
 
+func (t *TesseraTxManager) Address() string {
+	return t.address
+}
+
 func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
 	tm := &TesseraTxManager{
 		DefaultConfigurable: &DefaultConfigurable{
@@ -282,6 +288,8 @@ func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {
 	}
 	tm.Set(CfgKeyTxManagerPublicKeys, [][]byte{public})
 	tm.Set(CfgKeyTxManagerPrivateKeys, [][]byte{private})
+	tm.address = string(public)
+	log.Info("New Tx Manager", "idx", tm.Index(), "private-address", tm.address)
 	return tm, nil
 }
 

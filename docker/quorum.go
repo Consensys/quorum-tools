@@ -39,8 +39,7 @@ import (
 )
 
 const (
-	defaultQuorumP2PPort             = 21000
-	defaultQuorumRPCPort             = 22000
+	defaultQuorumRPCInitPort         = 22000
 	defaultQuorumContainerWorkingDir = "/qdata"
 )
 
@@ -48,7 +47,7 @@ type Quorum struct {
 	*DefaultConfigurable
 
 	containerName string
-	containerId string
+	containerId   string
 }
 
 func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
@@ -103,20 +102,25 @@ func (q *Quorum) Start() error {
 				Timeout:     10 * time.Second,
 				Test: []string{
 					"CMD",
-					"wget", "--spider", fmt.Sprintf("http://localhost:%d", defaultQuorumRPCPort),
+					"wget", "--spider", fmt.Sprintf("http://localhost:%d", node.DefaultHTTPPort),
 				},
 			},
 			Env: []string{
 				fmt.Sprintf("PRIVATE_CONFIG=%s", q.TxManager().SocketFile()),
-			},
-			ExposedPorts: map[nat.Port]struct{}{
-				nat.Port(fmt.Sprintf("%d", defaultQuorumP2PPort)): {},
 			},
 		},
 		&container.HostConfig{
 			Binds: []string{
 				fmt.Sprintf("%s:%s", q.DataDir().Base, defaultQuorumContainerWorkingDir),
 				fmt.Sprintf("%s:%s", q.TxManager().DataDir(), defaultTxManagerContainerWorkingDir),
+			},
+			PortBindings: map[nat.Port][]nat.PortBinding{
+				nat.Port(fmt.Sprintf("%d/tcp", node.DefaultHTTPPort)): {
+					nat.PortBinding{
+						HostIP: "0.0.0.0",
+						HostPort: fmt.Sprintf("%d", defaultQuorumRPCInitPort+q.Index()),
+					},
+				},
 			},
 		},
 		&network.NetworkingConfig{
@@ -179,14 +183,12 @@ func (q *Quorum) makeArgs() []string {
 	combinedConfig["--rpc"] = ""
 	combinedConfig["--rpcaddr"] = "0.0.0.0"
 	combinedConfig["--rpcapi"] = fmt.Sprintf("admin,db,eth,debug,miner,net,shh,txpool,personal,web3,quorum,%s", q.ConsensusAlgorithm())
-	combinedConfig["--rpcport"] = fmt.Sprintf("%d", defaultQuorumRPCPort)
-	combinedConfig["--port"] = fmt.Sprintf("%d", defaultQuorumP2PPort)
 	combinedConfig["--unlock"] = "0"
 	combinedConfig["--password"] = filepath.Join(defaultQuorumContainerWorkingDir, "passwords.txt")
 	combinedConfig["--nodiscover"] = ""
 	combinedConfig["--networkid"] = "2018"
 	combinedConfig["--identity"] = hostnameQuorum(q.Index())
-	combinedConfig["--ipcdisable"] = ""
+	// combinedConfig["--ipcdisable"] = ""
 	combinedConfig["--permissioned"] = ""
 	// now override with config from Node
 	for k, v := range q.Config() {

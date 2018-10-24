@@ -30,6 +30,12 @@ var upCmd = &cobra.Command{
 	RunE:  executeUpCmd,
 }
 
+var export string
+
+func init() {
+	upCmd.Flags().StringVarP(&export, "export", "e", "", "Export information about the network to a file or stdout (use hyphen)")
+}
+
 func executeUpCmd(cmd *cobra.Command, args []string) error {
-	return builder.Build()
+	return builder.Build(export)
 }
