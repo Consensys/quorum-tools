@@ -21,10 +21,11 @@ package apiv1
 
 import (
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/log"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/gorilla/mux"
 )
@@ -37,14 +38,13 @@ type nodeOutput struct {
 
 // GET /v1/nodes
 func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
-	var output interface{}
+	output := make([]nodeOutput, api.QuorumNetwork.NodeCount)
 	writeFn := writeJSON
 	if strings.Contains(r.Header.Get("Accept"), "application/yaml") {
-		writeFn = func(w http.ResponseWriter, output interface{}) error {
+		writeFn = func(w http.ResponseWriter, _ interface{}) error {
 			return api.QuorumNetwork.WriteNetworkConfigurationYAML(w)
 		}
 	} else {
-		output := make([]nodeOutput, api.QuorumNetwork.NodeCount)
 		for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
 			output[i] = nodeOutput{
 				Id:             i,
