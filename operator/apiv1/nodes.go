@@ -21,10 +21,10 @@ package apiv1
 
 import (
 	"encoding/json"
+	"github.com/ethereum/go-ethereum/log"
 	"net/http"
 	"strconv"
-
-	"github.com/ethereum/go-ethereum/log"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -36,16 +36,24 @@ type nodeOutput struct {
 }
 
 // GET /v1/nodes
-func (api *API) GetNodes(w http.ResponseWriter, _ *http.Request) {
-	output := make([]nodeOutput, api.QuorumNetwork.NodeCount)
-	for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
-		output[i] = nodeOutput{
-			Id:             i,
-			Url:            api.QuorumNetwork.QuorumNodes[i].Url(),
-			PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
+func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
+	var output interface{}
+	writeFn := writeJSON
+	if strings.Contains(r.Header.Get("Accept"), "application/yaml") {
+		writeFn = func(w http.ResponseWriter, output interface{}) error {
+			return api.QuorumNetwork.WriteNetworkConfigurationYAML(w)
+		}
+	} else {
+		output := make([]nodeOutput, api.QuorumNetwork.NodeCount)
+		for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
+			output[i] = nodeOutput{
+				Id:             i,
+				Url:            api.QuorumNetwork.QuorumNodes[i].Url(),
+				PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
+			}
 		}
 	}
-	if err := writeJSON(w, output); err != nil {
+	if err := writeFn(w, output); err != nil {
 		log.Error("Unable to write output", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}

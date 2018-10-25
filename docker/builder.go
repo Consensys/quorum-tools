@@ -136,14 +136,14 @@ func (qb *QuorumBuilder) Build(export string) (*QuorumNetwork, error) {
 		// don't do anything
 	case "-":
 		// output to stdout
-		qn.writeNetworkConfiguration(os.Stdout)
+		qn.WriteNetworkConfigurationYAML(os.Stdout)
 	default:
 		// write a file
 		f, err := os.Create(export)
 		if err != nil {
 			return nil, err
 		}
-		qn.writeNetworkConfiguration(f)
+		qn.WriteNetworkConfigurationYAML(f)
 	}
 	return qn, nil
 }
@@ -337,7 +337,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	return nil
 }
 
-func (qn *QuorumNetwork) writeNetworkConfiguration(file *os.File) error {
+func (qn *QuorumNetwork) WriteNetworkConfigurationYAML(file io.Writer) error {
 	tmpl := template.Must(template.New("networkConfiguration").Funcs(template.FuncMap{
 		"inc": func(i int) int {
 			return i + 1
