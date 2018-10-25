@@ -50,6 +50,12 @@ type Container interface {
 	Stop() error
 }
 
+type QuorumNetwork struct {
+	NodeCount   int
+	TxManagers  []TxManager
+	QuorumNodes []*Quorum
+}
+
 type QuorumBuilderConsensus struct {
 	Name   string            `yaml:"name"`
 	Config map[string]string `yaml:"config"`
@@ -103,38 +109,43 @@ func NewQuorumBuilder(r io.Reader) (*QuorumBuilder, error) {
 // 1. Build Docker Network
 // 2. Start Tx Manager
 // 3. Start Quorum
-func (qb *QuorumBuilder) Build(export string) error {
+func (qb *QuorumBuilder) Build(export string) (*QuorumNetwork, error) {
 	if t, err := ioutil.TempDir("", ""); err != nil {
-		return err
+		return nil, err
 	} else {
 		qb.tmpDir = t
 	}
 	if err := qb.buildDockerNetwork(); err != nil {
-		return err
+		return nil, err
 	}
 	txManagers, err := qb.startTxManagers()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	nodes, err := qb.startQuorums(txManagers)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	qn := &QuorumNetwork{
+		TxManagers:  txManagers,
+		QuorumNodes: nodes,
+		NodeCount:   len(nodes),
 	}
 	switch export {
 	case "":
 		// don't do anything
 	case "-":
 		// output to stdout
-		qb.writeNetworkConfiguration(os.Stdout, nodes, txManagers)
+		qn.writeNetworkConfiguration(os.Stdout)
 	default:
 		// write a file
 		f, err := os.Create(export)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		qb.writeNetworkConfiguration(f, nodes, txManagers)
+		qn.writeNetworkConfiguration(f)
 	}
-	return nil
+	return qn, nil
 }
 
 func (qb *QuorumBuilder) startTxManagers() ([]TxManager, error) {
@@ -326,7 +337,7 @@ func (qb *QuorumBuilder) Destroy() error {
 	return nil
 }
 
-func (qb *QuorumBuilder) writeNetworkConfiguration(file *os.File, nodes []*Quorum, txManagers []TxManager) error {
+func (qn *QuorumNetwork) writeNetworkConfiguration(file *os.File) error {
 	tmpl := template.Must(template.New("networkConfiguration").Funcs(template.FuncMap{
 		"inc": func(i int) int {
 			return i + 1
@@ -340,11 +351,11 @@ quorum:
       url: {{- $data.Url }}
     {{- end }}
 `))
-	tmplData := make([]map[string]string, len(nodes))
-	for i := 0; i < len(nodes); i++ {
+	tmplData := make([]map[string]string, len(qn.QuorumNodes))
+	for i := 0; i < len(qn.QuorumNodes); i++ {
 		tmplData[i] = make(map[string]string)
-		tmplData[i]["PrivacyAddress"] = fmt.Sprintf(" %s", txManagers[i].Address())
-		tmplData[i]["Url"] = fmt.Sprintf(" http://localhost:%d", defaultQuorumRPCInitPort+i)
+		tmplData[i]["PrivacyAddress"] = fmt.Sprintf(" %s", qn.TxManagers[i].Address())
+		tmplData[i]["Url"] = fmt.Sprintf(" http://localhost:%d", qn.QuorumNodes[i].rpcPort)
 	}
 	if err := tmpl.Execute(file, struct {
 		Nodes []map[string]string

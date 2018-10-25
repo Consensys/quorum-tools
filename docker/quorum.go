@@ -49,6 +49,7 @@ type Quorum struct {
 
 	containerName string
 	containerId   string
+	rpcPort       int
 }
 
 func NewQuorum(configureFns ...ConfigureFn) (Container, error) {
@@ -88,6 +89,7 @@ func (q *Quorum) Name() string {
 }
 
 func (q *Quorum) Start() error {
+	q.rpcPort = defaultQuorumRPCInitPort + q.Index()
 	additionalExposedPorts := make(map[nat.Port]struct{})
 	if q.ConsensusAlgorithm() == "raft" {
 		additionalExposedPorts[nat.Port(fmt.Sprintf("%d", defaultRaftPort))] = struct{}{}
@@ -124,7 +126,7 @@ func (q *Quorum) Start() error {
 				nat.Port(fmt.Sprintf("%d/tcp", node.DefaultHTTPPort)): {
 					nat.PortBinding{
 						HostIP:   "0.0.0.0",
-						HostPort: fmt.Sprintf("%d", defaultQuorumRPCInitPort+q.Index()),
+						HostPort: fmt.Sprintf("%d", q.rpcPort),
 					},
 				},
 			},
@@ -180,6 +182,10 @@ func (q *Quorum) Start() error {
 func (q *Quorum) Stop() error {
 	duration := 30 * time.Second
 	return q.DockerClient().ContainerStop(context.Background(), q.containerId, &duration)
+}
+
+func (q *Quorum) Url() string {
+	return fmt.Sprintf("http://%s:%d", q.MyIP(), q.rpcPort)
 }
 
 func (q *Quorum) makeArgs() []string {

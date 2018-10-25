@@ -22,8 +22,8 @@ consensus:
 nodes:
 - *node-default
 - *node-default
-- *node-default
-- *node-default
-- *node-default
-- *node-default
-- *node-default
+#- *node-default
+#- *node-default
+#- *node-default
+#- *node-default
+#- *node-default

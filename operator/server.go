@@ -19,9 +19,60 @@
 
 package operator
 
-import "github.com/ethereum/go-ethereum/log"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
-func Start(listenAddress string, port int) error {
+	"github.com/jpmorganchase/quorum-tools/operator/apiv1"
+
+	"github.com/jpmorganchase/quorum-tools/docker"
+
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/gorilla/mux"
+)
+
+var v1 *apiv1.API
+
+func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
 	log.Info("Start Quorum Network Operator", "listen", listenAddress, "port", port)
-	return nil
+	v1 = &apiv1.API{QuorumNetwork: qn}
+	router := mux.NewRouter()
+	setupHandlers(router)
+	server := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", listenAddress, port),
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+		IdleTimeout:  15 * time.Second,
+		Handler:      router,
+	}
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			log.Error("Stop Quorum Network Operator", "reason", err)
+		}
+	}()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	<-c // wait
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	return server.Shutdown(ctx)
+}
+
+func setupHandlers(r *mux.Router) {
+	// /v1 endpoint and accept application/json only
+	v1Router := r.PathPrefix("/v1").Subrouter()
+
+	// /v1/nodes endpoint
+	nodesRouter := v1Router.PathPrefix("/nodes").Subrouter()
+	nodesRouter.HandleFunc("", v1.GetNodes).Methods("GET")
+	nodesRouter.HandleFunc("/{idx}", v1.GetNode).Methods("GET")
+
 }

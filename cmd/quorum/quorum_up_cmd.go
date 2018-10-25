@@ -46,12 +46,12 @@ func init() {
 }
 
 func executeUpCmd(cmd *cobra.Command, args []string) error {
-	err := builder.Build(export)
+	qn, err := builder.Build(export)
 	if err != nil {
 		return err
 	}
 	if enableOperator {
-		if err := operator.Start(operatorAddress, operatorPort); err != nil {
+		if err := operator.Start(operatorAddress, operatorPort, qn); err != nil {
 			return err
 		}
 	}
