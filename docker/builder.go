@@ -28,7 +28,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"text/template"
 
 	"github.com/ethereum/go-ethereum/node"
 
@@ -50,25 +49,19 @@ type Container interface {
 	Stop() error
 }
 
-type QuorumNetwork struct {
-	NodeCount   int
-	TxManagers  []TxManager
-	QuorumNodes []*Quorum
-}
-
 type QuorumBuilderConsensus struct {
 	Name   string            `yaml:"name"`
 	Config map[string]string `yaml:"config"`
 }
 
 type QuorumBuilderNodeDocker struct {
-	Image  string            `yaml:"image"`
-	Config map[string]string `yaml:"config"`
+	Image  string            `yaml:"image" json:"image"`
+	Config map[string]string `yaml:"config" json:"config"`
 }
 
 type QuorumBuilderNode struct {
-	Quorum    QuorumBuilderNodeDocker `yaml:"quorum"`
-	TxManager QuorumBuilderNodeDocker `yaml:"tx_manager"`
+	Quorum    QuorumBuilderNodeDocker `yaml:"quorum" json:"quorum"`
+	TxManager QuorumBuilderNodeDocker `yaml:"tx_manager" json:"tx_manager"`
 }
 
 type QuorumBuilder struct {
@@ -334,36 +327,6 @@ func (qb *QuorumBuilder) Destroy() error {
 		return fmt.Errorf("destroy: %s", err)
 	}
 
-	return nil
-}
-
-func (qn *QuorumNetwork) WriteNetworkConfigurationYAML(file io.Writer) error {
-	tmpl := template.Must(template.New("networkConfiguration").Funcs(template.FuncMap{
-		"inc": func(i int) int {
-			return i + 1
-		},
-	}).Parse(`
-quorum:
-  nodes:
-    {{- range $index, $data := .Nodes }}
-    Node{{- inc $index }}:
-      privacy-address: {{- $data.PrivacyAddress }}
-      url: {{- $data.Url }}
-    {{- end }}
-`))
-	tmplData := make([]map[string]string, len(qn.QuorumNodes))
-	for i := 0; i < len(qn.QuorumNodes); i++ {
-		tmplData[i] = make(map[string]string)
-		tmplData[i]["PrivacyAddress"] = fmt.Sprintf(" %s", qn.TxManagers[i].Address())
-		tmplData[i]["Url"] = fmt.Sprintf(" http://localhost:%d", qn.QuorumNodes[i].rpcPort)
-	}
-	if err := tmpl.Execute(file, struct {
-		Nodes []map[string]string
-	}{
-		Nodes: tmplData,
-	}); err != nil {
-		return err
-	}
 	return nil
 }
 

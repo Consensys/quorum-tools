@@ -22,7 +22,9 @@ package docker
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
+	"text/template"
 	"time"
 
 	"github.com/docker/go-connections/nat"
@@ -43,6 +45,12 @@ const (
 	defaultQuorumContainerWorkingDir = "/qdata"
 	defaultRaftPort                  = 50400
 )
+
+type QuorumNetwork struct {
+	NodeCount   int // total number of nodes including stopped/killed nodes
+	TxManagers  []TxManager
+	QuorumNodes []*Quorum
+}
 
 type Quorum struct {
 	*DefaultConfigurable
@@ -227,6 +235,44 @@ func (q *Quorum) makeArgs() []string {
 		}
 	}
 	return args
+}
+
+func (qn *QuorumNetwork) AddNodes(newNodes []*QuorumBuilderNode) ([]int, error) {
+	newIds := make([]int, len(newNodes))
+	for i := 0; i < len(newIds); i++ {
+		newIds[i] = i + qn.NodeCount
+	}
+	return newIds, nil
+}
+
+func (qn *QuorumNetwork) WriteNetworkConfigurationYAML(file io.Writer) error {
+	tmpl := template.Must(template.New("networkConfiguration").Funcs(template.FuncMap{
+		"inc": func(i int) int {
+			return i + 1
+		},
+	}).Parse(`
+quorum:
+  nodes:
+    {{- range $index, $data := .Nodes }}
+    Node{{- inc $index }}:
+      privacy-address: {{- $data.PrivacyAddress }}
+      url: {{- $data.Url }}
+    {{- end }}
+`))
+	tmplData := make([]map[string]string, len(qn.QuorumNodes))
+	for i := 0; i < len(qn.QuorumNodes); i++ {
+		tmplData[i] = make(map[string]string)
+		tmplData[i]["PrivacyAddress"] = fmt.Sprintf(" %s", qn.TxManagers[i].Address())
+		tmplData[i]["Url"] = fmt.Sprintf(" http://localhost:%d", qn.QuorumNodes[i].rpcPort)
+	}
+	if err := tmpl.Execute(file, struct {
+		Nodes []map[string]string
+	}{
+		Nodes: tmplData,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func hostnameQuorum(idx int) string {

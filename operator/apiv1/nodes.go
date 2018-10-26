@@ -21,9 +21,13 @@ package apiv1
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/jpmorganchase/quorum-tools/docker"
 
 	"github.com/ethereum/go-ethereum/log"
 
@@ -31,14 +35,25 @@ import (
 )
 
 type nodeOutput struct {
-	Id             int    `json:"id"`
-	Url            string `json:"url"`
-	PrivacyAddress string `json:"privacy-address"`
+	Id               int    `json:"id"`
+	Url              string `json:"url"`
+	PrivacyAddress   string `json:"privacy-address"`
+	ValidatorAddress string `json:"validator-address,omitempty"` // for istanbul
 }
+
+type enrichNodeOutputFn func(quorm *docker.Quorum, txManager docker.TxManager, nodeOut *nodeOutput)
+
+var (
+	enrichNodeOutputByConsensus = map[string]enrichNodeOutputFn{
+		"istanbul": func(quorum *docker.Quorum, txManager docker.TxManager, nodeOut *nodeOutput) {
+			nodeOut.ValidatorAddress = "0x" + crypto.PubkeyToAddress(quorum.NodeKey().PublicKey).Hex()
+		},
+	}
+)
 
 // GET /v1/nodes
 func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
-	output := make([]nodeOutput, api.QuorumNetwork.NodeCount)
+	output := make([]*nodeOutput, api.QuorumNetwork.NodeCount)
 	writeFn := writeJSON
 	if strings.Contains(r.Header.Get("Accept"), "application/yaml") {
 		writeFn = func(w http.ResponseWriter, _ interface{}) error {
@@ -46,11 +61,7 @@ func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
-			output[i] = nodeOutput{
-				Id:             i,
-				Url:            api.QuorumNetwork.QuorumNodes[i].Url(),
-				PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
-			}
+			output[i] = api.buildNodeOutput(i)
 		}
 	}
 	if err := writeFn(w, output); err != nil {
@@ -68,17 +79,59 @@ func (api *API) GetNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid node index", http.StatusBadRequest)
 			return
 		}
-		if err := writeJSON(w, nodeOutput{
-			Id:             idx,
-			Url:            api.QuorumNetwork.QuorumNodes[idx].Url(),
-			PrivacyAddress: api.QuorumNetwork.TxManagers[idx].Address(),
-		}); err != nil {
+		if err := writeJSON(w, api.buildNodeOutput(idx)); err != nil {
 			log.Error("Unable to write output", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	} else {
 		http.Error(w, "Missing node index", http.StatusBadRequest)
 	}
+}
+
+func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Error("Unable to read request body", "error", err)
+		http.Error(w, "Unable to read body", http.StatusInternalServerError)
+		return
+	}
+	newNodes := make([]*docker.QuorumBuilderNode, 0)
+	if err := json.Unmarshal(data, newNodes); err != nil {
+		log.Error("Unable to marshall request body", "error", err)
+		http.Error(w, "Invalid json", http.StatusBadRequest)
+		return
+	}
+	if nodeIds, err := api.QuorumNetwork.AddNodes(newNodes); err != nil {
+		http.Error(w, "Unable to add nodes", http.StatusInternalServerError)
+		return
+	} else {
+		output := make([]*nodeOutput, len(nodeIds))
+		for i := 0; i < len(nodeIds); i++ {
+			output[i] = api.buildNodeOutput(nodeIds[i])
+		}
+		if err := writeJSON(w, output); err != nil {
+			log.Error("Unable to write output", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}
+}
+
+func (api *API) buildNodeOutput(i int) *nodeOutput {
+	q := api.QuorumNetwork.QuorumNodes[i]
+	if q == nil {
+		return &nodeOutput{
+			Id: i,
+		}
+	}
+	nodeOut := &nodeOutput{
+		Id:             i,
+		Url:            q.Url(),
+		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
+	}
+	if fn, ok := enrichNodeOutputByConsensus[q.ConsensusAlgorithm()]; ok {
+		fn(q, api.QuorumNetwork.TxManagers[i], nodeOut)
+	}
+	return nodeOut
 }
 
 func writeJSON(w http.ResponseWriter, output interface{}) error {

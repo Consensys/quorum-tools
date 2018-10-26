@@ -73,6 +73,10 @@ func setupHandlers(r *mux.Router) {
 	// /v1/nodes endpoint
 	nodesRouter := v1Router.PathPrefix("/nodes").Subrouter()
 	nodesRouter.HandleFunc("", v1.GetNodes).Methods("GET")
+	nodesRouter.HandleFunc("/", v1.GetNodes).Methods("GET")
 	nodesRouter.HandleFunc("/{idx}", v1.GetNode).Methods("GET")
+	nodesRouter.HandleFunc("", v1.AddNodes).Methods("PUT")
+	nodesRouter.HandleFunc("/", v1.AddNodes).Methods("PUT")
+
 
 }
