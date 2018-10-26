@@ -161,34 +161,8 @@ func (q *Quorum) Start() error {
 	if err != nil {
 		return fmt.Errorf("start: can't create container - %s", err)
 	}
-	containerId := resp.ID
-	shortContainerId := containerId[:6]
-	if err := q.DockerClient().ContainerStart(context.Background(), containerId, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("start: can't start container %s - %s", shortContainerId, err)
-	}
-
-	healthyContainer := &helper.StateChangeConfig{
-		Target:       []string{"healthy"},
-		PollInterval: 3 * time.Second,
-		Timeout:      60 * time.Second,
-		Refresh: func() (*helper.StateResult, error) {
-			c, err := q.DockerClient().ContainerInspect(context.Background(), containerId)
-			if err != nil {
-				return nil, err
-			}
-			return &helper.StateResult{
-				Result: c,
-				State:  c.State.Health.Status,
-			}, nil
-		},
-	}
-
-	if _, err := healthyContainer.Wait(); err != nil {
-		return err
-	}
-
-	q.containerId = containerId
-	return nil
+	q.containerId = resp.ID
+	return q.SoftStart()
 }
 
 func (q *Quorum) Stop() error {
@@ -239,6 +213,35 @@ func (q *Quorum) makeArgs() []string {
 		}
 	}
 	return args
+}
+
+// start an existing container
+func (q *Quorum) SoftStart() error {
+	shortContainerId := q.containerId[:6]
+	if err := q.DockerClient().ContainerStart(context.Background(), q.containerId, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("start: can't start container %s - %s", shortContainerId, err)
+	}
+
+	healthyContainer := &helper.StateChangeConfig{
+		Target:       []string{"healthy"},
+		PollInterval: 3 * time.Second,
+		Timeout:      60 * time.Second,
+		Refresh: func() (*helper.StateResult, error) {
+			c, err := q.DockerClient().ContainerInspect(context.Background(), q.containerId)
+			if err != nil {
+				return nil, err
+			}
+			return &helper.StateResult{
+				Result: c,
+				State:  c.State.Health.Status,
+			}, nil
+		},
+	}
+
+	if _, err := healthyContainer.Wait(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (qn *QuorumNetwork) AddNodes(newNodes []QuorumBuilderNode) (newIds []int, retErr error) {
@@ -362,6 +365,23 @@ quorum:
 		Nodes: tmplData,
 	}); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (qn *QuorumNetwork) PerformAction(idx int, action string) error {
+	switch action {
+	case "stop":
+		return qn.QuorumNodes[idx].Stop()
+	case "start":
+		return qn.QuorumNodes[idx].SoftStart()
+	case "restart":
+		if err := qn.QuorumNodes[idx].Stop(); err != nil {
+			return err
+		}
+		return qn.QuorumNodes[idx].SoftStart()
+	default:
+		return fmt.Errorf("action [%s] not implemented", action)
 	}
 	return nil
 }

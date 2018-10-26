@@ -89,6 +89,7 @@ func (api *API) GetNode(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PUT /v1/nodes
 func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -114,6 +115,41 @@ func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
 			log.Error("Unable to write output", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
+	}
+}
+
+// POST /v1/nodes/{idx}
+func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
+	pathVars := mux.Vars(r)
+	if a, ok := pathVars["idx"]; ok {
+		idx, err := strconv.Atoi(a)
+		if err != nil || idx >= api.QuorumNetwork.NodeCount {
+			http.Error(w, "Invalid node index", http.StatusBadRequest)
+			return
+		}
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Unable to read request body", "error", err)
+			http.Error(w, "Unable to read body", http.StatusInternalServerError)
+			return
+		}
+		actionMap := make(map[string]string)
+		if err := json.Unmarshal(data, &actionMap); err != nil {
+			log.Error("Unable to marshall request body", "error", err)
+			http.Error(w, "Invalid json", http.StatusBadRequest)
+			return
+		}
+		if action, ok := actionMap["action"]; !ok || !strings.Contains("stop start restart", strings.Replace(action, " ", "", -1)) {
+			log.Error("Unknown action", "action", action)
+			http.Error(w, "Unknown action", http.StatusBadRequest)
+			return
+		} else if err := api.QuorumNetwork.PerformAction(idx, action); err != nil {
+			log.Error("Unable to perform action", "action", action, "error", err)
+			http.Error(w, "Unable to perform action", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Error(w, "Missing node index", http.StatusBadRequest)
 	}
 }
 
