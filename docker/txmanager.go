@@ -154,35 +154,10 @@ func (t *TesseraTxManager) Start() error {
 	if err != nil {
 		return fmt.Errorf("start: can't create container - %s", err)
 	}
-	containerId := resp.ID
-	shortContainerId := containerId[:6]
-	if err := t.DockerClient().ContainerStart(context.Background(), containerId, types.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("start: can't start container %s - %s", shortContainerId, err)
-	}
-
-	healthyContainer := &helper.StateChangeConfig{
-		Target:       []string{"healthy"},
-		PollInterval: 3 * time.Second,
-		Timeout:      60 * time.Second,
-		Refresh: func() (*helper.StateResult, error) {
-			c, err := t.DockerClient().ContainerInspect(context.Background(), containerId)
-			if err != nil {
-				return nil, err
-			}
-			return &helper.StateResult{
-				Result: c,
-				State:  c.State.Health.Status,
-			}, nil
-		},
-	}
-
-	if _, err := healthyContainer.Wait(); err != nil {
-		return err
-	}
-
-	t.containerId = containerId
+	t.containerId = resp.ID
 	t.hostDataDir = tmpDataDir
-	return nil
+
+	return t.SoftStart()
 }
 
 func (t *TesseraTxManager) Stop() error {
@@ -277,6 +252,33 @@ func (t *TesseraTxManager) makeArgs() []string {
 
 func (t *TesseraTxManager) Address() string {
 	return t.address
+}
+func (t *TesseraTxManager) SoftStart() error {
+	shortContainerId := t.containerId[:6]
+	if err := t.DockerClient().ContainerStart(context.Background(), t.containerId, types.ContainerStartOptions{}); err != nil {
+		return fmt.Errorf("start: can't start container %s - %s", shortContainerId, err)
+	}
+
+	healthyContainer := &helper.StateChangeConfig{
+		Target:       []string{"healthy"},
+		PollInterval: 3 * time.Second,
+		Timeout:      60 * time.Second,
+		Refresh: func() (*helper.StateResult, error) {
+			c, err := t.DockerClient().ContainerInspect(context.Background(), t.containerId)
+			if err != nil {
+				return nil, err
+			}
+			return &helper.StateResult{
+				Result: c,
+				State:  c.State.Health.Status,
+			}, nil
+		},
+	}
+
+	if _, err := healthyContainer.Wait(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewTesseraTxManager(configureFns ...ConfigureFn) (Container, error) {

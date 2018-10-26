@@ -369,21 +369,32 @@ quorum:
 	return nil
 }
 
-func (qn *QuorumNetwork) PerformAction(idx int, action string) error {
-	switch action {
-	case "stop":
+func (qn *QuorumNetwork) PerformAction(idx int, target string, action string) error {
+	if action == "stop" && target == "quorum" {
 		return qn.QuorumNodes[idx].Stop()
-	case "start":
+	}
+	if action == "stop" && target == "tx_manager" {
+		return qn.TxManagers[idx].(Container).Stop()
+	}
+	if action == "start" && target == "quorum" {
 		return qn.QuorumNodes[idx].SoftStart()
-	case "restart":
+	}
+	if action == "start" && target == "tx_manager" {
+		return qn.TxManagers[idx].(Container).SoftStart()
+	}
+	if action == "restart" && target == "quorum" {
 		if err := qn.QuorumNodes[idx].Stop(); err != nil {
 			return err
 		}
 		return qn.QuorumNodes[idx].SoftStart()
-	default:
-		return fmt.Errorf("action [%s] not implemented", action)
 	}
-	return nil
+	if action == "restart" && target == "tx_manager" {
+		if err := qn.TxManagers[idx].(Container).Stop(); err != nil {
+			return err
+		}
+		return qn.TxManagers[idx].(Container).SoftStart()
+	}
+	return fmt.Errorf("not implemented")
 }
 
 func hostnameQuorum(idx int) string {

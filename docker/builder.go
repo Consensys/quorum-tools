@@ -47,8 +47,12 @@ import (
 
 type Container interface {
 	Name() string
+	// create a container then start
 	Start() error
+	// stop and don't remove
 	Stop() error
+	// start without create a container
+	SoftStart() error
 }
 
 var CurrrentBuilder *QuorumBuilder

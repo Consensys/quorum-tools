@@ -139,11 +139,19 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid json", http.StatusBadRequest)
 			return
 		}
-		if action, ok := actionMap["action"]; !ok || !strings.Contains("stop start restart", strings.Replace(action, " ", "", -1)) {
+		action, hasAction := actionMap["action"]
+		target, hasTarget := actionMap["target"]
+		if !hasAction || !strings.Contains("stop start restart", strings.Replace(action, " ", "", -1)) {
 			log.Error("Unknown action", "action", action)
 			http.Error(w, "Unknown action", http.StatusBadRequest)
 			return
-		} else if err := api.QuorumNetwork.PerformAction(idx, action); err != nil {
+		}
+		if !hasTarget || !strings.Contains("quorum tx_manager", strings.Replace(target, " ", "", -1)) {
+			log.Error("Unknown target", "target", target)
+			http.Error(w, "Unknown target", http.StatusBadRequest)
+			return
+		}
+		if err := api.QuorumNetwork.PerformAction(idx, target, action); err != nil {
 			log.Error("Unable to perform action", "action", action, "error", err)
 			http.Error(w, "Unable to perform action", http.StatusInternalServerError)
 			return
