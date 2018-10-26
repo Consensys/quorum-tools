@@ -38,6 +38,7 @@ type nodeOutput struct {
 	Id               int    `json:"id"`
 	Url              string `json:"url"`
 	PrivacyAddress   string `json:"privacy-address"`
+	EnodeAddress     string `json:"enode-address"`
 	ValidatorAddress string `json:"validator-address,omitempty"` // for istanbul
 }
 
@@ -46,7 +47,7 @@ type enrichNodeOutputFn func(quorm *docker.Quorum, txManager docker.TxManager, n
 var (
 	enrichNodeOutputByConsensus = map[string]enrichNodeOutputFn{
 		"istanbul": func(quorum *docker.Quorum, txManager docker.TxManager, nodeOut *nodeOutput) {
-			nodeOut.ValidatorAddress = "0x" + crypto.PubkeyToAddress(quorum.NodeKey().PublicKey).Hex()
+			nodeOut.ValidatorAddress = crypto.PubkeyToAddress(quorum.NodeKey().PublicKey).Hex()
 		},
 	}
 )
@@ -95,8 +96,8 @@ func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to read body", http.StatusInternalServerError)
 		return
 	}
-	newNodes := make([]*docker.QuorumBuilderNode, 0)
-	if err := json.Unmarshal(data, newNodes); err != nil {
+	newNodes := make([]docker.QuorumBuilderNode, 0)
+	if err := json.Unmarshal(data, &newNodes); err != nil {
 		log.Error("Unable to marshall request body", "error", err)
 		http.Error(w, "Invalid json", http.StatusBadRequest)
 		return
@@ -127,6 +128,7 @@ func (api *API) buildNodeOutput(i int) *nodeOutput {
 		Id:             i,
 		Url:            q.Url(),
 		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
+		EnodeAddress:   q.BootstrapData().Enode,
 	}
 	if fn, ok := enrichNodeOutputByConsensus[q.ConsensusAlgorithm()]; ok {
 		fn(q, api.QuorumNetwork.TxManagers[i], nodeOut)

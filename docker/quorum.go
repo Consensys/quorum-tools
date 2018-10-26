@@ -24,8 +24,11 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"text/template"
 	"time"
+
+	"github.com/jpmorganchase/quorum-tools/bootstrap"
 
 	"github.com/docker/go-connections/nat"
 
@@ -50,6 +53,7 @@ type QuorumNetwork struct {
 	NodeCount   int // total number of nodes including stopped/killed nodes
 	TxManagers  []TxManager
 	QuorumNodes []*Quorum
+	Genesis     *core.Genesis
 }
 
 type Quorum struct {
@@ -237,12 +241,99 @@ func (q *Quorum) makeArgs() []string {
 	return args
 }
 
-func (qn *QuorumNetwork) AddNodes(newNodes []*QuorumBuilderNode) ([]int, error) {
-	newIds := make([]int, len(newNodes))
+func (qn *QuorumNetwork) AddNodes(newNodes []QuorumBuilderNode) (newIds []int, retErr error) {
+	newIds = make([]int, len(newNodes))
 	for i := 0; i < len(newIds); i++ {
 		newIds[i] = i + qn.NodeCount
+		qn.NodeCount++
 	}
-	return newIds, nil
+	newLabels := make(map[string]string)
+	for k, v := range CurrrentBuilder.commonLabels {
+		newLabels[k] = v
+	}
+	newLabels["com.quorum.operator.createdAt"] = time.Now().Format(time.RFC1123Z)
+	newBuilder := &QuorumBuilder{
+		Consensus:     CurrrentBuilder.Consensus,
+		Name:          CurrrentBuilder.Name,
+		Genesis:       CurrrentBuilder.Genesis,
+		tmpDir:        CurrrentBuilder.tmpDir,
+		dockerNetwork: CurrrentBuilder.dockerNetwork,
+		pullMux:       CurrrentBuilder.pullMux,
+		dockerClient:  CurrrentBuilder.dockerClient,
+		commonLabels:  newLabels,
+		Nodes:         newNodes,
+	}
+	defer func() {
+		// clean up containers if there's anything happen
+		// as we already added additional tags so it only clean up ones that's created
+		if retErr != nil {
+			newBuilder.Destroy(false)
+		}
+	}()
+	// start tx
+	if err := newBuilder.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
+		ips, err := newBuilder.dockerNetwork.GetFreeIPAddrs(1)
+		if err != nil {
+			return nil, err
+		}
+		txManager, err := newBuilder.prepareTxManager(newIds[idx], qn.NodeCount, node, ips[0].String())
+		if err != nil {
+			return nil, err
+		}
+		qn.TxManagers = append(qn.TxManagers, txManager.(TxManager))
+		return txManager, nil
+	}); err != nil {
+		retErr = err
+		return
+	}
+	bsNodes := make([]*bootstrap.Node, qn.NodeCount)
+	for i := 0; i < qn.NodeCount; i++ {
+		if i >= newIds[0] { // this is for new nodes
+			port, err := strconv.Atoi(node.DefaultConfig.P2P.ListenAddr[1:])
+			if err != nil {
+				retErr = err
+				return
+			}
+			ips, err := newBuilder.dockerNetwork.GetFreeIPAddrs(1)
+			if err != nil {
+				retErr = err
+				return
+			}
+			bsNodes[i], err = bootstrap.NewNode(newBuilder.tmpDir, i, ips[0].String(), port)
+			if err != nil {
+				retErr = err
+				return
+			}
+		} else {
+			existingQuorumNode := qn.QuorumNodes[i]
+			bsNodes[i] = &bootstrap.Node{
+				IP:             existingQuorumNode.MyIP(),
+				NodeKey:        existingQuorumNode.NodeKey(),
+				DataDir:        existingQuorumNode.DataDir(),
+				DefaultAccount: existingQuorumNode.DefaultAccount(),
+				Enode:          existingQuorumNode.BootstrapData().Enode,
+				P2PPort:        existingQuorumNode.BootstrapData().P2PPort,
+			}
+		}
+	}
+	// Update permissioned-nodes and static-nodes files in current one
+	if err := bootstrap.WritePermissionedNodes(bsNodes, defaultRaftPort); err != nil {
+		retErr = err
+		return
+	}
+	// start Quorum
+	if err := newBuilder.startContainers(func(idx int, meta QuorumBuilderNode) (Container, error) {
+		q, err := newBuilder.prepareQuorum(newIds[idx], qn.NodeCount, meta, bsNodes[newIds[idx]], qn.TxManagers[newIds[idx]], qn.Genesis)
+		if err != nil {
+			return nil, err
+		}
+		qn.QuorumNodes = append(qn.QuorumNodes, q.(*Quorum))
+		return q, nil
+	}); err != nil {
+		retErr = err
+		return
+	}
+	return
 }
 
 func (qn *QuorumNetwork) WriteNetworkConfigurationYAML(file io.Writer) error {

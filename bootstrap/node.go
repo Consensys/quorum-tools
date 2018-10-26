@@ -34,8 +34,8 @@ type Node struct {
 	DataDir        *DataDir
 }
 
-func NewNode(tmpDir string, ip string, port int) (*Node, error) {
-	datadir, err := NewDataDir(tmpDir)
+func NewNode(tmpDir string, idx int, ip string, port int) (*Node, error) {
+	datadir, err := NewDataDir(tmpDir, idx)
 	if err != nil {
 		return nil, err
 	}

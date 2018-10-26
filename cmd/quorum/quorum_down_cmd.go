@@ -20,6 +20,7 @@
 package quorum
 
 import (
+	"github.com/jpmorganchase/quorum-tools/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -31,5 +32,5 @@ var downCmd = &cobra.Command{
 }
 
 func executeDestroyCmd(_ *cobra.Command, _ []string) error {
-	return builder.Destroy()
+	return docker.CurrrentBuilder.Destroy(true)
 }

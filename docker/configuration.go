@@ -31,7 +31,6 @@ const (
 	CfgKeyDockerClient         = "DockerClient"
 	CfgKeyDockerImage          = "DockerImage"
 	CfgKeyDockerNetwork        = "DockerNetwork"
-	CfgKeyMyIP                 = "MyIP"
 	CfgKeyConfig               = "Config"
 	CfgKeyNodeIndex            = "NodeIndex"
 	CfgKeyTxManagerPublicKeys  = "TxManagerPublicKeys"
@@ -40,13 +39,12 @@ const (
 	CfgKeyProvisionId          = "ProvisionId"
 	CfgKeyNodeCount            = "NodeCount"
 	CfgKeyTempDir              = "TempDir"
-	CfgKeyDefaultAccount       = "DefaultAccount"
-	CfgKeyDataDir              = "DataDir"
 	CfgKeyGenesis              = "Genesis"
 	CfgKeyConsensusGetArgs     = "ConsensusGethArgs"
 	CfgKeyConsensusAlgorithm   = "ConsensusAlgorithm"
 	CfgKeyTxManager            = "TxManager"
-	CfgKeyNodeKey              = "NodeKey"
+	CfgKeyBootstrapData        = "BootstrapData"
+	CfgKeyMyIP                 = "MyIP"
 )
 
 type ConfigureFn func(c Configurable)
@@ -112,11 +110,11 @@ func (dc *DefaultConfigurable) TempDir() string {
 }
 
 func (dc *DefaultConfigurable) DefaultAccount() *bootstrap.Account {
-	return dc.configuration[CfgKeyDefaultAccount].(*bootstrap.Account)
+	return dc.BootstrapData().DefaultAccount
 }
 
 func (dc *DefaultConfigurable) DataDir() *bootstrap.DataDir {
-	return dc.configuration[CfgKeyDataDir].(*bootstrap.DataDir)
+	return dc.BootstrapData().DataDir
 }
 
 func (dc *DefaultConfigurable) Genesis() *core.Genesis {
@@ -136,7 +134,11 @@ func (dc *DefaultConfigurable) TxManager() TxManager {
 }
 
 func (dc *DefaultConfigurable) NodeKey() *ecdsa.PrivateKey {
-	return dc.configuration[CfgKeyNodeKey].(*ecdsa.PrivateKey)
+	return dc.BootstrapData().NodeKey
+}
+
+func (dc *DefaultConfigurable) BootstrapData() *bootstrap.Node {
+	return dc.configuration[CfgKeyBootstrapData].(*bootstrap.Node)
 }
 
 func ConfigureNodeIndex(idx int) ConfigureFn {
@@ -181,12 +183,6 @@ func ConfigureProvisionId(id string) ConfigureFn {
 	}
 }
 
-func ConfigureMyIP(ip string) ConfigureFn {
-	return func(c Configurable) {
-		c.Set(CfgKeyMyIP, ip)
-	}
-}
-
 func ConfigureNodeCount(n int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeCount, n)
@@ -196,18 +192,6 @@ func ConfigureNodeCount(n int) ConfigureFn {
 func ConfigureTempDir(d string) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyTempDir, d)
-	}
-}
-
-func ConfigureDefaultAccount(acc *bootstrap.Account) ConfigureFn {
-	return func(c Configurable) {
-		c.Set(CfgKeyDefaultAccount, acc)
-	}
-}
-
-func ConfigureDataDir(dd *bootstrap.DataDir) ConfigureFn {
-	return func(c Configurable) {
-		c.Set(CfgKeyDataDir, dd)
 	}
 }
 
@@ -229,14 +213,21 @@ func ConfigureConsensusAlgorithm(algo string) ConfigureFn {
 	}
 }
 
+func ConfigureMyIP(ip string) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyMyIP, ip)
+	}
+}
+
 func ConfigureTxManager(t TxManager) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyTxManager, t)
 	}
 }
 
-func ConfigureNodeKey(k *ecdsa.PrivateKey) ConfigureFn {
+func ConfigureBootstrapData(bs *bootstrap.Node) ConfigureFn {
 	return func(c Configurable) {
-		c.Set(CfgKeyNodeKey, k)
+		c.Set(CfgKeyBootstrapData, bs)
+		ConfigureMyIP(bs.IP)
 	}
 }

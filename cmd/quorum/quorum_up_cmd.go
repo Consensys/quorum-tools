@@ -20,6 +20,7 @@
 package quorum
 
 import (
+	"github.com/jpmorganchase/quorum-tools/docker"
 	"github.com/jpmorganchase/quorum-tools/operator"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +47,7 @@ func init() {
 }
 
 func executeUpCmd(cmd *cobra.Command, args []string) error {
-	qn, err := builder.Build(export)
+	qn, err := docker.CurrrentBuilder.Build(export)
 	if err != nil {
 		return err
 	}

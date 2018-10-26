@@ -29,6 +29,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/core"
+
 	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/jpmorganchase/quorum-tools/bootstrap"
@@ -49,9 +51,30 @@ type Container interface {
 	Stop() error
 }
 
+var CurrrentBuilder *QuorumBuilder
+
 type QuorumBuilderConsensus struct {
 	Name   string            `yaml:"name"`
 	Config map[string]string `yaml:"config"`
+}
+
+func (qbc *QuorumBuilderConsensus) toGethArgs() (map[string]string, error) {
+	consensusGethArgs := make(map[string]string)
+	if a, ok := qbc.Config["geth_args"]; ok {
+		args := strings.Split(strings.TrimSpace(a), " ")
+		for _, arg := range args {
+			parts := strings.Split(strings.TrimSpace(arg), "=")
+			switch l := len(parts); l {
+			case 1:
+				consensusGethArgs[strings.TrimSpace(parts[0])] = ""
+			case 2:
+				consensusGethArgs[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			default:
+				return nil, fmt.Errorf("consensus config: invalid geth arg %s", arg)
+			}
+		}
+	}
+	return consensusGethArgs, nil
 }
 
 type QuorumBuilderNodeDocker struct {
@@ -69,8 +92,6 @@ type QuorumBuilder struct {
 	Genesis   string                 `yaml:"genesis"`
 	Consensus QuorumBuilderConsensus `yaml:"consensus"`
 	Nodes     []QuorumBuilderNode    `yaml:",flow"`
-
-	Export string
 
 	commonLabels  map[string]string
 	dockerClient  *client.Client
@@ -115,7 +136,7 @@ func (qb *QuorumBuilder) Build(export string) (*QuorumNetwork, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := qb.startQuorums(txManagers)
+	nodes, genesis, err := qb.startQuorums(txManagers)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +144,7 @@ func (qb *QuorumBuilder) Build(export string) (*QuorumNetwork, error) {
 		TxManagers:  txManagers,
 		QuorumNodes: nodes,
 		NodeCount:   len(nodes),
+		Genesis:     genesis,
 	}
 	switch export {
 	case "":
@@ -150,21 +172,8 @@ func (qb *QuorumBuilder) startTxManagers() ([]TxManager, error) {
 	}
 	txManagers := make([]TxManager, nodeCount)
 	if err := qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
-		if err := qb.pullImage(node.TxManager.Image); err != nil {
-			return nil, err
-		}
-		txManagerContainer, err := NewTesseraTxManager(
-			ConfigureTempDir(qb.tmpDir),
-			ConfigureNodeCount(nodeCount),
-			ConfigureMyIP(ips[idx].String()),
-			ConfigureNodeIndex(idx),
-			ConfigureProvisionId(qb.Name),
-			ConfigureDockerClient(qb.dockerClient),
-			ConfigureNetwork(qb.dockerNetwork),
-			ConfigureDockerImage(node.TxManager.Image),
-			ConfigureConfig(node.TxManager.Config),
-			ConfigureLabels(qb.commonLabels),
-		)
+		myIP := ips[idx].String()
+		txManagerContainer, err := qb.prepareTxManager(idx, nodeCount, node, myIP)
 		if err != nil {
 			return nil, err
 		}
@@ -176,82 +185,46 @@ func (qb *QuorumBuilder) startTxManagers() ([]TxManager, error) {
 	return txManagers, nil
 }
 
-func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) ([]*Quorum, error) {
+func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) ([]*Quorum, *core.Genesis, error) {
 	nodeCount := len(qb.Nodes)
 	log.Info("Start Quorum nodes", "count", nodeCount, "consensus", qb.Consensus.Name)
 	quorums := make([]*Quorum, nodeCount)
 	ips, err := qb.dockerNetwork.GetFreeIPAddrs(nodeCount)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	nodes := make([]*bootstrap.Node, nodeCount)
+	bsNodes := make([]*bootstrap.Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		port, err := strconv.Atoi(node.DefaultConfig.P2P.ListenAddr[1:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		nodes[i], err = bootstrap.NewNode(qb.tmpDir, ips[i].String(), port)
+		bsNodes[i], err = bootstrap.NewNode(qb.tmpDir, i, ips[i].String(), port)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	if err := bootstrap.WritePermissionedNodes(nodes, defaultRaftPort); err != nil {
-		return nil, err
+	if err := bootstrap.WritePermissionedNodes(bsNodes, defaultRaftPort); err != nil {
+		return nil, nil, err
 	}
-	genesis, err := bootstrap.NewGenesis(nodes, qb.Consensus.Name, qb.Consensus.Config)
+	genesis, err := bootstrap.NewGenesis(bsNodes, qb.Consensus.Name, qb.Consensus.Config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	consensusGethArgs := make(map[string]string)
-	if a, ok := qb.Consensus.Config["geth_args"]; ok {
-		args := strings.Split(strings.TrimSpace(a), " ")
-		for _, arg := range args {
-			parts := strings.Split(strings.TrimSpace(arg), "=")
-			switch l := len(parts); l {
-			case 1:
-				consensusGethArgs[strings.TrimSpace(parts[0])] = ""
-			case 2:
-				consensusGethArgs[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
-			default:
-				return nil, fmt.Errorf("consensus config: invalid geth arg %s", arg)
-			}
-		}
-	}
-	if err := qb.startContainers(func(idx int, node QuorumBuilderNode) (Container, error) {
-		if err := qb.pullImage(node.Quorum.Image); err != nil {
-			return nil, err
-		}
-		q, err := NewQuorum(
-			ConfigureTempDir(qb.tmpDir),
-			ConfigureTxManager(txManagers[idx]),
-			ConfigureDefaultAccount(nodes[idx].DefaultAccount),
-			ConfigureGenesis(genesis),
-			ConfigureNodeKey(nodes[idx].NodeKey),
-			ConfigureDataDir(nodes[idx].DataDir),
-			ConfigureConsensusGethArgs(consensusGethArgs),
-			ConfigureConsensusAlgorithm(qb.Consensus.Name),
-			ConfigureNodeCount(nodeCount),
-			ConfigureMyIP(ips[idx].String()),
-			ConfigureNodeIndex(idx),
-			ConfigureProvisionId(qb.Name),
-			ConfigureDockerClient(qb.dockerClient),
-			ConfigureNetwork(qb.dockerNetwork),
-			ConfigureDockerImage(node.Quorum.Image),
-			ConfigureConfig(node.Quorum.Config),
-			ConfigureLabels(qb.commonLabels),
-		)
+	if err := qb.startContainers(func(idx int, meta QuorumBuilderNode) (Container, error) {
+		q, err := qb.prepareQuorum(idx, nodeCount, meta, bsNodes[idx], txManagers[idx], genesis)
 		if err != nil {
 			return nil, err
 		}
 		quorums[idx] = q.(*Quorum)
 		return q, nil
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return quorums, nil
+	return quorums, genesis, nil
 }
 
-func (qb *QuorumBuilder) startContainers(containerFn func(idx int, node QuorumBuilderNode) (Container, error)) error {
+func (qb *QuorumBuilder) startContainers(containerFn func(idx int, meta QuorumBuilderNode) (Container, error)) error {
 	return doWorkInParallel("starting containers", quorumNodesToGeneric(qb.Nodes), func(idx int, el interface{}) error {
 		node := el.(QuorumBuilderNode)
 		c, err := containerFn(idx, node)
@@ -293,9 +266,11 @@ func (qb *QuorumBuilder) pullImage(image string) error {
 	return nil
 }
 
-func (qb *QuorumBuilder) Destroy() error {
-	log.Debug("removing temp directory")
-	os.RemoveAll(qb.tmpDir)
+func (qb *QuorumBuilder) Destroy(includeTmpDir bool) error {
+	if includeTmpDir {
+		log.Debug("removing temp directory")
+		os.RemoveAll(qb.tmpDir)
+	}
 
 	filters := filters.NewArgs()
 	for k, v := range qb.commonLabels {
@@ -328,6 +303,50 @@ func (qb *QuorumBuilder) Destroy() error {
 	}
 
 	return nil
+}
+func (qb *QuorumBuilder) prepareTxManager(idx int, nodeCount int, meta QuorumBuilderNode, ip string) (Container, error) {
+	if err := qb.pullImage(meta.TxManager.Image); err != nil {
+		return nil, err
+	}
+	return NewTesseraTxManager(
+		ConfigureTempDir(qb.tmpDir),
+		ConfigureNodeCount(nodeCount),
+		ConfigureMyIP(ip),
+		ConfigureNodeIndex(idx),
+		ConfigureProvisionId(qb.Name),
+		ConfigureDockerClient(qb.dockerClient),
+		ConfigureNetwork(qb.dockerNetwork),
+		ConfigureDockerImage(meta.TxManager.Image),
+		ConfigureConfig(meta.TxManager.Config),
+		ConfigureLabels(qb.commonLabels),
+	)
+}
+func (qb *QuorumBuilder) prepareQuorum(idx int, nodeCount int, meta QuorumBuilderNode, bs *bootstrap.Node, txManager TxManager, genesis *core.Genesis) (Container, error) {
+	consensusGethArgs, err := qb.Consensus.toGethArgs()
+	if err != nil {
+		return nil, err
+	}
+	if err := qb.pullImage(meta.Quorum.Image); err != nil {
+		return nil, err
+	}
+	return NewQuorum(
+		ConfigureTempDir(qb.tmpDir),
+		ConfigureTxManager(txManager),
+		ConfigureBootstrapData(bs),
+		ConfigureMyIP(bs.IP),
+		ConfigureGenesis(genesis),
+		ConfigureConsensusGethArgs(consensusGethArgs),
+		ConfigureConsensusAlgorithm(qb.Consensus.Name),
+		ConfigureNodeCount(nodeCount),
+		ConfigureNodeIndex(idx),
+		ConfigureProvisionId(qb.Name),
+		ConfigureDockerClient(qb.dockerClient),
+		ConfigureNetwork(qb.dockerNetwork),
+		ConfigureDockerImage(meta.Quorum.Image),
+		ConfigureConfig(meta.Quorum.Config),
+		ConfigureLabels(qb.commonLabels),
+	)
+
 }
 
 func quorumNodesToGeneric(n []QuorumBuilderNode) []interface{} {

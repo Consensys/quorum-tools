@@ -39,19 +39,21 @@ var v1 *apiv1.API
 
 func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
 	log.Info("Start Quorum Network Operator", "listen", listenAddress, "port", port)
+	defer docker.CurrrentBuilder.Destroy(true)
+
 	v1 = &apiv1.API{QuorumNetwork: qn}
 	router := mux.NewRouter()
 	setupHandlers(router)
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", listenAddress, port),
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
-		IdleTimeout:  15 * time.Second,
+		WriteTimeout: 5 * time.Minute,
+		ReadTimeout:  5 * time.Minute,
+		IdleTimeout:  5 * time.Minute,
 		Handler:      router,
 	}
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
-			log.Error("Stop Quorum Network Operator", "reason", err)
+			log.Info("Stop Quorum Network Operator", "reason", err)
 		}
 	}()
 
@@ -77,6 +79,4 @@ func setupHandlers(r *mux.Router) {
 	nodesRouter.HandleFunc("/{idx}", v1.GetNode).Methods("GET")
 	nodesRouter.HandleFunc("", v1.AddNodes).Methods("PUT")
 	nodesRouter.HandleFunc("/", v1.AddNodes).Methods("PUT")
-
-
 }

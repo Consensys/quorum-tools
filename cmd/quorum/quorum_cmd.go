@@ -32,8 +32,6 @@ type cmdArgs struct {
 
 var cmdCfg = new(cmdArgs)
 
-var builder *docker.QuorumBuilder
-
 var supportedConsensus = map[string]struct{}{
 	"raft":     {},
 	"istanbul": {},
@@ -62,7 +60,7 @@ func (cfg *cmdArgs) validate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer f.Close()
-	builder, err = docker.NewQuorumBuilder(f)
+	docker.CurrrentBuilder, err = docker.NewQuorumBuilder(f)
 	if err != nil {
 		return err
 	}

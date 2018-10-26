@@ -20,6 +20,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -31,8 +32,8 @@ type DataDir struct {
 	GethDir     string
 }
 
-func NewDataDir(tmpDir string) (*DataDir, error) {
-	dir, err := ioutil.TempDir(tmpDir, "qdata-")
+func NewDataDir(tmpDir string, idx int) (*DataDir, error) {
+	dir, err := ioutil.TempDir(tmpDir, fmt.Sprintf("q-%d-", idx))
 	if err != nil {
 		return nil, err
 	}
