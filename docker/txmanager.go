@@ -52,6 +52,8 @@ type TxManager interface {
 	SocketFile() string
 	DataDir() string
 	Address() string
+
+	ContainerId() string
 }
 
 type TesseraTxManager struct {
@@ -61,6 +63,10 @@ type TesseraTxManager struct {
 	containerName string
 	containerId   string
 	hostDataDir   string
+}
+
+func (t *TesseraTxManager) ContainerId() string {
+	return t.containerId
 }
 
 func (t *TesseraTxManager) DataDir() string {

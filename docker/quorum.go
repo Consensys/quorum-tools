@@ -28,6 +28,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/docker/docker/client"
+
 	"github.com/jpmorganchase/quorum-tools/bootstrap"
 
 	"github.com/docker/go-connections/nat"
@@ -50,10 +52,11 @@ const (
 )
 
 type QuorumNetwork struct {
-	NodeCount   int // total number of nodes including stopped/killed nodes
-	TxManagers  []TxManager
-	QuorumNodes []*Quorum
-	Genesis     *core.Genesis
+	NodeCount    int // total number of nodes including stopped/killed nodes
+	TxManagers   []TxManager
+	QuorumNodes  []*Quorum
+	Genesis      *core.Genesis
+	dockerClient *client.Client
 }
 
 type Quorum struct {
@@ -395,6 +398,29 @@ func (qn *QuorumNetwork) PerformAction(idx int, target string, action string) er
 		return qn.TxManagers[idx].(Container).SoftStart()
 	}
 	return fmt.Errorf("not implemented")
+}
+func (qn *QuorumNetwork) StreamLogs(idx int, target string, responseChan chan []byte) error {
+	defer func() {
+		log.Debug("Stop log streaming", "target", target, "idx", idx)
+	}()
+	log.Debug("Start log streaming", "target", target, "idx", idx)
+	containerId := qn.QuorumNodes[idx].containerId
+	if target == "tx_manager" {
+		containerId = qn.TxManagers[idx].ContainerId()
+	}
+
+	resp, err := qn.dockerClient.ContainerLogs(context.Background(), containerId, types.ContainerLogsOptions{
+		ShowStderr: true,
+		ShowStdout: true,
+		Follow:     true,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(&helper.ChanWriter{Chan: responseChan}, resp); err != nil {
+		return err
+	}
+	return nil
 }
 
 func hostnameQuorum(idx int) string {

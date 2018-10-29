@@ -80,4 +80,5 @@ func setupHandlers(r *mux.Router) {
 	nodesRouter.HandleFunc("/", v1.AddNodes).Methods("PUT")
 	nodesRouter.HandleFunc("/{idx}", v1.GetNode).Methods("GET")
 	nodesRouter.HandleFunc("/{idx}", v1.ActionOnNode).Methods("POST")
+	nodesRouter.HandleFunc("/{idx}/{target}/logs", v1.StreamLogs).Methods("GET")
 }

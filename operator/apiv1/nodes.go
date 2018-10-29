@@ -25,6 +25,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jpmorganchase/quorum-tools/docker"
@@ -42,6 +48,39 @@ type nodeOutput struct {
 	ValidatorAddress string `json:"validator-address,omitempty"` // for istanbul
 }
 
+type logConsumer struct {
+	id            string
+	quorumNetwork *docker.QuorumNetwork
+	source        int    // container index to follow
+	sourceType    string // quorum or tx_manager
+
+	conn *websocket.Conn
+
+	receiveChan chan []byte
+	pingPeriod  time.Duration
+	writeWait   time.Duration
+}
+
+type logBroadcaster struct {
+	source        int
+	sourceType    string
+	quorumNetwork *docker.QuorumNetwork
+
+	consumers map[*logConsumer]bool
+
+	broadcastChan  chan []byte
+	registerChan   chan *logConsumer
+	unregisterChan chan *logConsumer
+	stopChan       chan struct{}
+}
+
+type logHub struct {
+	broadcasters   map[int]*logBroadcaster
+	registerChan   chan *logConsumer
+	unregisterChan chan *logConsumer
+	mux            *sync.RWMutex
+}
+
 type enrichNodeOutputFn func(quorm *docker.Quorum, txManager docker.TxManager, nodeOut *nodeOutput)
 
 var (
@@ -50,7 +89,133 @@ var (
 			nodeOut.ValidatorAddress = crypto.PubkeyToAddress(quorum.NodeKey().PublicKey).Hex()
 		},
 	}
+	wsUpgrader      = websocket.Upgrader{}
+	logStreamingHub = &logHub{
+		broadcasters:   make(map[int]*logBroadcaster),
+		registerChan:   make(chan *logConsumer),
+		unregisterChan: make(chan *logConsumer),
+		mux:            new(sync.RWMutex),
+	}
 )
+
+func init() {
+	go logStreamingHub.run()
+}
+
+func (lh *logHub) wait() {
+	lh.mux.Lock()
+	defer lh.mux.Unlock()
+}
+
+func (lh *logHub) run() {
+	lh.mux.Lock()
+	defer lh.mux.Unlock()
+
+	for {
+		select {
+		case c := <-lh.registerChan:
+			if b, ok := lh.broadcasters[c.source]; ok {
+				b.registerChan <- c
+			} else {
+				broadcaster := &logBroadcaster{
+					source:         c.source,
+					sourceType:     c.sourceType,
+					quorumNetwork:  c.quorumNetwork,
+					consumers:      make(map[*logConsumer]bool),
+					broadcastChan:  make(chan []byte),
+					registerChan:   make(chan *logConsumer),
+					unregisterChan: make(chan *logConsumer),
+					stopChan:       make(chan struct{}),
+				}
+				lh.broadcasters[c.source] = broadcaster
+				go broadcaster.run()
+				broadcaster.registerChan <- c
+			}
+		case c := <-lh.unregisterChan:
+			if b, ok := lh.broadcasters[c.source]; ok {
+				b.unregisterChan <- c
+			}
+		}
+	}
+}
+
+func (lb *logBroadcaster) stop() {
+	lb.stopChan <- struct{}{}
+}
+
+func (lb *logBroadcaster) run() {
+	// start container streaming
+	go func() {
+		if err := lb.quorumNetwork.StreamLogs(lb.source, lb.sourceType, lb.broadcastChan); err != nil {
+			log.Error("Unable to stream logs", "error", err)
+		}
+	}()
+	for {
+		select {
+		case c := <-lb.registerChan:
+			log.Debug("Register new log consumer", "target", c.sourceType, "idx", c.source, "consumer", c.id)
+			lb.consumers[c] = true
+		case c := <-lb.unregisterChan:
+			if _, ok := lb.consumers[c]; ok {
+				log.Debug("Unregister log consumer", "target", c.sourceType, "idx", c.source, "consumer", c.id)
+				delete(lb.consumers, c)
+				c.unregister()
+			}
+		case msg := <-lb.broadcastChan:
+			for c := range lb.consumers {
+				go func(_c *logConsumer) {
+					defer func() {
+						if x := recover(); x != nil {
+							lb.unregisterChan <- _c
+						}
+					}()
+					_c.receiveChan <- msg
+				}(c)
+			}
+		case <-lb.stopChan:
+			close(lb.broadcastChan)
+			return
+		}
+	}
+}
+
+func (lc *logConsumer) unregister() {
+	defer func() {
+		recover()
+	}()
+	close(lc.receiveChan)
+}
+
+func (lc *logConsumer) run() {
+	logger := log.New("target", lc.sourceType, "idx", lc.source, "consumer", lc.id)
+	ticker := time.NewTicker(lc.pingPeriod)
+	defer func() {
+		logger.Debug("Log consumer exited")
+		close(lc.receiveChan)
+		ticker.Stop()
+		lc.conn.Close()
+	}()
+	for {
+		select {
+		case msg, ok := <-lc.receiveChan:
+			if !ok {
+				logger.Debug("Receive Channel closed for log consumer")
+				return
+			}
+			lc.conn.SetWriteDeadline(time.Now().Add(lc.writeWait))
+			if err := lc.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				logger.Debug("Write message to websocket failed", "error", err)
+				return
+			}
+		case <-ticker.C:
+			lc.conn.SetWriteDeadline(time.Now().Add(lc.writeWait))
+			if err := lc.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				logger.Debug("Ping error", "error", err)
+				return
+			}
+		}
+	}
+}
 
 // GET /v1/nodes
 func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +323,45 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		http.Error(w, "Missing node index", http.StatusBadRequest)
+	}
+}
+
+// Websocket /v1/nodes/{idx}/{target}/logs
+func (api *API) StreamLogs(w http.ResponseWriter, r *http.Request) {
+	pathVars := mux.Vars(r)
+	if a, ok := pathVars["idx"]; ok {
+		idx, err := strconv.Atoi(a)
+		if err != nil || idx >= api.QuorumNetwork.NodeCount {
+			http.Error(w, "Invalid node index", http.StatusBadRequest)
+			return
+		}
+		target, hasTarget := pathVars["target"]
+		if !hasTarget || !strings.Contains("quorum tx_manager", strings.Replace(target, " ", "", -1)) {
+			log.Error("Unknown target", "target", target)
+			http.Error(w, "Unknown target", http.StatusBadRequest)
+			return
+		}
+		clientId := uuid.New().String()
+		if conn, err := wsUpgrader.Upgrade(w, r, http.Header{"X-Consumer": []string{clientId}}); err != nil {
+			log.Error("Unable to initialize websocket connection", "error", err)
+			http.Error(w, "Unable to initialize websocket connection", http.StatusInternalServerError)
+			return
+		} else {
+			client := &logConsumer{
+				id:            clientId,
+				quorumNetwork: api.QuorumNetwork,
+				source:        idx,
+				sourceType:    target,
+				receiveChan:   make(chan []byte),
+				conn:          conn,
+				pingPeriod:    3 * time.Second,
+				writeWait:     10 * time.Second,
+			}
+			logStreamingHub.registerChan <- client
+			go client.run()
+			defer func() { logStreamingHub.unregisterChan <- client }()
+			logStreamingHub.wait()
+		}
 	}
 }
 

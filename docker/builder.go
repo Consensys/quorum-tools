@@ -145,10 +145,11 @@ func (qb *QuorumBuilder) Build(export string) (*QuorumNetwork, error) {
 		return nil, err
 	}
 	qn := &QuorumNetwork{
-		TxManagers:  txManagers,
-		QuorumNodes: nodes,
-		NodeCount:   len(nodes),
-		Genesis:     genesis,
+		TxManagers:   txManagers,
+		QuorumNodes:  nodes,
+		NodeCount:    len(nodes),
+		Genesis:      genesis,
+		dockerClient: qb.dockerClient,
 	}
 	switch export {
 	case "":
