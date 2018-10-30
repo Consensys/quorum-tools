@@ -1,8 +1,20 @@
-A CLI (`qctl`) provides a set of tools for Quorum Network management (using [Docker](https://www.docker.com/)):
-* Bring up a simple Quorum Network
-* Bring up a managed Quorum Network by exposing additional APIs: add new Quorum nodes, start/stop existing Quorum nodes
-* Istanbul BFT utilities: encode/decode `extraData`
+## Summary
+A CLI (`qctl`) provides a set of tools for Quorum Network management (using [Docker](https://www.docker.com/), minium 4G RAM for 7-node network):
+* Bring up a simple Quorum Network. E.g.:
+  ```
+  qctl quorum -f samples/7nodes-istanbul.yml up
+  qctl quorum -f samples/7nodes-intanbul.yaml down
+  ```
+* Bring up a managed Quorum Network by exposing [additional APIs](#operator-apis): add new Quorum nodes, start/stop existing Quorum nodes
+  ```
+  qctl quorum -f samples/7nodes-istanbul.yml up --enable-operator
+  <Ctrl+C> to stop and destroy the network
+  ```
+* Istanbul BFT utilities: encode/decode `extraData` - **TODO**
 
+And more! Just run `qctl --help` for help and additional information
+
+## Table of Contents
 
 [Getting started](#getting-started)
 
@@ -35,7 +47,7 @@ See [samples](samples/)
 
 ### Operator APIs
 
-When bringin up a managed Quorum Network with `--enable-operator` flag, the following APIs are exposed
+When bringing up a managed Quorum Network with `--enable-operator` flag, the following APIs are exposed
 
 #### `GET /v1/nodes`
 **Response:**
@@ -50,7 +62,7 @@ When bringin up a managed Quorum Network with `--enable-operator` flag, the foll
     ...
 ]
 ```
-If `Accept` header has value `application/yaml`, the response would be
+If request header `Accept` has value `application/yaml`, the response would be
 ```yaml
 quorum:
   nodes:
@@ -60,6 +72,7 @@ quorum:
     Node2:
       privacy-address: QfeDAys9MPDs2XHExtc84jKGHxZg/aj52DTh0vtA3Xc=
       url: http://localhost:22001
+    ...
 ```
 
 #### `PUT /v1/nodes`
