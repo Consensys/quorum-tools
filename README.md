@@ -27,7 +27,7 @@ A CLI (`qctl`) provides a set of tools for Quorum Network management (using [Doc
 
 ### How to
 
-See [docs/qctl.md](docs/qctl.md]) for details of different commands
+See [docs/qctl.md](docs/qctl.md) for details of different commands
 
 ### Quorum Network Configuration
 
