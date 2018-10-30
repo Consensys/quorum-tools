@@ -89,7 +89,7 @@ var genesisConfigurerByConsensus = map[string]configureGenesisFn{
 	},
 }
 
-func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]string) (*core.Genesis, error) {
+func NewGenesis(nodes []*Node, enrichGenesisFn func(genesis *core.Genesis) error, consensus string, consensusConfig map[string]string) (*core.Genesis, error) {
 	genesis := &core.Genesis{
 		Timestamp:  uint64(time.Now().Unix()),
 		GasLimit:   InitGasLimit,
@@ -109,6 +109,11 @@ func NewGenesis(nodes []*Node, consensus string, consensusConfig map[string]stri
 	}
 	if fn, ok := genesisConfigurerByConsensus[consensus]; ok {
 		if err := fn(genesis, nodes, consensusConfig); err != nil {
+			return nil, err
+		}
+	}
+	if enrichGenesisFn!= nil {
+		if err := enrichGenesisFn(genesis); err != nil {
 			return nil, err
 		}
 	}

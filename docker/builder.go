@@ -29,6 +29,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/ethereum/go-ethereum/core"
 
 	"github.com/ethereum/go-ethereum/node"
@@ -91,9 +94,13 @@ type QuorumBuilderNode struct {
 	TxManager QuorumBuilderNodeDocker `yaml:"tx_manager" json:"tx_manager"`
 }
 
+type QuorumBuilderGenesis struct {
+	Alloc map[string]string `yaml:"alloc"`
+}
+
 type QuorumBuilder struct {
 	Name      string                 `yaml:"name"`
-	Genesis   string                 `yaml:"genesis"`
+	Genesis   QuorumBuilderGenesis   `yaml:"genesis"`
 	Consensus QuorumBuilderConsensus `yaml:"consensus"`
 	Nodes     []QuorumBuilderNode    `yaml:",flow"`
 
@@ -212,7 +219,19 @@ func (qb *QuorumBuilder) startQuorums(txManagers []TxManager) ([]*Quorum, *core.
 	if err := bootstrap.WritePermissionedNodes(bsNodes, defaultRaftPort); err != nil {
 		return nil, nil, err
 	}
-	genesis, err := bootstrap.NewGenesis(bsNodes, qb.Consensus.Name, qb.Consensus.Config)
+	genesis, err := bootstrap.NewGenesis(bsNodes, func(genesis *core.Genesis) error {
+		if qb.Genesis.Alloc != nil {
+			for a, v := range qb.Genesis.Alloc {
+				accountAddress := common.HexToAddress(a)
+				balance, err := hexutil.DecodeBig(v)
+				if err != nil {
+					return fmt.Errorf("can't decode hex value %s", v)
+				}
+				genesis.Alloc[accountAddress] = core.GenesisAccount{Balance: balance}
+			}
+		}
+		return nil
+	}, qb.Consensus.Name, qb.Consensus.Config)
 	if err != nil {
 		return nil, nil, err
 	}

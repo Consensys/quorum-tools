@@ -14,6 +14,9 @@ template-node-default: &node-default
 
 # main configuration
 name: 7nodes-example
+genesis:
+  alloc:
+    "0x00000000000102310": "0xf000000000"
 consensus:
   name: istanbul
   config:
