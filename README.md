@@ -40,7 +40,7 @@ When bringin up a managed Quorum Network with `--enable-operator` flag, the foll
         "id": "0",
         "url": "http://localhost:22000",
         "privacy-address": "xyz=",
-        "validator-address": ""0xaf234abcd
+        "validator-address": "0xaf234abcd"
     },
     ...
 ]
@@ -86,7 +86,7 @@ quorum:
         "id": "7",
         "url": "http://localhost:22000",
         "privacy-address": "xyz=",
-        "validator-address": ""0xaf234abcd
+        "validator-address": "0xaf234abcd"
     },
     ...
 ]
@@ -97,7 +97,7 @@ quorum:
 **Request:**
 ```json
 {
-  "target": "quorum/tx_manager"
+  "target": "quorum/tx_manager",
   "action": "stop/start/restart"
 }
 ```

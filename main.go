@@ -21,6 +21,11 @@ package main
 
 import "github.com/jpmorganchase/quorum-tools/cmd"
 
+var (
+	Version string
+	Commit  string
+)
+
 func main() {
-	cmd.Execute()
+	cmd.Execute(Version, Commit)
 }

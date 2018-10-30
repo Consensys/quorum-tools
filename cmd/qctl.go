@@ -21,8 +21,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra/doc"
 	"os"
+
+	"github.com/spf13/cobra/doc"
 
 	"github.com/ethereum/go-ethereum/log"
 
@@ -32,7 +33,9 @@ import (
 )
 
 var (
-	Verbosity int
+	verbosity int
+	version   string
+	commit    string
 )
 
 var rootCmd = &cobra.Command{
@@ -41,11 +44,11 @@ var rootCmd = &cobra.Command{
 	Long: `Quorum is a permissioned implementation of Ethereum supporting data privacy.
 qctl provides a set of tools to work with Quorum.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if log.Lvl(Verbosity) == log.LvlTrace {
+		if log.Lvl(verbosity) == log.LvlTrace {
 			log.PrintOrigins(true)
 		}
 		glogger := log.NewGlogHandler(log.StreamHandler(os.Stdout, log.TerminalFormat(false)))
-		glogger.Verbosity(log.Lvl(Verbosity))
+		glogger.Verbosity(log.Lvl(verbosity))
 		glogger.BacktraceAt("")
 		glogger.Vmodule("")
 		log.Root().SetHandler(glogger)
@@ -54,11 +57,22 @@ qctl provides a set of tools to work with Quorum.`,
 }
 
 func init() {
-	rootCmd.PersistentFlags().IntVarP(&Verbosity, "verbosity", "v", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
+	rootCmd.PersistentFlags().IntVarP(&verbosity, "verbosity", "v", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
 	rootCmd.AddCommand(quorum.Cmd)
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Display version of this tool",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("Version:", version)
+			fmt.Println(" Commit:", commit)
+			return nil
+		},
+	})
 }
 
-func Execute() {
+func Execute(v, c string) {
+	version = v
+	commit = c
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
