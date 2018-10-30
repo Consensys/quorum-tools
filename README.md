@@ -3,15 +3,20 @@ A CLI (`qctl`) provides a set of tools for Quorum Network management (using [Doc
 * Bring up a managed Quorum Network by exposing additional APIs: add new Quorum nodes, start/stop existing Quorum nodes
 * Istanbul BFT utilities: encode/decode `extraData`
 
-- [Getting started](#getting-started)
-- [How to](#how-to)
-- [Quorum Network Configuration](#quorum-network-configuration)
-- [Operator APIs](#operator-apis)
-  * [`GET /v1/nodes`](#get-v1-nodes) - retrieve nodes
-  * [`PUT /v1/nodes`](#put-v1-nodes) - create new nodes to existing network. This only bring up new nodes and configure permissioned/discovery. Other actions like proposing Istanbul validators or add RAFT peers must be done seperately via JSON RPC
-  * [`POST /v1/nodes/{idx}`](#post-v1-nodes-idx) - perform an action on a node
-  * [`GET /v1/nodes/{idx}/{target}/logs`](#xx) - Websocket endpoint to stream logs from a node
-- [Development](#development)
+
+[Getting started](#getting-started)
+
+[How to](#how-to)
+
+[Quorum Network Configuration](#quorum-network-configuration)
+
+[Operator APIs](#operator-apis)
+  * [`GET /v1/nodes`](#get-v1nodes) - retrieve nodes
+  * [`PUT /v1/nodes`](#put-v1nodes) - create new nodes to existing network. This only bring up new nodes and configure permissioned/discovery. Other actions like proposing Istanbul validators or add RAFT peers must be done seperately via JSON RPC
+  * [`POST /v1/nodes/{idx}`](#post-v1nodesidx) - perform an action on a node
+  * [`GET /v1/nodes/{idx}/{target}/logs`](#get-v1nodesidxtargetlogs) - Websocket endpoint to stream logs from a node
+
+[Development](#development)
 
 ### Getting started
 
@@ -92,7 +97,7 @@ quorum:
 ]
 ```
 
-#### `POST /nodes/{idx}`
+#### `POST /v1/nodes/{idx}`
 
 **Request:**
 ```json
@@ -101,6 +106,10 @@ quorum:
   "action": "stop/start/restart"
 }
 ```
+
+#### `GET /v1/nodes/{idx}/{target}/logs`
+
+Logs are streamed to response body
 
 ### Development
 
