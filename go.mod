@@ -7,6 +7,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20181002214814-33151c4543a7 // indirect
 	github.com/btcsuite/btcd v0.0.0-20181013004428-67e573d211ac // indirect
 	github.com/cespare/cp v1.0.0 // indirect
+	github.com/cpuguy83/go-md2man v1.0.8 // indirect
 	github.com/docker/distribution v2.7.0-rc.0+incompatible // indirect
 	github.com/docker/docker v0.0.0-20170504205632-89658bed64c2
 	github.com/docker/go-connections v0.4.0
@@ -37,6 +38,8 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/rs/cors v1.6.0 // indirect
+	github.com/russross/blackfriday v1.5.2 // indirect
+	github.com/shurcooL/sanitized_anchor_name v0.0.0-20170918181015-86672fcb3f95 // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stevvooe/resumable v0.0.0-20180830230917-22b14a53ba50 // indirect

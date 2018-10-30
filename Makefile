@@ -12,3 +12,6 @@ tools:
 
 build: tools
 	@gox -os="${XC_OS}" -arch="${XC_ARCH}" -output "build/{{.OS}}_{{.Arch}}/qctl" .
+
+docs:
+	@go run docs/main.go

@@ -21,6 +21,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/spf13/cobra/doc"
 	"os"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -62,4 +63,8 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func GenDoc(dir string) error {
+	return doc.GenMarkdownTree(rootCmd, dir)
 }
