@@ -181,7 +181,7 @@ func (lb *logBroadcaster) run() {
 
 func (lc *logConsumer) unregister() {
 	defer func() {
-		recover()
+		recover() // race condition when we close the channel twice
 	}()
 	close(lc.receiveChan)
 }
@@ -203,7 +203,18 @@ func (lc *logConsumer) run() {
 				return
 			}
 			lc.conn.SetWriteDeadline(time.Now().Add(lc.writeWait))
-			if err := lc.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			w, err := lc.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				logger.Debug("Unable to get next websocket writer", "error", err)
+				return
+			}
+			w.Write(msg)
+			for i := 0; i < len(lc.receiveChan); i++ {
+				if msg, ok := <-lc.receiveChan; ok {
+					w.Write(msg)
+				}
+			}
+			if err := w.Close(); err != nil {
 				logger.Debug("Write message to websocket failed", "error", err)
 				return
 			}
