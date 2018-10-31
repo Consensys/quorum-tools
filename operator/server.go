@@ -22,6 +22,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -38,7 +39,6 @@ import (
 var v1 *apiv1.API
 
 func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
-	log.Info("Start Quorum Network Operator", "listen", listenAddress, "port", port)
 	defer func() {
 		if docker.CurrrentBuilder != nil {
 			docker.CurrrentBuilder.Destroy(true)
@@ -59,11 +59,25 @@ func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
 		IdleTimeout:  5 * time.Minute,
 		Handler:      router,
 	}
-	go func() {
-		if err := server.ListenAndServe(); err != nil {
-			log.Info("Stop Quorum Network Operator", "reason", err)
+	if port == 0 {
+		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", listenAddress, port))
+		if err != nil {
+			return err
 		}
-	}()
+		port = listener.Addr().(*net.TCPAddr).Port
+		go func() {
+			if err := server.Serve(listener); err != nil {
+				log.Info("Stop Quorum Network Operator", "reason", err)
+			}
+		}()
+	} else {
+		go func() {
+			if err := server.ListenAndServe(); err != nil {
+				log.Info("Stop Quorum Network Operator", "reason", err)
+			}
+		}()
+	}
+	log.Info("Start Quorum Network Operator", "listen", listenAddress, "port", port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

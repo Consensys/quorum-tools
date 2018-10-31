@@ -48,9 +48,9 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 	}
 	// run qctl quorum -f <tmpFile> up --enable-operator --operator-port 0
 	qctlCommand := exec.Command(qctl, "quorum", "-f", tmpFile.Name(), "up", "--enable-operator", "--operator-port", "0")
-	qctlCommand.Stdout = w
-	qctlCommand.Stderr = w
-	if err := qctlCommand.Run(); err != nil {
+	qctlCommand.Stdout = os.Stdout
+	qctlCommand.Stderr = os.Stdin
+	if err := qctlCommand.Start(); err != nil {
 		log.Info("Command run failed", "error", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
