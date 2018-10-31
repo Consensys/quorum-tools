@@ -14,8 +14,9 @@ build:
 	@echo Done!
 	@ls build/*
 
-docs:
+docs: clean
 	@go run docs/main.go
 
 clean:
 	@rm -rf build/
+	@rm -rf docs/*.md

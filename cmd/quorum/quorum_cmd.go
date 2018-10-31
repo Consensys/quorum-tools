@@ -49,6 +49,7 @@ func init() {
 
 	Cmd.AddCommand(upCmd)
 	Cmd.AddCommand(downCmd)
+	Cmd.AddCommand(creatorCmd)
 }
 
 func (cfg *cmdArgs) validate(cmd *cobra.Command, args []string) error {

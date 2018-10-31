@@ -17,12 +17,30 @@
  * under the License.
  */
 
-package main
+package quorum
 
 import (
-	"github.com/jpmorganchase/quorum-tools/cmd"
+	"github.com/jpmorganchase/quorum-tools/operator"
+	"github.com/spf13/cobra"
 )
 
-func main() {
-	cmd.GenDoc("./docs")
+var creatorCmd = &cobra.Command{
+	Use:   "creator",
+	Short: "Start a managed Quorum Network",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Root().PersistentPreRunE(cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return operator.Start(creatorBindAddress, creatorPort, nil)
+	},
+}
+
+var (
+	creatorPort        int
+	creatorBindAddress string
+)
+
+func init() {
+	creatorCmd.Flags().IntVarP(&creatorPort, "port", "p", 8800, "Port listening")
+	creatorCmd.Flags().StringVarP(&creatorBindAddress, "address", "a", "0.0.0.0", "Listing to address")
 }
