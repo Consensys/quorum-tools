@@ -2,6 +2,7 @@
 template-quorum-miner-default: &quorum-miner-default
   image: quorumengineering/quorum:latest
   config:
+    permissioned:
     mine:
     minerthreads: 1
     verbosity: 5

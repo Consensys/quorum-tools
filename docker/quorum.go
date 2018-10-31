@@ -190,7 +190,7 @@ func (q *Quorum) makeArgs() []string {
 	combinedConfig["--networkid"] = "2018"
 	combinedConfig["--identity"] = hostnameQuorum(q.Index())
 	// combinedConfig["--ipcdisable"] = ""
-	combinedConfig["--permissioned"] = ""
+	// combinedConfig["--permissioned"] = ""
 	// now override with config from Node
 	for k, v := range q.Config() {
 		combinedConfig[fmt.Sprintf("--%s", k)] = v

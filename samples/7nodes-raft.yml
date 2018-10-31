@@ -2,6 +2,7 @@
 template-quorum-default: &quorum-default
   image: quorumengineering/quorum:latest
   config:
+    permissioned:
     verbosity: 5
 template-tessera-default: &tessera-default
   image: quorumengineering/tessera:latest
@@ -14,8 +15,8 @@ template-node-default: &node-default
 name: 7nodes-example
 consensus:
   name: raft
-  config:
-    geth_args:
+#  config:
+#    geth_args:
 nodes:
 - *node-default
 - *node-default
