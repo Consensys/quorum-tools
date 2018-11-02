@@ -24,9 +24,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var creatorCmd = &cobra.Command{
-	Use:   "creator",
-	Short: "Start a managed Quorum Network",
+var bootCmd = &cobra.Command{
+	Use:   "boot",
+	Short: "Start a server which can create a managed Quorum Network on demand",
+	Long:  "Server provides an API to create a managed Quorum Network",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Root().PersistentPreRunE(cmd, args)
 	},
@@ -41,6 +42,6 @@ var (
 )
 
 func init() {
-	creatorCmd.Flags().IntVarP(&creatorPort, "port", "p", 8800, "Port listening")
-	creatorCmd.Flags().StringVarP(&creatorBindAddress, "address", "a", "0.0.0.0", "Listing to address")
+	bootCmd.Flags().IntVarP(&creatorPort, "port", "p", 8800, "Port listening")
+	bootCmd.Flags().StringVarP(&creatorBindAddress, "address", "a", "0.0.0.0", "Listing to address")
 }

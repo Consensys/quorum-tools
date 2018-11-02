@@ -19,8 +19,26 @@
 
 package apiv1
 
-import "github.com/jpmorganchase/quorum-tools/docker"
+import (
+	"sync"
+
+	"github.com/jpmorganchase/quorum-tools/docker"
+)
 
 type API struct {
 	QuorumNetwork *docker.QuorumNetwork
+	Port          int
+	Mux           *sync.RWMutex
+	startPort     int
+}
+
+func (api *API) getFreePort() int {
+	api.Mux.Lock()
+	defer api.Mux.Unlock()
+	if api.startPort == 0 {
+		api.startPort = api.Port + 1
+	} else {
+		api.startPort += 1
+	}
+	return api.startPort
 }

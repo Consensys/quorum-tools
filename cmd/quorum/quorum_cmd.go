@@ -49,7 +49,7 @@ func init() {
 
 	Cmd.AddCommand(upCmd)
 	Cmd.AddCommand(downCmd)
-	Cmd.AddCommand(creatorCmd)
+	Cmd.AddCommand(bootCmd)
 }
 
 func (cfg *cmdArgs) validate(cmd *cobra.Command, args []string) error {

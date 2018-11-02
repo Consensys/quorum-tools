@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/jpmorganchase/quorum-tools/operator/apiv1"
@@ -44,8 +45,10 @@ func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
 			docker.CurrrentBuilder.Destroy(true)
 		}
 	}()
-
-	v1 = &apiv1.API{QuorumNetwork: qn}
+	v1 = &apiv1.API{
+		QuorumNetwork: qn,
+		Mux:           new(sync.RWMutex),
+	}
 	router := mux.NewRouter()
 	if qn == nil {
 		setupCreatorHandlers(router)
@@ -78,6 +81,7 @@ func Start(listenAddress string, port int, qn *docker.QuorumNetwork) error {
 		}()
 	}
 	log.Info("Start Quorum Network Operator", "listen", listenAddress, "port", port)
+	v1.Port = port
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
