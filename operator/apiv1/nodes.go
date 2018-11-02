@@ -21,6 +21,7 @@ package apiv1
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -41,7 +42,6 @@ import (
 )
 
 type nodeOutput struct {
-	Id               int    `json:"id"`
 	Url              string `json:"url"`
 	PrivacyAddress   string `json:"privacy-address"`
 	EnodeAddress     string `json:"enode-address"`
@@ -230,7 +230,7 @@ func (lc *logConsumer) run() {
 
 // GET /v1/nodes
 func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
-	output := make([]*nodeOutput, api.QuorumNetwork.NodeCount)
+	output := make(map[string]*nodeOutput)
 	writeFn := writeJSON
 	if strings.Contains(r.Header.Get("Accept"), "application/yaml") {
 		writeFn = func(w http.ResponseWriter, _ interface{}) error {
@@ -238,7 +238,7 @@ func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
-			output[i] = api.buildNodeOutput(i)
+			output[fmt.Sprintf("Node%d", i+1)] = api.buildNodeOutput(i)
 		}
 	}
 	if err := writeFn(w, output); err != nil {
@@ -283,9 +283,9 @@ func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to add nodes", http.StatusInternalServerError)
 		return
 	} else {
-		output := make([]*nodeOutput, len(nodeIds))
+		output := make(map[string]*nodeOutput, len(nodeIds))
 		for i := 0; i < len(nodeIds); i++ {
-			output[i] = api.buildNodeOutput(nodeIds[i])
+			output[fmt.Sprintf("Node%d", nodeIds[i]+1)] = api.buildNodeOutput(nodeIds[i])
 		}
 		if err := writeJSON(w, output); err != nil {
 			log.Error("Unable to write output", "error", err)
@@ -379,12 +379,9 @@ func (api *API) StreamLogs(w http.ResponseWriter, r *http.Request) {
 func (api *API) buildNodeOutput(i int) *nodeOutput {
 	q := api.QuorumNetwork.QuorumNodes[i]
 	if q == nil {
-		return &nodeOutput{
-			Id: i,
-		}
+		return &nodeOutput{}
 	}
 	nodeOut := &nodeOutput{
-		Id:             i,
 		Url:            q.Url(),
 		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
 		EnodeAddress:   q.BootstrapData().Enode,
