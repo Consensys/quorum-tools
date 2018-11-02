@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -55,7 +56,7 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 	// run qctl quorum -f <tmpFile> up --enable-operator --operator-port 0
 	qctlCommand := exec.Command(qctl, "quorum", "-f", tmpFile.Name(), "up", "--enable-operator", "--operator-port", fmt.Sprintf("%d", freePort))
 	qctlCommand.Stdout = os.Stdout
-	qctlCommand.Stderr = os.Stdin
+	qctlCommand.Stderr = os.Stderr
 	if err := qctlCommand.Start(); err != nil {
 		log.Info("Command run failed", "error", err)
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -74,6 +75,9 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 				}, nil
 			}
 			defer conn.Close()
+			if err := qctlCommand.Process.Signal(syscall.Signal(0)); err !=  nil {
+				return nil, err
+			}
 			return &helper.StateResult{
 				State:  "up",
 				Result: "up",
@@ -81,7 +85,10 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	if _, err := waitForServer.Wait(); err != nil {
-		log.Info("Network is not up", "error", err)
+		log.Info("Network is not up. Clean up", "error", err)
+		if err := exec.Command(qctl, "quorum", "-f", tmpFile.Name(), "down").Run(); err != nil {
+			log.Info("Can't clean up network", "error", err)
+		}
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}

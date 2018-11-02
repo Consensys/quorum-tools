@@ -49,6 +49,7 @@ func init() {
 func executeUpCmd(cmd *cobra.Command, args []string) error {
 	qn, err := docker.CurrrentBuilder.Build(export)
 	if err != nil {
+		docker.CurrrentBuilder.Destroy(true)
 		return err
 	}
 	if enableOperator {
