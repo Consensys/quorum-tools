@@ -42,6 +42,7 @@ import (
 type networkCache struct {
 	builder         *docker.QuorumBuilder
 	operatorAddress string
+	qctlCommand     *exec.Cmd
 }
 
 var cache = make(map[string]*networkCache)
@@ -53,15 +54,23 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
+	defer r.Body.Close()
 	if _, err := io.Copy(tmpFile, r.Body); err != nil {
 		http.Error(w, "Can't write", http.StatusInternalServerError)
 		return
 	}
-	builder, err := docker.NewQuorumBuilder(tmpFile)
+	f, err := os.Open(tmpFile.Name())
+	if err != nil {
+		http.Error(w, "Can't read", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+	builder, err := docker.NewQuorumBuilder(f)
 	if err != nil {
 		http.Error(w, "Invalid template format", http.StatusBadRequest)
 		return
 	}
+	log.Info("Create new network", "name", builder.Name)
 	var address string
 	if nc, ok := api.getFromCache(builder.Name); ok {
 		address = nc.operatorAddress
@@ -116,6 +125,7 @@ func (api *API) NewNetwork(w http.ResponseWriter, r *http.Request) {
 		cache[builder.Name] = &networkCache{
 			builder:         builder,
 			operatorAddress: address,
+			qctlCommand:     qctlCommand,
 		}
 	}
 	if err := writeJSON(w, map[string]string{
@@ -143,6 +153,10 @@ func (api *API) DeleteNetwork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
+	if err := c.qctlCommand.Process.Signal(os.Interrupt); err != nil {
+		c.qctlCommand.Process.Signal(os.Kill)
+	}
+	delete(cache, name)
 }
 
 func (api *API) getFromCache(name string) (nc *networkCache, ok bool) {

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -237,8 +238,9 @@ func (api *API) GetNodes(w http.ResponseWriter, r *http.Request) {
 			return api.QuorumNetwork.WriteNetworkConfigurationYAML(w)
 		}
 	} else {
+		host := regexp.MustCompile(":.+").ReplaceAllString(r.Host, "")
 		for i := 0; i < api.QuorumNetwork.NodeCount; i++ {
-			output[fmt.Sprintf("Node%d", i+1)] = api.buildNodeOutput(i)
+			output[fmt.Sprintf("Node%d", i+1)] = api.buildNodeOutput(i, host)
 		}
 	}
 	if err := writeFn(w, output); err != nil {
@@ -256,7 +258,8 @@ func (api *API) GetNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid node index", http.StatusBadRequest)
 			return
 		}
-		if err := writeJSON(w, api.buildNodeOutput(idx)); err != nil {
+		host := regexp.MustCompile(":.+").ReplaceAllString(r.Host, "")
+		if err := writeJSON(w, api.buildNodeOutput(idx, host)); err != nil {
 			log.Error("Unable to write output", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
@@ -284,8 +287,9 @@ func (api *API) AddNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		output := make(map[string]*nodeOutput, len(nodeIds))
+		host := regexp.MustCompile(":.+").ReplaceAllString(r.Host, "")
 		for i := 0; i < len(nodeIds); i++ {
-			output[fmt.Sprintf("Node%d", nodeIds[i]+1)] = api.buildNodeOutput(nodeIds[i])
+			output[fmt.Sprintf("Node%d", nodeIds[i]+1)] = api.buildNodeOutput(nodeIds[i], host)
 		}
 		if err := writeJSON(w, output); err != nil {
 			log.Error("Unable to write output", "error", err)
@@ -376,13 +380,13 @@ func (api *API) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *API) buildNodeOutput(i int) *nodeOutput {
+func (api *API) buildNodeOutput(i int, host string) *nodeOutput {
 	q := api.QuorumNetwork.QuorumNodes[i]
 	if q == nil {
 		return &nodeOutput{}
 	}
 	nodeOut := &nodeOutput{
-		Url:            q.Url(),
+		Url:            q.Url(host),
 		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
 		EnodeAddress:   q.BootstrapData().Enode,
 	}

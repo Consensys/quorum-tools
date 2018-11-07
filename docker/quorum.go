@@ -173,8 +173,11 @@ func (q *Quorum) Stop() error {
 	return q.DockerClient().ContainerStop(context.Background(), q.containerId, &duration)
 }
 
-func (q *Quorum) Url() string {
-	return fmt.Sprintf("http://%s:%d", q.MyIP(), q.rpcPort)
+func (q *Quorum) Url(host string) string {
+	if host == "" {
+		host = q.MyIP()
+	}
+	return fmt.Sprintf("http://%s:%d", host, q.rpcPort)
 }
 
 func (q *Quorum) makeArgs() []string {
