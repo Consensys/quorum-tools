@@ -1,11 +1,12 @@
 # templates
 template-quorum-miner-default: &quorum-miner-default
-  image: quorumengineering/quorum:latest
+  image: vsmk98/geth-upgrade-1.8.12:latest
   config:
     permissioned:
     mine:
     minerthreads: 1
     verbosity: 5
+    gcmode: full
 template-tessera-default: &tessera-default
   image: quorumengineering/tessera:latest
   config:
@@ -14,20 +15,16 @@ template-node-default: &node-default
   tx_manager: *tessera-default
 
 # main configuration
-name: 7nodes-example
+name: 3nodes-1.8.12
 # genesis:
-#  alloc:
-#    "0x00000000000102310": "0xf000000000"
+#   alloc:
+#     "0x00000000000102310": "0xf000000000"
 consensus:
   name: istanbul
   config:
-    validators: 0,1,2,3,4,5,6 # indices of nodes to be validators
+    validators: 0,1,2 # indices of nodes to be validators
     geth_args: --istanbul.blockperiod=1 --emitcheckpoints --syncmode=full
 nodes:
-- *node-default
-- *node-default
-- *node-default
-- *node-default
 - *node-default
 - *node-default
 - *node-default
