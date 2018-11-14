@@ -130,7 +130,7 @@ func (t *TesseraTxManager) Start() error {
 				Timeout:     10 * time.Second,
 				Test: []string{
 					"CMD",
-					"wget", "--spider", fmt.Sprintf("http://localhost:%d/upcheck", defaultTesseraPort),
+					"wget", "--spider", fmt.Sprintf("http://%s:%d/upcheck", t.MyIP(), defaultTesseraPort),
 				},
 			},
 			ExposedPorts: map[nat.Port]struct{}{

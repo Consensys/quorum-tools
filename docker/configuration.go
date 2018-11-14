@@ -45,6 +45,8 @@ const (
 	CfgKeyTxManager            = "TxManager"
 	CfgKeyBootstrapData        = "BootstrapData"
 	CfgKeyMyIP                 = "MyIP"
+	CfgKeyRaftPort             = "RaftPort"
+	CfgKeyRaftId               = "RaftId"
 )
 
 type ConfigureFn func(c Configurable)
@@ -141,6 +143,18 @@ func (dc *DefaultConfigurable) BootstrapData() *bootstrap.Node {
 	return dc.configuration[CfgKeyBootstrapData].(*bootstrap.Node)
 }
 
+func (dc *DefaultConfigurable) RaftPort() int {
+	return dc.configuration[CfgKeyRaftPort].(int)
+}
+
+// returns 0 if raftId has not been configured
+func (dc *DefaultConfigurable) RaftId() int {
+	if _, ok := dc.configuration[CfgKeyRaftId]; !ok {
+		return 0
+	}
+	return dc.configuration[CfgKeyRaftId].(int)
+}
+
 func ConfigureNodeIndex(idx int) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyNodeIndex, idx)
@@ -229,5 +243,17 @@ func ConfigureBootstrapData(bs *bootstrap.Node) ConfigureFn {
 	return func(c Configurable) {
 		c.Set(CfgKeyBootstrapData, bs)
 		ConfigureMyIP(bs.IP)
+	}
+}
+
+func ConfigureRaftPort(p int) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyRaftPort, p)
+	}
+}
+
+func ConfigureRaftId(id int) ConfigureFn {
+	return func(c Configurable) {
+		c.Set(CfgKeyRaftId, id)
 	}
 }

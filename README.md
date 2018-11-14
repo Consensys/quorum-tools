@@ -116,7 +116,8 @@ quorum:
 ```json
 {
   "target": "quorum/tx_manager",
-  "action": "stop/start/restart"
+  "action": "stop/start/restart/fn_setRaftId",
+  "fnArgs": ["12"]
 }
 ```
 

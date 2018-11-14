@@ -20,6 +20,7 @@
 package apiv1
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -29,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/google/uuid"
 
@@ -313,7 +316,7 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unable to read body", http.StatusInternalServerError)
 			return
 		}
-		actionMap := make(map[string]string)
+		actionMap := make(map[string]interface{})
 		if err := json.Unmarshal(data, &actionMap); err != nil {
 			log.Error("Unable to marshall request body", "error", err)
 			http.Error(w, "Invalid json", http.StatusBadRequest)
@@ -321,17 +324,26 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 		}
 		action, hasAction := actionMap["action"]
 		target, hasTarget := actionMap["target"]
-		if !hasAction || !strings.Contains("stop start restart", strings.Replace(action, " ", "", -1)) {
+		fnArgs, hasFnArgs := actionMap["fnArgs"]
+		if _, ok := action.(string); !hasAction || !ok || !strings.Contains("stop start restart", strings.Replace(action.(string), " ", "", -1)) {
 			log.Error("Unknown action", "action", action)
 			http.Error(w, "Unknown action", http.StatusBadRequest)
 			return
 		}
-		if !hasTarget || !strings.Contains("quorum tx_manager", strings.Replace(target, " ", "", -1)) {
+		if _, ok := target.(string); !hasTarget || !ok || !strings.Contains("quorum tx_manager", strings.Replace(target.(string), " ", "", -1)) {
 			log.Error("Unknown target", "target", target)
 			http.Error(w, "Unknown target", http.StatusBadRequest)
 			return
 		}
-		if err := api.QuorumNetwork.PerformAction(idx, target, action); err != nil {
+		if _, ok := fnArgs.([]string); !ok && strings.HasPrefix(action.(string), "fn_") {
+			log.Error("Invalid function args", "action", target)
+			http.Error(w, "Invalid function args", http.StatusBadRequest)
+			return
+		}
+		if !hasFnArgs {
+			fnArgs = make([]string, 0)
+		}
+		if err := api.QuorumNetwork.PerformAction(idx, target.(string), action.(string), fnArgs.([]string)); err != nil {
 			log.Error("Unable to perform action", "action", action, "error", err)
 			http.Error(w, "Unable to perform action", http.StatusInternalServerError)
 			return
@@ -388,7 +400,7 @@ func (api *API) buildNodeOutput(i int, host string) *nodeOutput {
 	nodeOut := &nodeOutput{
 		Url:            q.Url(host),
 		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
-		EnodeAddress:   q.BootstrapData().Enode,
+		EnodeAddress:   fmt.Sprintf("enode://%s@%s:%s?discport=0&raftPort=%d", q.BootstrapData().Enode, q.MyIP(), node.DefaultConfig.P2P.ListenAddr[1:], q.RaftPort()),
 	}
 	if fn, ok := enrichNodeOutputByConsensus[q.ConsensusAlgorithm()]; ok {
 		fn(q, api.QuorumNetwork.TxManagers[i], nodeOut)
@@ -397,12 +409,15 @@ func (api *API) buildNodeOutput(i int, host string) *nodeOutput {
 }
 
 func writeJSON(w http.ResponseWriter, output interface{}) error {
-	if data, err := json.Marshal(output); err != nil {
+	data := new(bytes.Buffer)
+	encoder := json.NewEncoder(data)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(output); err != nil {
 		return err
 	} else {
 		w.Header().Set("Content-type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		w.Write(data.Bytes())
 	}
 	return nil
 }

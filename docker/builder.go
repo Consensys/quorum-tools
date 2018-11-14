@@ -369,6 +369,7 @@ func (qb *QuorumBuilder) prepareQuorum(idx int, nodeCount int, meta QuorumBuilde
 		ConfigureDockerImage(meta.Quorum.Image),
 		ConfigureConfig(meta.Quorum.Config),
 		ConfigureLabels(qb.commonLabels),
+		ConfigureRaftPort(defaultRaftPort),
 	)
 
 }

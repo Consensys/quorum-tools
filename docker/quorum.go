@@ -103,6 +103,10 @@ func (q *Quorum) Name() string {
 	return q.containerName
 }
 
+func (q *Quorum) RpcPort() int {
+	return q.rpcPort
+}
+
 func (q *Quorum) Start() error {
 	q.rpcPort = defaultQuorumRPCInitPort + q.Index()
 	additionalExposedPorts := make(map[nat.Port]struct{})
@@ -173,6 +177,14 @@ func (q *Quorum) Stop() error {
 	return q.DockerClient().ContainerStop(context.Background(), q.containerId, &duration)
 }
 
+func (q *Quorum) Recreate() error {
+	log.Debug("Recreate container", "name", q.containerName)
+	if err := q.DockerClient().ContainerRemove(context.Background(), q.containerId, types.ContainerRemoveOptions{Force: true}); err != nil {
+		return err
+	}
+	return q.Start()
+}
+
 func (q *Quorum) Url(host string) string {
 	if host == "" {
 		host = q.MyIP()
@@ -206,6 +218,9 @@ func (q *Quorum) makeArgs() []string {
 	if q.ConsensusAlgorithm() == "raft" {
 		combinedConfig["--raft"] = ""
 		combinedConfig["--raftport"] = fmt.Sprintf("%d", defaultRaftPort)
+		if q.RaftId() != 0 {
+			combinedConfig["--raftjoinexisting"] = fmt.Sprintf("%d", q.RaftId())
+		}
 	}
 	args := make([]string, 0)
 	for k, v := range combinedConfig {
@@ -247,6 +262,13 @@ func (q *Quorum) SoftStart() error {
 	if _, err := healthyContainer.Wait(); err != nil {
 		return err
 	}
+	return nil
+}
+
+// inject raftId into the quorum configuration
+// require container to be removed and recreate
+func (q *Quorum) UpdateRaftId(raftId int) error {
+	ConfigureRaftId(raftId)(q)
 	return nil
 }
 
@@ -375,30 +397,45 @@ quorum:
 	return nil
 }
 
-func (qn *QuorumNetwork) PerformAction(idx int, target string, action string) error {
+func (qn *QuorumNetwork) PerformAction(idx int, target string, action string, fnArgs []string) error {
+	qNode := qn.QuorumNodes[idx]
 	if action == "stop" && target == "quorum" {
-		return qn.QuorumNodes[idx].Stop()
+		return qNode.Stop()
 	}
+	tmNode := qn.TxManagers[idx]
 	if action == "stop" && target == "tx_manager" {
-		return qn.TxManagers[idx].(Container).Stop()
+		return tmNode.(Container).Stop()
 	}
 	if action == "start" && target == "quorum" {
-		return qn.QuorumNodes[idx].SoftStart()
+		return qNode.SoftStart()
 	}
 	if action == "start" && target == "tx_manager" {
-		return qn.TxManagers[idx].(Container).SoftStart()
+		return tmNode.(Container).SoftStart()
 	}
 	if action == "restart" && target == "quorum" {
-		if err := qn.QuorumNodes[idx].Stop(); err != nil {
+		if err := qNode.Stop(); err != nil {
 			return err
 		}
-		return qn.QuorumNodes[idx].SoftStart()
+		return qNode.SoftStart()
 	}
 	if action == "restart" && target == "tx_manager" {
-		if err := qn.TxManagers[idx].(Container).Stop(); err != nil {
+		if err := tmNode.(Container).Stop(); err != nil {
 			return err
 		}
-		return qn.TxManagers[idx].(Container).SoftStart()
+		return tmNode.(Container).SoftStart()
+	}
+	if action == "fn_setRaftId" && target == "quorum" {
+		if len(fnArgs) != 1 {
+			return fmt.Errorf("%s requires 1 fnArg", action)
+		}
+		raftId, err := strconv.Atoi(fnArgs[0])
+		if err != nil {
+			return err
+		}
+		if err := qNode.UpdateRaftId(raftId); err != nil {
+			return err
+		}
+		return qNode.Recreate()
 	}
 	return fmt.Errorf("not implemented")
 }
