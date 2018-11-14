@@ -400,7 +400,7 @@ func (api *API) buildNodeOutput(i int, host string) *nodeOutput {
 	nodeOut := &nodeOutput{
 		Url:            q.Url(host),
 		PrivacyAddress: api.QuorumNetwork.TxManagers[i].Address(),
-		EnodeAddress:   fmt.Sprintf("enode://%s@%s:%s?discport=0&raftPort=%d", q.BootstrapData().Enode, q.MyIP(), node.DefaultConfig.P2P.ListenAddr[1:], q.RaftPort()),
+		EnodeAddress:   fmt.Sprintf("enode://%s@%s:%s?discport=0&raftport=%d", q.BootstrapData().Enode, q.MyIP(), node.DefaultConfig.P2P.ListenAddr[1:], q.RaftPort()),
 	}
 	if fn, ok := enrichNodeOutputByConsensus[q.ConsensusAlgorithm()]; ok {
 		fn(q, api.QuorumNetwork.TxManagers[i], nodeOut)
