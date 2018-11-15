@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"text/template"
@@ -179,6 +180,20 @@ func (q *Quorum) Stop() error {
 
 func (q *Quorum) Recreate() error {
 	log.Info("Recreate container", "name", q.containerName)
+	if q.ConsensusAlgorithm() == "raft" {
+		// need to clean up raft related folders before we restart the container
+		dirs := []string {
+			filepath.Join(q.DataDir().Base, "raft-wal"),
+			filepath.Join(q.DataDir().Base, "raft-snap"),
+			filepath.Join(q.DataDir().Base, "quorum-raft-state"),
+		}
+		for _, d := range dirs {
+			if err := os.RemoveAll(d); err != nil {
+				return err
+			}
+		}
+	}
+
 	if err := q.DockerClient().ContainerRemove(context.Background(), q.containerId, types.ContainerRemoveOptions{Force: true}); err != nil {
 		return err
 	}
@@ -246,11 +261,14 @@ func (q *Quorum) SoftStart() error {
 	healthyContainer := &helper.StateChangeConfig{
 		Target:       []string{"healthy"},
 		PollInterval: 3 * time.Second,
-		Timeout:      60 * time.Second,
+		Timeout:      90 * time.Second,
 		Refresh: func() (*helper.StateResult, error) {
 			c, err := q.DockerClient().ContainerInspect(context.Background(), q.containerId)
 			if err != nil {
 				return nil, err
+			}
+			if c.State.Status == "exited" {
+				return nil, fmt.Errorf("container exited")
 			}
 			return &helper.StateResult{
 				Result: c,
