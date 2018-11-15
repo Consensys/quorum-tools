@@ -283,6 +283,20 @@ func (qn *QuorumNetwork) AddNodes(newNodes []QuorumBuilderNode) (newIds []int, r
 		newLabels[k] = v
 	}
 	newLabels["com.quorum.operator.createdAt"] = time.Now().Format(time.RFC1123Z)
+	// copy config from an existing nodes to this new nodes
+	sampleNode := CurrrentBuilder.Nodes[0]
+	for _, newNode := range newNodes {
+		for k, v := range sampleNode.Quorum.Config {
+			if _, ok := newNode.Quorum.Config[k]; !ok {
+				newNode.Quorum.Config[k] = v
+			}
+		}
+		for k, v := range sampleNode.TxManager.Config {
+			if _, ok := newNode.TxManager.Config[k]; !ok {
+				newNode.TxManager.Config[k] = v
+			}
+		}
+	}
 	newBuilder := &QuorumBuilder{
 		Consensus:     CurrrentBuilder.Consensus,
 		Name:          CurrrentBuilder.Name,
@@ -404,7 +418,7 @@ func (qn *QuorumNetwork) PerformAction(idx int, target string, action string, fn
 	if target == "quorum" {
 		containerId = qNode.containerId
 	}
-	log.Info("Perform action", "containerId", containerId[6:], "action", action, "fnArgs", fnArgs)
+	log.Info("Perform action", "containerId", containerId[:6], "target", target, "action", action, "fnArgs", fnArgs)
 	if action == "stop" && target == "quorum" {
 		return qNode.Stop()
 	}
