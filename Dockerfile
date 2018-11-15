@@ -11,5 +11,5 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /quorum-tools/build/qctl /usr/local/bin/
 
-EXPOSE 8800
+EXPOSE 8800-9900
 ENTRYPOINT ["qctl"]
