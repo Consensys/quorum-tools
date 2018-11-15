@@ -324,8 +324,8 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 		}
 		action, hasAction := actionMap["action"]
 		target, hasTarget := actionMap["target"]
-		fnArgs, hasFnArgs := actionMap["fnArgs"]
-		if _, ok := action.(string); !hasAction || !ok || !strings.Contains("stop start restart", strings.Replace(action.(string), " ", "", -1)) {
+		fnArgsRaw, hasFnArgs := actionMap["fnArgs"]
+		if _, ok := action.(string); !hasAction || !ok || !(strings.Contains("stop start restart", strings.Replace(action.(string), " ", "", -1)) || strings.HasPrefix(action.(string), "fn_")) {
 			log.Error("Unknown action", "action", action)
 			http.Error(w, "Unknown action", http.StatusBadRequest)
 			return
@@ -335,15 +335,23 @@ func (api *API) ActionOnNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unknown target", http.StatusBadRequest)
 			return
 		}
-		if _, ok := fnArgs.([]string); !ok && strings.HasPrefix(action.(string), "fn_") {
-			log.Error("Invalid function args", "action", target)
+		if _, ok := fnArgsRaw.([]interface{}); !ok && strings.HasPrefix(action.(string), "fn_") {
+			log.Error("Invalid function args", "action", action, "target", target)
 			http.Error(w, "Invalid function args", http.StatusBadRequest)
 			return
 		}
-		if !hasFnArgs {
-			fnArgs = make([]string, 0)
+		fnArgs := make([]string, 0)
+		if hasFnArgs {
+			for _, r := range fnArgsRaw.([]interface{}) {
+				if _, ok := r.(string); !ok {
+					log.Error("Invalid function args data type", "action", action, "target", target)
+					http.Error(w, "Invalid function args data type", http.StatusBadRequest)
+					return
+				}
+				fnArgs = append(fnArgs, r.(string))
+			}
 		}
-		if err := api.QuorumNetwork.PerformAction(idx, target.(string), action.(string), fnArgs.([]string)); err != nil {
+		if err := api.QuorumNetwork.PerformAction(idx, target.(string), action.(string), fnArgs); err != nil {
 			log.Error("Unable to perform action", "action", action, "error", err)
 			http.Error(w, "Unable to perform action", http.StatusInternalServerError)
 			return

@@ -178,7 +178,7 @@ func (q *Quorum) Stop() error {
 }
 
 func (q *Quorum) Recreate() error {
-	log.Debug("Recreate container", "name", q.containerName)
+	log.Info("Recreate container", "name", q.containerName)
 	if err := q.DockerClient().ContainerRemove(context.Background(), q.containerId, types.ContainerRemoveOptions{Force: true}); err != nil {
 		return err
 	}
@@ -399,10 +399,15 @@ quorum:
 
 func (qn *QuorumNetwork) PerformAction(idx int, target string, action string, fnArgs []string) error {
 	qNode := qn.QuorumNodes[idx]
+	tmNode := qn.TxManagers[idx]
+	containerId := tmNode.ContainerId()
+	if target == "quorum" {
+		containerId = qNode.containerId
+	}
+	log.Info("Perform action", "containerId", containerId[6:], "action", action, "fnArgs", fnArgs)
 	if action == "stop" && target == "quorum" {
 		return qNode.Stop()
 	}
-	tmNode := qn.TxManagers[idx]
 	if action == "stop" && target == "tx_manager" {
 		return tmNode.(Container).Stop()
 	}
