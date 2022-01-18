@@ -1,5 +1,13 @@
 # Quorum Tools
 
+## ⚠️ Project Deprecation Notice ⚠️
+
+Quorum Tools has been deprecated, and we are no longer supporting the project.
+
+If you have any questions or concerns, please reach out to the ConsenSys protocol engineering team on [#Discord](https://chat.consensys.net) or by [email](mailto:quorum@consensys.net).
+
+## Description
+
 This project contains tools for running Quorum clusters and integration testing Quorum.
 
 ## Installation
